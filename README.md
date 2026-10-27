@@ -49,7 +49,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **Liked songs**: heart a song to add it to **Liked**.
 - **Recently played**: newest first, up to 100 songs.
 - **Visible queue** ("up next") with a playlist tag on each row when browsing All songs.
-- **Shuffle** (a true Fisher-Yates shuffle) and **repeat** (off / all / one).
+- **Shuffle in rounds**: every song in the playlist plays once, in random order, before any song repeats. The app remembers which songs it already played (even after you close it), so reopening never starts on the same song again. With repeat **all**, a new random round starts when the old one ends, and it never opens with the song that just played. **Repeat** has three modes: off / all / one.
 - Shuffle, repeat and next/previous all stay inside the playlist you are playing.
 
 ### Download songs
@@ -69,6 +69,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **Home screen** with a time-based greeting (Good morning / afternoon / evening / night), quick tiles, a "Made for you" shelf (Your whole sky, Recently played, Liked) and your **Constellations** (folders and your own playlists).
 - **Animated equalizer** on the playlist that holds the current song.
 - Bundled fonts (Lora, Newsreader, Manrope, Atkinson) so the app looks the same offline.
+- **Smooth with big libraries**: indexed song look-ups, off-screen rows are skipped by the renderer, and entrance animations are limited to the first rows.
 - A custom launcher icon, status/navigation bar insets handled for edge-to-edge display.
 
 ### Updates

@@ -27,8 +27,8 @@ function fakeElement(listeners, id) {
 }
 
 // `saved` is the audio prefs blob the last run left behind; `bluetooth` is what the phone reports.
-function launch({ saved = null, bluetooth = false, onScanAudio = null } = {}) {
-  const store = saved ? { novelReader_audioPrefs: JSON.stringify(saved) } : {};
+function launch({ saved = null, bluetooth = false, onScanAudio = null, extraStore = {} } = {}) {
+  const store = Object.assign({}, extraStore, saved ? { novelReader_audioPrefs: JSON.stringify(saved) } : {});
   const calls = [];
   const listeners = {};
   const elements = {};

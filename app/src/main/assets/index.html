@@ -2258,9 +2258,9 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 .pl-eq i:nth-child(2) { transform: scaleY(.8); }
 .pl-eq i:nth-child(3) { transform: scaleY(.55); }
 @keyframes plEq { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
-#audio-panel:has(#audio-play-btn.is-playing) .pl-eq i { animation: plEq .8s ease-in-out infinite alternate; }
-#audio-panel:has(#audio-play-btn.is-playing) .pl-eq i:nth-child(2) { animation-duration: .6s; animation-delay: -.2s; }
-#audio-panel:has(#audio-play-btn.is-playing) .pl-eq i:nth-child(3) { animation-duration: .95s; animation-delay: -.45s; }
+#audio-panel#audio-panel.sp-playing .pl-eq i { animation: plEq .8s ease-in-out infinite alternate; }
+#audio-panel#audio-panel.sp-playing .pl-eq i:nth-child(2) { animation-duration: .6s; animation-delay: -.2s; }
+#audio-panel#audio-panel.sp-playing .pl-eq i:nth-child(3) { animation-duration: .95s; animation-delay: -.45s; }
 
 @media (prefers-reduced-motion: reduce) {
   #audio-playlist-list.open li, #audio-playlist-list.closing, .pl-slide-next, .pl-slide-prev,
@@ -2629,7 +2629,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-mini-play { width: 44px; height: 44px; border: 0; background: none; color: var(--text); display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer; }
 #sp-mini-play .ico { width: 26px; height: 26px; }
 #sp-mini-bar { position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; background: color-mix(in srgb, var(--text) 28%, transparent); border-radius: 2px; }
-#sp-mini-fill { display: block; height: 100%; width: 0; background: var(--text); }
+#sp-mini-fill { display: block; height: 100%; width: 100%; background: var(--text); transform: scaleX(0); transform-origin: 0 50%; will-change: transform; }
 
 #sp-nav {
   position: relative; z-index: 2; flex: 0 0 auto; display: flex; background: color-mix(in srgb, var(--bg) 94%, transparent);
@@ -2971,8 +2971,8 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 #sp-lib-phase { margin-top: -4px; font-size: 12px; letter-spacing: .06em; color: var(--sp-sub, var(--muted)); text-align: center; }
 
 /* Playing: the play button glows like the moon. */
-#audio-panel:has(#audio-play-btn.is-playing) .sp-fab { box-shadow: 0 0 0 6px var(--accent-soft), 0 0 26px var(--accent-line); }
-#audio-panel:has(#audio-play-btn.is-playing) #audio-artwork { box-shadow: 0 0 0 1px rgba(243,239,224,.15), 0 0 22px rgba(243,239,224,.18); }
+#audio-panel#audio-panel.sp-playing .sp-fab { box-shadow: 0 0 0 6px var(--accent-soft), 0 0 26px var(--accent-line); }
+#audio-panel#audio-panel.sp-playing #audio-artwork { box-shadow: 0 0 0 1px rgba(243,239,224,.15), 0 0 22px rgba(243,239,224,.18); }
 
 /* Sliders: the thumb is a little moon with a halo. */
 input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft), 0 0 12px var(--accent-line); }
@@ -3022,6 +3022,22 @@ input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-s
   .sky::before, .sky::after, .sky .shoot, #welcome .wl-mark::before, #splash-moon, #splash-status .dots i { animation: none !important; }
   .sky .shoot { display: none; }
 }
+
+/* ---- Speed ------------------------------------------------------------------
+   - Long song lists: rows far off screen are not laid out or painted (content-visibility), so a
+     library of thousands of songs scrolls and re-renders like a short one.
+   - Only the first rows play their entrance animation (animating hundreds of rows at once janks).
+   - The star layers sit on their own compositor layer and cannot cause repaints elsewhere.
+   - No tap delay / grey tap flash; scroll lists do not chain into the page. */
+#audio-queue li { content-visibility: auto; contain-intrinsic-size: auto 58px; }
+#audio-panel.sp-enter #audio-queue li:nth-child(n+9) { animation: none; }
+#audio-playlist-list.open li:nth-child(n+11) { animation: none; }
+.sky { contain: layout paint size; }
+.sky::before, .sky::after { will-change: opacity; }
+html, body { -webkit-tap-highlight-color: transparent; }
+button, a, li, input[type="range"], select, summary, [role="button"] { touch-action: manipulation; }
+#audio-queue, #audio-playlist-list, #sp-views { overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) { .sky::before, .sky::after, .sky .shoot { animation: none; } }
 </style>
 <style id="home-screen">
 /* =========================================================================

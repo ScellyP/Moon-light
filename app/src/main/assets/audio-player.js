@@ -234,7 +234,9 @@ window.NovelAudio = (function () {
       // closed. It becomes the current song (shown in the player, and what Play starts) but is
       // not started here, and like every track it starts from the beginning, not where it was
       // left. If it is no longer in the selected playlist, fall back to the whole library.
-      const remembered = !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
+      // With shuffle on, the remembered song is NOT brought back: it would be the first song of every
+      // launch. The shuffle round picks a song that has not been played yet instead (see below).
+      const remembered = !state.shuffle && !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
       if (remembered) {
         state.currentTrackId = remembered.id;
         state.durationSec = remembered.durationSec || 0;
@@ -258,13 +260,30 @@ window.NovelAudio = (function () {
       if (currentId && ids.includes(currentId)) {
         PlaybackQueue.jumpTo(currentId);
       }
+      // Shuffle on and nothing loaded yet (a fresh launch): get the next unplayed song ready (not started).
+      if (state.shuffle && !currentId && PlaybackQueue.current()) {
+        const first = this.getTrack(PlaybackQueue.current());
+        if (first) {
+          state.currentTrackId = first.id;
+          state.durationSec = first.durationSec || 0;
+          state.positionSec = 0;
+        }
+      }
       AudioUI.render();
       StartupPlayback.libraryScanned(state.tracks.length > 0);
       this._flushWaiters();
     },
 
+    // O(1) look-up. (A linear search here made every render O(songs squared) with a big library.)
+    // The index is rebuilt whenever the tracks array is replaced or changes length.
+    _index: null, _indexFor: null, _indexLen: -1,
     getTrack(id) {
-      return state.tracks.find(t => t.id === id) || null;
+      if (this._indexFor !== state.tracks || this._indexLen !== state.tracks.length) {
+        const map = new Map();
+        for (const t of state.tracks) map.set(t.id, t);
+        this._index = map; this._indexFor = state.tracks; this._indexLen = state.tracks.length;
+      }
+      return this._index.get(id) || null;
     },
 
     /* Distinct playlist names among the current library, sorted for a
@@ -310,16 +329,11 @@ window.NovelAudio = (function () {
 
     buildFrom(trackIds) {
       this._originalOrder = trackIds.slice();
-      // If shuffle is already on (e.g. restored from a saved preference,
-      // or surviving a rescan/playlist switch), the rebuilt queue needs
-      // to come out shuffled too — otherwise every rebuild silently
-      // reverted to plain alphabetical order while the shuffle button
-      // kept showing as active, which is what let a "not really
-      // shuffling" queue slip through unnoticed.
+      this._pending = null;
       if (state.shuffle) {
-        state.queue = trackIds.slice();
-        state.queueIndex = trackIds.length ? 0 : -1;
-        this.setShuffle(true);
+        // Shuffle already on (restored preference, rescan, playlist switch): the rebuilt queue
+        // must come out shuffled too, and must remember which songs this round already played.
+        this._shuffleInto(trackIds, state.currentTrackId);
       } else {
         state.queue = trackIds.slice();
         state.queueIndex = trackIds.length ? 0 : -1;
@@ -330,34 +344,102 @@ window.NovelAudio = (function () {
       return state.queue[state.queueIndex] || null;
     },
 
-    /* Fisher-Yates shuffle — unbiased, unlike `sort(() => Math.random()
-     * - 0.5)`. When shuffle is switched on while a track is actually
-     * playing, that track stays first so playback doesn't jump; anything
-     * else is shuffled around it. Switching shuffle off restores
-     * _originalOrder exactly, since that array is never mutated.
-     *
-     * Pinning only applies when state.currentTrackId is set — i.e.
-     * something has actually been loaded to play. queueIndex itself is
-     * always 0 right after buildFrom(), whether or not anything has
-     * played yet, so using this.current() (which reads off queueIndex)
-     * as the "keep this one first" track pinned whatever track happened
-     * to sort first alphabetically on every fresh scan or playlist
-     * switch — shuffle looked like it "always played the first song"
-     * because, from a fresh queue, it effectively always did. */
+    /* SHUFFLE = a "round". Every song of the selection is played once, in random order, before any
+     * song is played again. The songs already played this round are remembered (and saved, so the
+     * round survives closing the app): the queue is always
+     *     [songs already played, in the order they were played] + [songs not yet played, shuffled]
+     * so a new launch, a rescan or a playlist re-open never starts over with the same song, it carries
+     * on with songs that have not come up yet. When every song has been played the round is over:
+     * repeat "off" stops, repeat "all" starts a fresh random round (its first song is never the one
+     * that just played). */
+    _shuffleList(list) {                       // Fisher-Yates, in place (unbiased)
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      }
+      return list;
+    },
+
+    // A fresh random order of `ids` whose first song is not `lastId` (when there is a choice).
+    _newRound(ids, lastId) {
+      const round = this._shuffleList(ids.slice());
+      if (round.length > 1 && round[0] === lastId) {
+        const k = 1 + Math.floor(Math.random() * (round.length - 1));
+        const tmp = round[0]; round[0] = round[k]; round[k] = tmp;
+      }
+      return round;
+    },
+
+    // The round is kept in its own localStorage key (not in the audio prefs, which are mirrored to
+    // settings.txt with a small size limit). Songs are stored as short hashes of their id.
+    _cyc: null,
+    _hash(id) {                                   // FNV-1a, 32 bit, base 36
+      let h = 0x811c9dc5;
+      for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+      return h.toString(36);
+    },
+    _cycle() {
+      if (!this._cyc) {
+        let c = null;
+        try { c = JSON.parse(localStorage.getItem('moonlight_shuffleRound') || 'null'); } catch (e) { c = null; }
+        this._cyc = c && typeof c.key === 'string' && Array.isArray(c.played)
+          ? { key: c.key, played: c.played.filter(x => typeof x === 'string') }
+          : { key: 'all', played: [] };
+      }
+      const key = state.activePlaylist || 'all';
+      if (this._cyc.key !== key) { this._cyc.key = key; this._cyc.played = []; }   // another playlist = another round
+      return this._cyc;
+    },
+    _saveCycle() {
+      try { localStorage.setItem('moonlight_shuffleRound', JSON.stringify(this._cyc)); } catch (e) { /* non-fatal */ }
+    },
+
+    // Builds state.queue for shuffle. currentId (optional) is the song that is loaded right now: it
+    // counts as played and queueIndex points at it. Without it queueIndex points at the first song
+    // not played yet, i.e. a fresh song.
+    _shuffleInto(ids, currentId) {
+      const cyc = this._cycle();
+      const inSel = new Set(ids);
+      const byHash = new Map();
+      ids.forEach(id => byHash.set(this._hash(id), id));
+      const seen = new Set();
+      let played = [];
+      cyc.played.forEach(h => { const id = byHash.get(h); if (id && !seen.has(id)) { seen.add(id); played.push(id); } });
+      const cur = currentId && inSel.has(currentId) ? currentId : null;
+      if (cur && !seen.has(cur)) { seen.add(cur); played.push(cur); }
+      let rest = ids.filter(id => !seen.has(id));
+      if (!rest.length && ids.length && !cur) {
+        // The round is complete and nothing is loaded: begin a new one (its first song is not the last one played).
+        const last = played[played.length - 1] || null;
+        played = [];
+        rest = this._newRound(ids, last);
+      } else {
+        this._shuffleList(rest);
+      }
+      cyc.played = played.map(id => this._hash(id));
+      this._saveCycle();
+      state.queue = played.concat(rest);
+      state.queueIndex = !state.queue.length ? -1 : (cur ? played.indexOf(cur) : Math.min(played.length, state.queue.length - 1));
+      this._pending = null;
+    },
+
+    // Called whenever a song starts (a feature module, below): it is now "played" for this round.
+    noteStarted(id) {
+      if (!state.shuffle || !id) return;
+      const cyc = this._cycle();
+      const h = this._hash(id);
+      if (cyc.played.indexOf(h) === -1) { cyc.played.push(h); this._saveCycle(); }
+    },
+
     // keepCurrent: the current song stays first in the shuffled queue (so turning shuffle on
     // mid-song doesn't move it). Pass false to start from a fresh random song instead.
     setShuffle(enabled, keepCurrent = true) {
       state.shuffle = enabled;
+      this._pending = null;
       const currentId = keepCurrent ? (state.currentTrackId || null) : null;
 
       if (enabled) {
-        const rest = this._originalOrder.filter(id => id !== currentId);
-        for (let i = rest.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          const tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp;
-        }
-        state.queue = currentId ? [currentId, ...rest] : rest;
-        state.queueIndex = state.queue.length ? 0 : -1;
+        this._shuffleInto(this._originalOrder, currentId);
       } else {
         state.queue = this._originalOrder.slice();
         state.queueIndex = currentId ? state.queue.indexOf(currentId) : (state.queue.length ? 0 : -1);
@@ -379,7 +461,25 @@ window.NovelAudio = (function () {
       if (state.repeat === 'one') return this.current();
       const nextIndex = state.queueIndex + 1;
       if (nextIndex < state.queue.length) return state.queue[nextIndex];
-      return state.repeat === 'all' ? (state.queue[0] || null) : null;
+      if (state.repeat !== 'all' || !state.queue.length) return null;
+      const pending = this._pendingRound();
+      return pending ? pending[0] : (state.queue[0] || null);
+    },
+
+    // Shuffle + repeat all, at the end of the queue: the next round (same songs, new random order).
+    // Worked out once and kept, so the preload (peekNext) and the real step (advance) agree.
+    _pendingRound() {
+      if (!state.shuffle || !state.queue.length) return null;
+      if (!this._pending) this._pending = this._newRound(state.queue, state.queue[state.queue.length - 1]);
+      return this._pending;
+    },
+
+    _adoptPending() {
+      state.queue = this._pending;
+      state.queueIndex = 0;
+      this._pending = null;
+      this._cycle().played = [];
+      this._saveCycle();
     },
 
     advance() {
@@ -388,7 +488,8 @@ window.NovelAudio = (function () {
       if (nextIndex < state.queue.length) {
         state.queueIndex = nextIndex;
       } else if (state.repeat === 'all' && state.queue.length) {
-        state.queueIndex = 0;
+        if (this._pendingRound()) this._adoptPending();
+        else state.queueIndex = 0;
       } else {
         return null;
       }
@@ -408,8 +509,23 @@ window.NovelAudio = (function () {
     },
 
     jumpTo(trackId) {
+      // The crossfade steps into the next round before advance() runs.
+      if (this._pending && state.queueIndex === state.queue.length - 1 && trackId === this._pending[0]) {
+        this._adoptPending();
+        return this.current();
+      }
       const idx = state.queue.indexOf(trackId);
-      if (idx !== -1) state.queueIndex = idx;
+      if (idx !== -1) {
+        // Picking a song that is still ahead: it moves up to "next" so the songs it jumps over
+        // stay unplayed in this round instead of being left behind.
+        if (state.shuffle && state.queueIndex >= 0 && idx > state.queueIndex + 1) {
+          state.queue.splice(idx, 1);
+          state.queue.splice(state.queueIndex + 1, 0, trackId);
+          state.queueIndex += 1;
+        } else {
+          state.queueIndex = idx;
+        }
+      }
       return this.current();
     },
   };
@@ -1439,6 +1555,17 @@ window.NovelAudio = (function () {
     },
     getIds() { return state.features.history.ids.slice(); },
     clear() { state.features.history.ids = []; Prefs.save(); },
+  });
+
+  /* ---- Shuffle round ---------------------------------------------------------
+     Tells the queue that a song started, so it counts as played in the current shuffle round
+     (see PlaybackQueue "SHUFFLE = a round"). Its data lives in PlaybackQueue._cyc, saved under its
+     own localStorage key, not in the audio prefs. */
+  AudioFeatures.register({
+    id: 'shuffleRound', label: 'Shuffle round', status: 'working',
+    defaults: {},
+    persistKeys: [],
+    trackStart(track) { if (track) PlaybackQueue.noteStarted(track.id); },
   });
 
   /* ---- Remember the last song ---------------------------------------------------

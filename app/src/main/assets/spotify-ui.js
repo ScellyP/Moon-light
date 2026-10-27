@@ -1170,7 +1170,7 @@
 
     const max = parseFloat(el.seek.max) || 1;
     const value = parseFloat(el.seek.value) || 0;
-    el.miniFill.style.width = clamp(value / max * 100, 0, 100) + '%';
+    el.miniFill.style.transform = 'scaleX(' + clamp(value / max, 0, 1) + ')';
   }
 
   /* =======================================================================
