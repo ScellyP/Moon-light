@@ -74,9 +74,11 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 
 ### Updates
 - The app checks this repo's **GitHub Releases** on start (at most every 6 hours) and downloads new versions on Wi-Fi only.
-- An **Install** bar appears at the bottom of Home. Tap the version number to check right now.
-- An **Update automatically** switch controls background checking.
-- APK size and SHA-256 (when GitHub provides it) are verified before install, and Android always asks you to confirm.
+- **It also updates while closed**: Android's JobScheduler wakes a background check about every 6 hours (Wi-Fi only, not when the battery is low, and again after a reboot). A newer version is downloaded and installed by itself. On Android 12+ this can happen with no screen at all; otherwise a **notification** appears and one tap installs it. No Firebase or server is needed.
+- The install waits while **music is playing** or a **song download** is running (it retries 30 minutes later), because an install restarts the app.
+- An **Install** bar appears at the bottom of Home when the app is open. Tap the version number to check right now.
+- An **Update automatically** switch controls both the in-app and the background checking.
+- APK size and SHA-256 (when GitHub provides it) are verified before install, and Android always has the final say.
 
 ---
 
@@ -145,13 +147,16 @@ Only one level of grouping counts: a folder inside a playlist folder does not cr
 | `POST_NOTIFICATIONS` | Show the media notification (Android 13+) |
 | `INTERNET` | Song downloads and update checks (nothing else uses the network) |
 | `ACCESS_NETWORK_STATE` | Skip automatic update downloads on mobile data |
-| `REQUEST_INSTALL_PACKAGES` | Install the updated APK (you confirm each install) |
+| `REQUEST_INSTALL_PACKAGES` | Install the updated APK |
+| `RECEIVE_BOOT_COMPLETED` | Keep the background update check scheduled after a reboot |
 
 ---
 
 ## Updating
 
 From v1.00.00 the app checks GitHub Releases when it starts. If a newer version exists it downloads on Wi-Fi, and a bar at the bottom of **Home** offers **Install**. Android asks you to confirm, and the first time to allow *Install unknown apps* for Moonlight.
+
+From v1.01.00 the app also checks **in the background** about every 6 hours, even when it is closed, and installs the update by itself when Android allows it (otherwise it posts a notification; tap it to install). Android only lets an app skip the confirm screen for updates of an app it installed itself, so **the first update installed through Moonlight may ask once; later ones can be silent** (Android 12 and newer). Turn the **Update automatically** switch off to stop all background checking.
 
 The app never installs by itself while music is playing or a download is running.
 
@@ -197,7 +202,8 @@ moonlight/
 │   │   ├── SongDownloader.kt      yt-dlp / ffmpeg download jobs
 │   │   ├── SongNames.kt           Song and playlist name cleaning
 │   │   ├── Id3Title.kt            Writes ID3 title tags
-│   │   └── AppUpdater.kt          GitHub Releases updater
+│   │   ├── AppUpdater.kt          In-app GitHub Releases updater
+│   │   └── BackgroundUpdater.kt   Background update check (JobScheduler) and install notification
 │   ├── assets/
 │   │   ├── index.html             The page and its styles
 │   │   ├── player-app.js          App glue: insets, tab swipe, back handling, dialogs

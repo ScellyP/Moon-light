@@ -218,6 +218,13 @@ class PlaybackService : MediaSessionService() {
         @Volatile
         var crossfade: NativeCrossfade? = null
 
+        /**
+         * True while the player is playing (or about to). Read from other threads by the background
+         * updater, which must not install an update (it restarts the app) over playing music.
+         */
+        @Volatile
+        var playingNow: Boolean = false
+
         // How long the service may sit with nothing playing before it
         // shuts itself (and its notification) down.
         private const val IDLE_STOP_MS = 10 * 60 * 1000L
@@ -341,8 +348,13 @@ class PlaybackService : MediaSessionService() {
 
     private fun updateIdleTimer() {
         idleHandler.removeCallbacks(idleStopRunnable)
-        val p = mediaSession?.player ?: return
-        if (!isPlaybackActive(p)) idleHandler.postDelayed(idleStopRunnable, IDLE_STOP_MS)
+        val p = mediaSession?.player
+        if (p == null) {
+            playingNow = false
+            return
+        }
+        playingNow = isPlaybackActive(p)
+        if (!playingNow) idleHandler.postDelayed(idleStopRunnable, IDLE_STOP_MS)
     }
 
     /**
@@ -392,6 +404,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        playingNow = false
         idleHandler.removeCallbacks(idleStopRunnable)
         crossfade?.release()
         crossfade = null

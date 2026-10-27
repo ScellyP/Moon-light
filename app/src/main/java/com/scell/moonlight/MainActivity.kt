@@ -181,6 +181,14 @@ class MainActivity : ComponentActivity() {
     private var webViewGone = false
     // True between onResume and onPause; the progress poll slows down when false.
     @Volatile private var appInForeground = false
+
+    companion object {
+        /** Same as appInForeground, readable by BackgroundUpdater (another thread, no activity needed). */
+        @Volatile var inForeground = false
+
+        /** True while a song download or an update is running; the background updater waits then. */
+        @Volatile var busyCheck: (() -> Boolean)? = null
+    }
     private var lastBackPressMs = 0L
     private var permissionFlowActive = false
     private var permissionFlowStarted = false
@@ -367,6 +375,9 @@ class MainActivity : ComponentActivity() {
         registerVolumeReceiver()
         songDownloader.warmUp()
         appUpdater.start()
+        busyCheck = { songDownloader.isBusy() || appUpdater.isBusy() }
+        // Keeps updating the app while it is closed (see BackgroundUpdater.kt).
+        BackgroundUpdater.schedule(applicationContext)
         // A few seconds after launch, so the check does not compete with the splash and the library scan.
         screenHandler.postDelayed({ appUpdater.checkOnStart() }, 6000L)
         // If access was already granted, make sure the folders exist right away.
@@ -919,6 +930,7 @@ class MainActivity : ComponentActivity() {
         try { unregisterReceiver(volumeReceiver) } catch (e: Exception) { /* not registered */ }
         songDownloader.release()
         appUpdater.release()
+        busyCheck = null
         screenHandler.removeCallbacks(releaseScreenRunnable)
         screenHandler.removeCallbacks(closeRunnable)
         stopProgressUpdates()
@@ -932,6 +944,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         appInForeground = false
+        inForeground = false
         screenHandler.removeCallbacks(releaseScreenRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::webView.isInitialized && !webViewGone) {
@@ -942,6 +955,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         appInForeground = true
+        inForeground = true
         appUpdater.onResume()
         // Push the current position right away (the poll may have been in slow mode).
         if (mediaController?.isPlaying == true) startProgressUpdates()
@@ -988,7 +1002,10 @@ class MainActivity : ComponentActivity() {
         fun getAutoUpdate(): Boolean = appUpdater.autoEnabled()
 
         @JavascriptInterface
-        fun setAutoUpdate(on: Boolean) { appUpdater.setAutoEnabled(on) }
+        fun setAutoUpdate(on: Boolean) {
+            appUpdater.setAutoEnabled(on)
+            BackgroundUpdater.schedule(applicationContext)   // creates or cancels the background job
+        }
 
 
         // "Download songs" wizard (song-download.js). A job is answered through
