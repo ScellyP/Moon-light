@@ -72,11 +72,17 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **Smooth with big libraries**: indexed song look-ups, off-screen rows are skipped by the renderer, and entrance animations are limited to the first rows.
 - A custom launcher icon, status/navigation bar insets handled for edge-to-edge display.
 
+### Settings menu
+- **Swipe right on Home** (or tap the sliders button at the top right) and a **Settings** menu slides in from the left. It follows your finger, and a quick flick opens or closes it from any distance. Swipe left, tap the dark area, tap the X or press Back to close it.
+- **Playback:** volume normalisation (Off / Track / Album), crossfade length, and **Play when Bluetooth connects**.
+- **Appearance:** **Twinkling stars** (turn off for still stars, calmer and easier on the battery) and **Colours from the cover** (tint the screens from the song that's playing).
+- **Updates sit at the bottom:** the update bar (download / install progress), the **Update automatically** switch, the version number and a **Check for updates** button. A small dot on the sliders button shows when there is an update to act on.
+
 ### Updates
 - The app checks this repo's **GitHub Releases** on start (at most every 6 hours) and downloads new versions on Wi-Fi only.
 - **It also updates while closed**: Android's JobScheduler wakes a background check about every 6 hours (Wi-Fi only, not when the battery is low, and again after a reboot). A newer version is downloaded and installed by itself. On Android 12+ this can happen with no screen at all; otherwise a **notification** appears and one tap installs it. No Firebase or server is needed.
 - The install waits while **music is playing** or a **song download** is running (it retries 30 minutes later), because an install restarts the app.
-- An **Install** bar appears at the bottom of Home when the app is open. Tap the version number to check right now.
+- - When the app is open, the update bar appears at the bottom of the **Settings menu**; use **Check for updates** to check right now.
 - An **Update automatically** switch controls both the in-app and the background checking.
 - APK size and SHA-256 (when GitHub provides it) are verified before install, and Android always has the final say.
 
@@ -88,9 +94,9 @@ Swipe sideways or use the bottom bar to move between four tabs:
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Greeting, moon phase, quick tiles, Made for you, your Constellations, **Scan the sky**, update bar, version number |
+| **Home** | Greeting, moon phase, quick tiles, Made for you, your Constellations, **Scan the sky**, and the **Settings** button (or swipe right) |
 | **Songs** | The full library, playlists and the visible queue |
-| **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, crossfade, normalisation, sleep timer |
+| **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, volume, sleep timer |
 | **Download** | The paste-a-link song download wizard |
 
 The Back button closes dialogs and sheets first, then returns to Home, then leaves the app.
@@ -154,7 +160,7 @@ Only one level of grouping counts: a folder inside a playlist folder does not cr
 
 ## Updating
 
-From v1.00.00 the app checks GitHub Releases when it starts. If a newer version exists it downloads on Wi-Fi, and a bar at the bottom of **Home** offers **Install**. Android asks you to confirm, and the first time to allow *Install unknown apps* for Moonlight.
+From v1.00.00 the app checks GitHub Releases when it starts. If a newer version exists it downloads on Wi-Fi, and a bar at the bottom of the **Settings menu** offers **Install**. Android asks you to confirm, and the first time to allow *Install unknown apps* for Moonlight.
 
 From v1.01.00 the app also checks **in the background** about every 6 hours, even when it is closed, and installs the update by itself when Android allows it (otherwise it posts a notification; tap it to install). Android only lets an app skip the confirm screen for updates of an app it installed itself, so **the first update installed through Moonlight may ask once; later ones can be silent** (Android 12 and newer). Turn the **Update automatically** switch off to stop all background checking.
 
@@ -210,6 +216,7 @@ moonlight/
 │   │   ├── audio-player.js        Queue, engines, library, feature framework
 │   │   ├── spotify-ui.js          Home / Songs / Now playing / Download tabs
 │   │   ├── song-download.js       Download wizard
+│   │   ├── settings-menu.js       Settings drawer: swipe gesture and switches
 │   │   ├── app-update.js          Update bar and switch
 │   │   ├── settings-file.js       Mirrors settings to settings.txt
 │   │   ├── moon-phase.js, moon-theme.js   Moon-phase badge and theme

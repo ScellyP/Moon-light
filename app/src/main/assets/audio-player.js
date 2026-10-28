@@ -1568,6 +1568,18 @@ window.NovelAudio = (function () {
     trackStart(track) { if (track) PlaybackQueue.noteStarted(track.id); },
   });
 
+  /* ---- App settings (the Settings menu) --------------------------------------
+     The on/off choices in the Settings menu that are not playback tuning (crossfade and volume
+     normalisation have their own modules above). Read and written through NovelAudio.getSetting /
+     setSetting; settings-menu.js applies them to the page.
+       btAutoStart  start playing on its own when the app opens with Bluetooth audio connected
+       animatedSky  the twinkling stars behind the screens (off = still stars, calmer, easier on battery)
+       coverTint    colour the screens from the current cover art */
+  AudioFeatures.register({
+    id: 'appSettings', label: 'App settings', status: 'working',
+    defaults: { btAutoStart: true, animatedSky: true, coverTint: true },
+  });
+
   /* ---- Remember the last song ---------------------------------------------------
      Every time a track starts, the audio prefs are saved with it as `lastTrackId`
      (see Prefs.save), so the next launch can bring that song back. */
@@ -2469,6 +2481,7 @@ window.NovelAudio = (function () {
     _tryStart() {
       if (this.done || !this.libraryReady || !this.nativeReady) return;
       this.done = true;
+      if (state.features.appSettings.btAutoStart === false) return;   // switched off in Settings
       const bridge = window.AndroidBridge;
       if (!bridge || !bridge.isBluetoothAudioConnected || state.playing) return;
       let connected = false;
@@ -2483,6 +2496,19 @@ window.NovelAudio = (function () {
      ======================================================================= */
 
   return {
+    /* Settings menu: the app-wide on/off choices (see the "App settings" module). */
+    getSetting(name) {
+      const settings = state.features.appSettings;
+      return settings && Object.prototype.hasOwnProperty.call(settings, name) ? settings[name] : undefined;
+    },
+    setSetting(name, value) {
+      const settings = state.features.appSettings;
+      if (!settings || !Object.prototype.hasOwnProperty.call(settings, name) || typeof value !== typeof settings[name]) return false;
+      settings[name] = value;
+      Prefs.save();
+      return true;
+    },
+
     init() {
       AudioUI.cacheElements();
       if (!els.panel) return; // panel absent — nothing to do

@@ -191,7 +191,7 @@
     return coverUrlByName[name] || '';
   }
 
-  window.SpotifyUI = { setView, stepView, getCover };
+  window.SpotifyUI = { setView, stepView, getCover, refreshTint: () => updateTint() };
 
   /* =======================================================================
      "..." sheet
@@ -489,6 +489,11 @@
   }
 
   function updateTint() {
+    // Switched off in Settings: keep the plain app theme.
+    if (window.NovelAudio && window.NovelAudio.getSetting && window.NovelAudio.getSetting('coverTint') === false) {
+      if (tintKey !== '') resetTint();
+      return;
+    }
     const hasTrack = isEnabled(el.seek);
     const image = hasTrack && el.artwork ? el.artwork.querySelector('img') : null;
 

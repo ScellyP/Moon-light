@@ -9,9 +9,10 @@
              installing | failed
      step (failed only): check | download | install
 
-   What the page shows: a bar (#update-bar) at the bottom of the side menu, plus a small dot on the
-   menu button (body.has-update) while there is something to act on. Tapping the version number
-   (#app-version) checks right now. The bar also holds the "Update automatically" switch.
+   What the page shows: a bar (#update-bar) at the bottom of the Settings menu, plus a small dot on the
+   settings button (body.has-update) while there is something to act on. The "Check for updates"
+   button (#update-check) checks right now, and so does tapping the version number (#app-version).
+   The "Update automatically" switch sits just under the bar.
    An automatic check that finds nothing, or fails (no network at start-up), shows nothing at all.
    ========================================================================= */
 (function (root) {
@@ -116,6 +117,8 @@
   function checkNow() {
     call('checkForUpdate');
   }
+  var checkBtn = document.getElementById('update-check');
+  if (checkBtn) checkBtn.addEventListener('click', checkNow);
   if (versionEl) {
     versionEl.addEventListener('click', checkNow);
     versionEl.addEventListener('keydown', function (e) {

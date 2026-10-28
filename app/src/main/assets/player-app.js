@@ -5,7 +5,8 @@
    Here the panel is simply always open, so this file only does what reader.js did for it:
      - NovelAudio.init() / onPanelOpened()
      - the system-bar insets (window.onStatusBarInset / onNavBarInset)
-     - swiping sideways between Home / Songs / Now playing / Download
+     - swiping sideways between Home / Songs / Now playing / Download (settings-menu.js adds the
+       swipe-right-on-Home Settings drawer)
      - window.handleBack (MainActivity asks it before leaving the app)
      - the in-app message dialog (replaces alert()) and window.onFolderPickError
    ========================================================================= */
@@ -91,6 +92,7 @@
      asks for a second back press before it exits. ---- */
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
+    if (window.SettingsMenu && window.SettingsMenu.isOpen()) { window.SettingsMenu.close(); return true; }
     var sheet = document.getElementById('sp-sheet');
     if (sheet && !sheet.classList.contains('hidden')) {
       var close = document.getElementById('sp-sheet-close');
