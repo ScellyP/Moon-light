@@ -245,6 +245,8 @@ window.NovelAudio = (function () {
       }
 
       AudioFeatures.emit('libraryChanged');
+      // First scan of this launch: bring back the liked / recent songs from their text files if the app lost them.
+      try { if (window.SongMemory) window.SongMemory.restore(); } catch (e) { /* non-fatal */ }
       AudioUI.setNote(state.tracks.length ? '' : 'No audio files found in /storage/emulated/0/Novel/Audio.');
       AudioUI.renderPlaylistOptions();
 
@@ -1234,6 +1236,8 @@ window.NovelAudio = (function () {
           features: AudioFeatures.serialize(),
         }));
       } catch (e) { /* storage full — non-fatal */ }
+      // The liked / recent songs are also kept in text files (song-memory.js); it checks if they changed.
+      try { if (window.SongMemory) window.SongMemory.changed(); } catch (e) { /* non-fatal */ }
     },
   };
 
@@ -2506,6 +2510,45 @@ window.NovelAudio = (function () {
       if (!settings || !Object.prototype.hasOwnProperty.call(settings, name) || typeof value !== typeof settings[name]) return false;
       settings[name] = value;
       Prefs.save();
+      return true;
+    },
+
+    /* Search tab and song memory (song-search.js, song-memory.js). */
+    getTracks() { return state.tracks; },
+    getCurrentTrackId() { return state.currentTrackId; },
+    getTrackInfo(id) {
+      const t = MediaLibrary.getTrack(id);
+      return t ? { id: t.id, title: t.title || '', artist: t.artist || '', album: t.album || '', playlist: t.playlist || '', durationSec: t.durationSec || 0 } : null;
+    },
+    getLikedIds() { return AudioFeatures.likes.getIds().slice(); },
+    isLiked(id) { return AudioFeatures.likes.isLiked(id); },
+    toggleLike(id) {
+      if (!id) return false;
+      const now = AudioFeatures.likes.toggle(id);
+      AudioUI.render();
+      return now;
+    },
+    getHistoryIds() { return AudioFeatures.history.getIds().slice(); },
+    setLikedIds(ids) {
+      if (!Array.isArray(ids)) return false;
+      state.features.likes.ids = ids.filter((x) => typeof x === 'string');
+      Prefs.save();
+      AudioUI.render();
+      return true;
+    },
+    setHistoryIds(ids) {
+      if (!Array.isArray(ids)) return false;
+      state.features.history.ids = ids.filter((x) => typeof x === 'string').slice(0, 100);
+      Prefs.save();
+      AudioUI.render();
+      return true;
+    },
+    // Play one song from the Search tab: in its own playlist (or All songs), like tapping it there.
+    playTrack(id) {
+      const track = MediaLibrary.getTrack(id);
+      if (!track) return false;
+      AudioUI.selectPlaylist(track.playlist || 'all');
+      AudioEngine.play(track.id);
       return true;
     },
 

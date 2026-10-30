@@ -229,6 +229,20 @@ class PlaybackService : MediaSessionService() {
         // shuts itself (and its notification) down.
         private const val IDLE_STOP_MS = 10 * 60 * 1000L
 
+        /**
+         * Set (to the time of the pause) while the music is paused only because the phone's media
+         * volume was muted, 0 otherwise. A muted pause is waiting for the volume to come back, so
+         * neither this service nor the activity may treat it as "idle" and close for [MUTE_HOLD_MS].
+         */
+        @Volatile
+        var muteHeldSince: Long = 0L
+        const val MUTE_HOLD_MS = 3 * 60 * 60 * 1000L
+
+        fun heldByMute(): Boolean {
+            val since = muteHeldSince
+            return since > 0L && System.currentTimeMillis() - since < MUTE_HOLD_MS
+        }
+
         // Wear OS controllers allowed to connect to the media session (see
         // isAllowedController). Only the Google Wear OS companion app is
         // listed; add the package of any other watch app you use.
@@ -337,7 +351,7 @@ class PlaybackService : MediaSessionService() {
     private val idleHandler = Handler(Looper.getMainLooper())
     private val idleStopRunnable = Runnable {
         val p = mediaSession?.player
-        if (p == null || !isPlaybackActive(p)) {
+        if ((p == null || !isPlaybackActive(p)) && !heldByMute()) {
             getSystemService(NotificationManager::class.java)?.cancelAll()
             stopSelf()
         }
@@ -354,7 +368,8 @@ class PlaybackService : MediaSessionService() {
             return
         }
         playingNow = isPlaybackActive(p)
-        if (!playingNow) idleHandler.postDelayed(idleStopRunnable, IDLE_STOP_MS)
+        if (playingNow) muteHeldSince = 0L   // playing again, whoever started it
+        if (!playingNow) idleHandler.postDelayed(idleStopRunnable, if (heldByMute()) MUTE_HOLD_MS else IDLE_STOP_MS)
     }
 
     /**

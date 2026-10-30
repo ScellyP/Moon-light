@@ -2401,7 +2401,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   background: linear-gradient(180deg, var(--sp-cur) 0%, transparent 100%);
   pointer-events: none; z-index: 0; transition: background .4s ease;
 }
-#audio-panel[data-view="library"], #audio-panel[data-view="download"] { --sp-cur: color-mix(in srgb, var(--accent) 38%, var(--bg)); }
+#audio-panel[data-view="library"], #audio-panel[data-view="search"], #audio-panel[data-view="download"] { --sp-cur: color-mix(in srgb, var(--accent) 38%, var(--bg)); }
 
 #sp-views {
   position: relative; z-index: 1; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
@@ -2411,6 +2411,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-views::-webkit-scrollbar { display: none; }
 .sp-view { display: none; flex-direction: column; padding-bottom: 16px; }
 #audio-panel[data-view="library"] #sp-view-library,
+#audio-panel[data-view="search"] #sp-view-search,
 #audio-panel[data-view="album"] #sp-view-album,
 #audio-panel[data-view="download"] #sp-view-download,
 #audio-panel[data-view="track"] #sp-view-track { display: flex; animation: spIn .22s var(--ease) both; }
@@ -3197,6 +3198,100 @@ body.settings-open #sp-views { pointer-events: none; }
 body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-motion .sky .shoot { animation: none; }
 @media (prefers-reduced-motion: reduce) { #settings-drawer, #settings-scrim { transition: none !important; } }
 </style>
+<style id="search-css">
+/* ---- Search tab (song-search.js) ---- */
+#sp-view-search { flex-direction: column; }
+#sp-view-search .sp-topbar h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+#srch-bar {
+  position: sticky; top: 0; z-index: 2; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px; margin: 2px 14px 10px; padding: 0 6px 0 14px; min-height: 48px;
+  border-radius: 10px; background: color-mix(in srgb, var(--text) 90%, var(--bg)); color: var(--bg);
+}
+#srch-bar > .ico { width: 22px; height: 22px; flex-shrink: 0; }
+#srch-input { flex: 1; min-width: 0; height: 48px; border: 0; outline: 0; background: transparent; color: #12141f; font: inherit; font-size: 15.5px; font-weight: 500; -webkit-appearance: none; appearance: none; }
+#srch-input::placeholder { color: color-mix(in srgb, #12141f 62%, transparent); font-weight: 500; }
+#srch-input::-webkit-search-cancel-button, #srch-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+#srch-clear { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: #12141f; cursor: pointer; }
+#srch-clear[hidden], #srch-chips[hidden] { display: none; }
+#srch-chips { flex-shrink: 0; display: flex; gap: 8px; padding: 0 14px 10px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x pan-y; }
+#srch-chips::-webkit-scrollbar { display: none; }
+#srch-chips button { flex-shrink: 0; min-height: 36px; padding: 0 16px; border: 0; border-radius: var(--r-pill); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
+#srch-chips button.active { background: var(--accent); color: var(--accent-ink); }
+#srch-body { flex: 1 1 auto; padding: 0 14px 24px; }
+.srch-section { padding-top: 6px; }
+.srch-head { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 0 6px; }
+.srch-head h2 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+.srch-link { border: 0; background: none; color: var(--faint); font: inherit; font-size: 13px; font-weight: 600; padding: 8px 2px; cursor: pointer; }
+.srch-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.srch-row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 6px 0; cursor: pointer; border-radius: 8px; -webkit-user-select: none; user-select: none; content-visibility: auto; contain-intrinsic-size: auto 60px; }
+.srch-row:active { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.srch-row:focus-visible, .srch-tile:focus-visible, .srch-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.srch-thumb { width: 48px; height: 48px; flex-shrink: 0; border-radius: 4px; }
+.srch-avatar { width: 48px; height: 48px; flex-shrink: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--accent) 34%, var(--bg)); }
+.srch-avatar[data-tone="1"] { background: color-mix(in srgb, var(--accent) 52%, var(--bg)); }
+.srch-avatar[data-tone="2"] { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.srch-avatar[data-tone="3"] { background: color-mix(in srgb, var(--accent) 42%, #402a52); }
+.srch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.srch-title { font-size: 15.5px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srch-sub { font-size: 13px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srch-row.playing .srch-title { color: var(--sp-accent, var(--accent)); }
+mark.srch-hit { background: none; color: inherit; font-weight: 800; }
+.srch-heart, .srch-x { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-right: -6px; border: 0; background: none; color: var(--faint); cursor: pointer; border-radius: 50%; }
+.srch-heart[aria-pressed="true"] { color: var(--sp-accent, var(--accent)); }
+.srch-heart[aria-pressed="true"] .ico { fill: currentColor; }
+.srch-top { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 18px; border-radius: 10px; cursor: pointer; background: color-mix(in srgb, var(--text) 8%, var(--bg)); }
+.srch-top:active { background: color-mix(in srgb, var(--text) 13%, var(--bg)); }
+.srch-top-cover { width: 84px; height: 84px; border-radius: 6px; margin-bottom: 8px; box-shadow: 0 8px 22px rgba(0,0,0,.4); }
+.srch-top-title { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1.15; overflow-wrap: anywhere; }
+.srch-top-sub { font-size: 13.5px; color: var(--faint); }
+.srch-recent { min-height: 52px; }
+.srch-recent-ico { width: 36px; display: inline-flex; justify-content: center; color: var(--faint); }
+.srch-recent .srch-title { flex: 1; }
+.srch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.srch-tile {
+  --tile: color-mix(in srgb, var(--accent) 45%, var(--bg));
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 6px; min-height: 92px; padding: 12px; overflow: hidden; border: 0; border-radius: 8px; text-align: left; cursor: pointer; font: inherit; color: var(--text);
+  background: var(--tile); content-visibility: auto; contain-intrinsic-size: auto 92px;
+}
+.srch-tile[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
+.srch-tile[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
+.srch-tile[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
+.srch-tile[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
+.srch-tile[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
+.srch-tile[data-sp-cover]::after { content: ""; position: absolute; right: -14px; bottom: -10px; width: 62px; height: 62px; border-radius: 4px; transform: rotate(25deg); background: var(--sp-cover) center / cover; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+.srch-tile-name { font-size: 15px; font-weight: 700; line-height: 1.2; max-width: 80%; overflow-wrap: anywhere; z-index: 1; }
+.srch-tile-sub { font-size: 12px; color: color-mix(in srgb, var(--text) 78%, transparent); z-index: 1; }
+.srch-empty, .srch-none p { color: var(--faint); font-size: 14px; line-height: 1.5; }
+.srch-none { padding: 36px 6px; text-align: center; }
+.srch-none h2 { margin: 0 0 8px; font-size: 18px; }
+body.settings-open #srch-input { pointer-events: none; }
+</style>
+<style id="download-memory-css">
+/* ---- Download tab: songs downloaded before, and similar names (song-download.js, song-memory.js) ---- */
+.dl-mark-warn { background: color-mix(in srgb, #e6b450 88%, transparent); color: var(--bg); }
+.dl-dupes { gap: 10px; }
+.dl-dupe-list { align-self: stretch; display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+.dl-dupe { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--text) 8%, transparent); text-align: left; }
+.dl-dupe-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dl-dupe-name { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.dl-dupe-sub { font-size: 12.5px; color: var(--sp-sub); }
+.dl-dupe-state { font-size: 12.5px; font-weight: 600; color: var(--sp-accent); }
+.dl-dupe-state.gone { color: #e6b450; }
+.dl-again { flex-shrink: 0; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 13px; color: var(--text); cursor: pointer; }
+.dl-again input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
+.dl-similar { align-self: stretch; text-align: left; }
+.dl-similar:empty { display: none; }
+.dl-similar-title { margin: 12px 0 6px; font-size: 13px; font-weight: 600; color: var(--sp-sub); }
+.dl-warn { margin: 12px 0 8px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; line-height: 1.4; font-weight: 600; color: #f3d9a0; background: color-mix(in srgb, #e6b450 16%, transparent); border: 1px solid color-mix(in srgb, #e6b450 45%, transparent); }
+.dl-similar-list { display: flex; flex-direction: column; gap: 6px; }
+.dl-similar-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.dl-similar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dl-similar-name { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.dl-similar-sub { font-size: 12px; color: var(--sp-sub); }
+.dl-badge { flex-shrink: 0; padding: 3px 9px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--text) 16%, transparent); }
+.dl-badge.same { color: #2a1d05; background: #e6b450; }
+.dl-drop { align-self: flex-start; margin-top: 10px; min-height: 44px; }
+</style>
 </head>
 <body class="player-app">
 <!-- Icon sprite: 24x24 grid, 1.75px stroke, round caps/joins (set in .ico). -->
@@ -3206,7 +3301,7 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
   <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3.5" y="14.5" width="4" height="6" rx="1.6"/><rect x="16.5" y="14.5" width="4" height="6" rx="1.6"/></symbol>
   <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 4.5h11a1 1 0 0 1 1 1v14.2a.5.5 0 0 1-.8.4L12 15.5l-5.7 4.6a.5.5 0 0 1-.8-.4V5.5a1 1 0 0 1 1-1Z"/></symbol>
   <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M6.5 3.5h11M6.5 20.5h11"/><path d="M8 3.5c0 4 2.2 5.4 4 8.5-1.8 3.1-4 4.5-4 8.5M16 3.5c0 4-2.2 5.4-4 8.5 1.8 3.1 4 4.5 4 8.5"/></symbol>
-  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4.5 7h8M17.5 7h2M4.5 12h2M11.5 12h8M4.5 17h9M18 17h1.5"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="12" r="2.2"/><circle cx="15.7" cy="17" r="2.2"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4.5 7h15M4.5 12h15M4.5 17h9"/></symbol>
   <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
   <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
@@ -3214,6 +3309,7 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
   <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4.5v10.2M7.6 10.4 12 14.8l4.4-4.4M5 19.5h14"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5.5 12.5 4.5 4.5 8.5-9.5"/></symbol>
@@ -3254,7 +3350,7 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
         <section id="sp-view-library" class="sp-view" aria-label="Library">
           <div class="sp-topbar">
             <h1 id="sp-greeting"></h1>
-            <button type="button" id="settings-btn" class="sp-icon-btn" title="Settings" aria-label="Open settings" aria-haspopup="dialog" aria-controls="settings-drawer"><svg class="ico"><use href="#i-sliders"/></svg></button>
+            <button type="button" id="settings-btn" class="sp-icon-btn" title="Settings" aria-label="Open settings" aria-haspopup="dialog" aria-controls="settings-drawer"><svg class="ico"><use href="#i-settings"/></svg></button>
           </div>
           <div id="sp-lib-hero">
             <div id="sp-lib-avatar"><span class="moon-badge big" data-moon></span></div>
@@ -3288,6 +3384,23 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
             </button>
           </div>
           <ul id="audio-playlist-list" class="hidden"></ul>
+        </section>
+
+        <!-- ============ SEARCH (song-search.js) ============ -->
+        <section id="sp-view-search" class="sp-view" aria-label="Search">
+          <div class="sp-topbar"><h1 id="srch-title-h">Search</h1></div>
+          <div id="srch-bar">
+            <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
+            <input id="srch-input" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="What do you want to listen to?" aria-label="Search your songs, artists and playlists">
+            <button type="button" id="srch-clear" aria-label="Clear search" hidden><svg class="ico"><use href="#i-close"/></svg></button>
+          </div>
+          <div id="srch-chips" role="group" aria-label="Filter results" hidden>
+            <button type="button" data-srch-filter="all" class="active" aria-pressed="true">All</button>
+            <button type="button" data-srch-filter="songs" aria-pressed="false">Songs</button>
+            <button type="button" data-srch-filter="playlists" aria-pressed="false">Playlists</button>
+            <button type="button" data-srch-filter="artists" aria-pressed="false">Artists</button>
+          </div>
+          <div id="srch-body" data-state="empty"></div>
         </section>
 
         <!-- ============ SONGS (kit: "Album View") ============ -->
@@ -3420,6 +3533,7 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
       <!-- ============ Bottom navigation ============ -->
       <nav id="sp-nav" aria-label="Music navigation">
         <button type="button" data-sp-view="library"><svg class="ico"><use href="#sp-home"/></svg><span>Home</span></button>
+        <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="album"><svg class="ico"><use href="#i-moon-music"/></svg><span>Songs</span></button>
         <button type="button" data-sp-view="track"><svg class="ico"><use href="#i-headphones"/></svg><span>Now playing</span></button>
         <button type="button" data-sp-view="download"><svg class="ico"><use href="#i-download"/></svg><span>Download</span></button>
@@ -3531,7 +3645,9 @@ body.no-sky-motion .sky::before, body.no-sky-motion .sky::after, body.no-sky-mot
 <script src="version.js"></script>
 <script src="settings-file.js"></script>
 <script src="audio-player.js"></script>
+<script src="song-memory.js"></script>
 <script src="spotify-ui.js"></script>
+<script src="song-search.js"></script>
 <script src="song-download.js"></script>
 <script src="moon-phase.js"></script>
 <script src="moon-theme.js"></script>

@@ -121,7 +121,7 @@
                state: waiting | downloading | ready | failed | placed | skipped
        index   which item the screen is about
      ----------------------------------------------------------------------- */
-  function createWizard({ stage, place, cancel, discard, play, onChange } = {}) {
+  function createWizard({ stage, place, cancel, discard, discardOne, play, onPlaced, onChange } = {}) {
     const w = { step: 'paste', items: [], index: 0, message: '', error: '', folder: '' };
     const jobs = {};            // jobId -> { kind: 'stage' | 'place', item }
     let seq = 0;                // job ids never repeat within a session, so a late answer can't be mistaken
@@ -195,6 +195,8 @@
     function placeDone(item, finalPath) {
       item.state = 'placed';
       item.finalPath = finalPath || '';
+      // Remember the link and the name it was saved under (downloads.txt), before anything else can go wrong.
+      try { if (onPlaced) onPlaced(item, finalPath || '', w.folder); } catch (e) { /* the song is placed either way */ }
       try { if (play && finalPath) play(finalPath, w.folder); } catch (e) { /* the song is placed either way */ }
       advance();
     }
@@ -256,6 +258,16 @@
         if (w.step !== 'download' || !cur || cur.state !== 'failed') return;
         cur.state = 'skipped';
         advance();
+      },
+      // "Don't keep this one" (it turned out to be a duplicate): deletes just this downloaded song, not
+      // the next one that is downloading in the background, and moves on.
+      dropCurrent() {
+        const cur = current();
+        if (!cur || cur.state !== 'ready' || (w.step !== 'name' && w.step !== 'playlist' && w.step !== 'newplaylist')) return false;
+        try { if (discardOne && cur.path) discardOne(cur.path); } catch (e) { /* nothing to delete */ }
+        cur.state = 'dropped';
+        advance();
+        return true;
       },
       // The name being typed (no redraw: the user is typing in the field).
       rename(text) {
@@ -395,6 +407,10 @@
     place(id, path, name, folder) { return needBridge('placeSong').placeSong(id, path, name, folder); },
     cancel() { const b = bridge(); if (b && typeof b.cancelSongDownload === 'function') b.cancelSongDownload(); },
     discard() { const b = bridge(); if (b && typeof b.discardStagedSongs === 'function') b.discardStagedSongs(); },
+    discardOne(path) { const b = bridge(); if (b && typeof b.discardStagedSong === 'function') b.discardStagedSong(path); },
+    onPlaced(item, finalPath, folder) {
+      if (root.SongMemory) root.SongMemory.recordDownload({ url: item.url, name: item.name, playlist: folder, path: finalPath });
+    },
     play(path, folder) {
       const audio = root.NovelAudio;
       if (audio && typeof audio.playAfterRescan === 'function') {
@@ -410,10 +426,36 @@
 
   /* ---- step 1 ---------------------------------------------------------- */
 
+  /* Links already downloaded before (downloads.txt, any form of the same link) are not downloaded again
+     unless asked: the user sees which ones they are and what they were saved as. dupes = { fresh: [url],
+     known: [{ url, entry, present, again }] } while that choice is on screen. */
+  let dupes = null;
+
+  function reviewLinks(links) {
+    const memory = root.SongMemory;
+    if (!memory) { wizard.start(links); return; }
+    const seen = new Set();
+    const fresh = [];
+    const known = [];
+    links.forEach((url) => {
+      const key = memory.normalizeUrl(url);
+      if (seen.has(key)) return;               // the same song twice in one paste
+      seen.add(key);
+      const entry = memory.findDownloaded(url);
+      if (!entry) { fresh.push(url); return; }
+      const present = memory.isPresent(entry);
+      // The file is gone (deleted since): downloading it again is probably what is wanted.
+      known.push({ url, entry, present, again: !present });
+    });
+    if (!known.length) { wizard.start(fresh); return; }
+    dupes = { fresh, known };
+    render();
+  }
+
   function takeClipboardText(text) {
     const parsed = parseLinks(text);
     if (!parsed.links.length) wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
-    else wizard.start(parsed.links);
+    else reviewLinks(parsed.links);
   }
 
   function pasteFromClipboard() {
@@ -433,7 +475,62 @@
 
   /* ---- the steps ------------------------------------------------------- */
 
+  function dupeCount(d) { return d.fresh.length + d.known.filter((k) => k.again).length; }
+
+  function buildDupes() {
+    const d = dupes;
+    const box = el('div', 'dl-step dl-dupes');
+    const mark = el('span', 'dl-mark dl-mark-warn');
+    mark.appendChild(icon('i-info'));
+    box.appendChild(mark);
+    box.appendChild(el('h2', 'dl-title', d.known.length === 1 ? 'Already downloaded' : d.known.length + ' links already downloaded'));
+    box.appendChild(el('p', 'dl-hint', d.fresh.length
+      ? 'These were downloaded before. The ' + d.fresh.length + ' new link' + (d.fresh.length === 1 ? '' : 's') + ' will download as usual.'
+      : 'These were downloaded before. Switch on any you want again.'));
+
+    const list = el('div', 'dl-dupe-list');
+    d.known.forEach((k) => {
+      const item = el('div', 'dl-dupe');
+      const text = el('span', 'dl-dupe-text');
+      text.appendChild(el('span', 'dl-dupe-name', k.entry.name || shortLink(k.url)));
+      const bits = [];
+      if (k.entry.playlist) bits.push(k.entry.playlist);
+      if (k.entry.t && root.SongMemoryPure) bits.push(root.SongMemoryPure.formatDate(k.entry.t).slice(0, 10));
+      text.appendChild(el('span', 'dl-dupe-sub', bits.join(' • ')));
+      text.appendChild(el('span', 'dl-dupe-state' + (k.present ? '' : ' gone'), k.present ? 'Still on your phone' : 'No longer on your phone'));
+      item.appendChild(text);
+      const label = el('label', 'dl-again');
+      const box2 = el('input');
+      box2.type = 'checkbox';
+      box2.checked = k.again;
+      box2.setAttribute('aria-label', 'Download “' + (k.entry.name || shortLink(k.url)) + '” again');
+      box2.addEventListener('change', () => { k.again = box2.checked; go.textContent = goLabel(); });
+      label.appendChild(box2);
+      label.appendChild(el('span', null, 'Again'));
+      item.appendChild(label);
+      list.appendChild(item);
+    });
+    box.appendChild(list);
+
+    const goLabel = () => {
+      const n = dupeCount(d);
+      return n ? 'Download ' + n + (n === 1 ? ' song' : ' songs') : 'Skip them all';
+    };
+    const row = el('div', 'dl-row dl-row-end');
+    row.appendChild(button('Cancel', 'dl-secondary', () => { dupes = null; render(); }));
+    const go = button(goLabel(), 'dl-primary', () => {
+      const urls = d.fresh.concat(d.known.filter((k) => k.again).map((k) => k.url));
+      dupes = null;
+      if (urls.length) wizard.start(urls);
+      else { wizard.setMessage('Nothing new to download: those songs are already there.'); render(); }
+    });
+    row.appendChild(go);
+    box.appendChild(row);
+    return box;
+  }
+
   function buildPaste(s) {
+    if (dupes) return buildDupes();
     const box = el('div', 'dl-step');
     box.appendChild(button('Click to paste', 'dl-primary dl-big', pasteFromClipboard));
     if (s.message) box.appendChild(el('p', 'dl-msg', s.message));
@@ -497,10 +594,49 @@
     box.appendChild(input);
     box.appendChild(hint);
 
+    // Songs already on the phone (or downloaded before) with a similar name, updated as the name is typed.
+    const similar = el('div', 'dl-similar');
+    similar.setAttribute('aria-live', 'polite');
+    box.appendChild(similar);
+    let similarTimer = 0;
+    const refreshSimilar = () => showSimilar(similar, input.value);
+    input.addEventListener('input', () => { clearTimeout(similarTimer); similarTimer = setTimeout(refreshSimilar, 120); });
+    refreshSimilar();
+
     const row = el('div', 'dl-row dl-row-end');
     row.appendChild(button('Save', 'dl-primary', () => wizard.save()));
     box.appendChild(row);
     return box;
+  }
+
+  function showSimilar(host, name) {
+    host.textContent = '';
+    const memory = root.SongMemory;
+    if (!memory) return;
+    const found = memory.similarTo(name, { limit: 4 });
+    if (!found.length) return;
+    const exact = found.find((f) => f.exact);
+    if (exact) {
+      const where = exact.source === 'log'
+        ? 'was downloaded before' + (exact.playlist ? ' into ' + exact.playlist : '') + ' (the file is gone)'
+        : exact.playlist ? 'is already in ' + exact.playlist : 'is already on your phone';
+      host.appendChild(el('p', 'dl-warn', '“' + (exact.title || name) + '” ' + where + '. Saving adds another copy.'));
+    } else {
+      host.appendChild(el('p', 'dl-similar-title', 'Similar songs already here'));
+    }
+    const list = el('div', 'dl-similar-list');
+    found.forEach((f) => {
+      const r = el('div', 'dl-similar-row');
+      const text = el('span', 'dl-similar-text');
+      text.appendChild(el('span', 'dl-similar-name', f.title));
+      const sub = [f.artist, f.playlist, f.source === 'log' ? 'file gone' : ''].filter(Boolean).join(' • ');
+      if (sub) text.appendChild(el('span', 'dl-similar-sub', sub));
+      r.appendChild(text);
+      r.appendChild(el('span', 'dl-badge' + (f.exact ? ' same' : ''), f.exact ? 'Same song' : 'Similar'));
+      list.appendChild(r);
+    });
+    host.appendChild(list);
+    host.appendChild(button('Don’t keep this song', 'dl-secondary dl-drop', () => wizard.dropCurrent()));
   }
 
   function tile(title, sub, cover, onClick, extraClass) {
@@ -639,7 +775,7 @@
     new MutationObserver(() => {
       const shown = isShown();
       if (shown && !wasShown) render();
-      if (!shown && wasShown) wizard.leave();
+      if (!shown && wasShown) { dupes = null; wizard.leave(); }
       wasShown = shown;
     }).observe(panel, { attributes: true, attributeFilter: ['data-view', 'class'] });
   }

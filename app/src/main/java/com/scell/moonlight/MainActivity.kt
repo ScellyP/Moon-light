@@ -104,7 +104,9 @@ class MainActivity : ComponentActivity() {
             val nativeActive = c != null && (c.isPlaying ||
                 (c.playWhenReady && (c.playbackState == Player.STATE_BUFFERING ||
                     c.playbackState == Player.STATE_READY)))
-            if (nativeActive || songDownloader.isBusy() || appUpdater.isBusy()) {
+            // A pause caused by muting the phone (see handleMuteChange) is not "idle": the music is
+            // waiting for the volume to come back, so the app must not close itself meanwhile.
+            if (nativeActive || PlaybackService.heldByMute() || songDownloader.isBusy() || appUpdater.isBusy()) {
                 closeRecheckPending = false
                 screenHandler.postDelayed(this, inactivityCloseMs)
                 return
@@ -142,6 +144,9 @@ class MainActivity : ComponentActivity() {
 
     // Upper limit for settings.txt (read and write); see readSettingsFile().
     private val MAX_SETTINGS_BYTES = 256 * 1024
+    // The permanent song lists (downloads.txt, favorites.txt, recents.txt): the only names the page may read/write.
+    private val DATA_FILES = setOf("downloads.txt", "favorites.txt", "recents.txt")
+    private val MAX_DATA_BYTES = 1024 * 1024
 
 
     private fun keepScreenAwake() {
@@ -832,10 +837,13 @@ class MainActivity : ComponentActivity() {
             if (muted) {
                 if (controller != null && controller.isPlaying) {
                     mutePaused = true
+                    // Before the pause, so the service's idle timer already sees the hold.
+                    PlaybackService.muteHeldSince = System.currentTimeMillis()
                     controller.pause()
                 }
             } else if (mutePaused) {
                 mutePaused = false
+                PlaybackService.muteHeldSince = 0L
                 controller?.play()
             }
         } catch (e: Exception) {
@@ -1037,6 +1045,26 @@ class MainActivity : ComponentActivity() {
             try { File(SongDownloader.STAGING_DIR).deleteRecursively() } catch (e: Exception) { /* nothing to delete */ }
         }
 
+        // Deletes ONE downloaded-but-not-placed song (and its own staging folder): used when the
+        // user decides not to keep a song that turned out to be a duplicate. Other staged songs
+        // (the next one downloading in the background) are left alone. Only staged files qualify.
+        @JavascriptInterface
+        fun discardStagedSong(path: String): Boolean {
+            if (!SongDownloader.isStagedPath(path)) return false
+            return try {
+                val file = File(path).canonicalFile
+                val root = File(SongDownloader.STAGING_DIR).canonicalFile
+                val folder = file.parentFile
+                file.delete()
+                if (folder != null && folder != root && folder.path.startsWith(root.path + File.separator)) {
+                    folder.deleteRecursively()   // the song's own folder only
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         // The text on the clipboard ("" if none), for the "Click to paste" button. Android only lets
         // an app read the clipboard while it is in the foreground, which it is when the button is tapped.
         @JavascriptInterface
@@ -1076,6 +1104,46 @@ class MainActivity : ComponentActivity() {
             return try {
                 playerRoot.mkdirs()
                 settingsFile.writeText(text)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        // The permanent song lists, next to settings.txt in /storage/emulated/0/Moonlight/:
+        //   downloads.txt  every song downloaded from a link (link, name it was saved as, playlist, path)
+        //   favorites.txt  the liked songs, with their details
+        //   recents.txt    the recently played songs, with their details
+        // Only these names are accepted (the page can never read or write any other file). Same
+        // contract as the settings file: null = storage not accessible yet, "" = no such file yet.
+        // See song-memory.js for the formats.
+        @JavascriptInterface
+        fun readDataFile(name: String): String? {
+            if (name !in DATA_FILES) return null
+            if (!hasStoragePermission()) return null
+            return try {
+                val f = File(playerRoot, name)
+                if (f.exists() && f.length() <= MAX_DATA_BYTES) f.readText() else ""
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        @JavascriptInterface
+        fun writeDataFile(name: String, text: String): Boolean {
+            if (name !in DATA_FILES) return false
+            if (!hasStoragePermission()) return false
+            if (text.length > MAX_DATA_BYTES) return false
+            return try {
+                playerRoot.mkdirs()
+                // Write next to it and rename, so a crash half-way never leaves a broken list.
+                val tmp = File(playerRoot, "$name.tmp")
+                tmp.writeText(text)
+                val target = File(playerRoot, name)
+                if (!tmp.renameTo(target)) {
+                    target.writeText(text)
+                    tmp.delete()
+                }
                 true
             } catch (e: Exception) {
                 false

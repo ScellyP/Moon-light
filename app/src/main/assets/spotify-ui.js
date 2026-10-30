@@ -62,7 +62,7 @@
      Constants & element references
      ======================================================================= */
 
-  const VIEWS = ['library', 'album', 'track', 'download'];   // the order of the bottom bar, and of swiping
+  const VIEWS = ['library', 'search', 'album', 'track', 'download'];   // the order of the bottom bar, and of swiping
   const ENTER_ANIMATION_MS = 900;
   const PROGRESS_INTERVAL_MS = 400;
 
@@ -191,7 +191,16 @@
     return coverUrlByName[name] || '';
   }
 
-  window.SpotifyUI = { setView, stepView, getCover, refreshTint: () => updateTint() };
+  /** Opens a playlist's song list (what tapping it on Home does). Used by the Search tab. */
+  function openPlaylist(name) {
+    const row = findRow(name);
+    if (row) row.click();
+  }
+
+  window.SpotifyUI = {
+    setView, stepView, getCover, refreshTint: () => updateTint(),
+    getPlaylistRows: () => readPlaylistRows(), openPlaylist,
+  };
 
   /* =======================================================================
      "..." sheet
