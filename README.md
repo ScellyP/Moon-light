@@ -15,7 +15,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - [Installing](#installing)
 - [Permissions](#permissions)
 - [Updating](#updating)
-- [Your settings](#your-settings)
+- [Your settings and song lists](#your-settings-and-song-lists)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Building](#building)
@@ -39,6 +39,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **A-B repeat**: loop a section of a song with the A / B buttons under the seek bar.
 - **Sleep timer**: stop after a set number of minutes or at the end of the current track, with a fade-out.
 - **Unplayable files are skipped** instead of stalling the player.
+- **Muting the phone pauses the music** and it carries on when you turn the volume back up. While it waits like that, the app no longer closes itself after 10 minutes (it holds on for up to 3 hours).
 - **Remembers the last song**: on the next launch it is ready in the player (not started) from the beginning.
 - **Optional auto-start over Bluetooth**: when Bluetooth audio connects, Moonlight can start playing the current song by itself.
 
@@ -61,6 +62,8 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - Names are cleaned up automatically (file name and title tag stay in sync).
 - If yt-dlp breaks because a site changed, the app updates yt-dlp by itself after the first failure.
 - Leaving the tab before a song is placed cancels running downloads and deletes the staged files.
+- **It remembers what you downloaded.** Every saved song's link and the name it was saved under go into `downloads.txt` on the phone. Paste a link you downloaded before (even written another way, like `youtu.be/…` or `youtube.com/watch?v=…`) and the app says **Already downloaded**, shows the name, playlist and date, and whether the file is still on your phone. By default it skips them; flip **Again** on any you want anyway. A song whose file was deleted since is offered again automatically.
+- **Duplicate names are caught while you name a song.** Songs already on your phone (or downloaded before) with the same or a similar name are listed under the name box, ignoring capitals, punctuation and tags like "(Official Video)". If one has the same name you get a warning, and **Don't keep this song** deletes just that download.
 
 ### Look and feel
 - **Spotify-style design**: mini player, "..." action sheet, album/playlist headers, 2×2 cover mosaics on playlist rows.
@@ -72,11 +75,17 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **Smooth with big libraries**: indexed song look-ups, off-screen rows are skipped by the renderer, and entrance animations are limited to the first rows.
 - A custom launcher icon, status/navigation bar insets handled for edge-to-edge display.
 
+### Search
+- A **Search** tab (second in the bottom bar) works like Spotify's. Results appear as you type: a **Top result**, then **Songs**, **Playlists** and **Artists**, with the letters you typed highlighted.
+- Every word you type must match somewhere in a song's **title, artist, album or playlist**. Capitals, accents and punctuation don't matter, a small typo is forgiven, and `lofi` finds `Lo-fi`.
+- Chips narrow it to **Songs**, **Playlists** or **Artists**. Tap a song to play it, tap the heart to like it, tap a playlist to open it, tap an artist to see their songs.
+- With nothing typed it shows your **recent searches** (tap to repeat, × to remove, Clear all) and a **Browse all** grid of your playlists.
+
 ### Settings menu
-- **Swipe right on Home** (or tap the sliders button at the top right) and a **Settings** menu slides in from the left. It follows your finger, and a quick flick opens or closes it from any distance. Swipe left, tap the dark area, tap the X or press Back to close it.
+- **Swipe right on Home** (or tap the gear button at the top right) and a **Settings** menu slides in from the left. It follows your finger, and a quick flick opens or closes it from any distance. Swipe left, tap the dark area, tap the X or press Back to close it.
 - **Playback:** volume normalisation (Off / Track / Album), crossfade length, and **Play when Bluetooth connects**.
 - **Appearance:** **Twinkling stars** (turn off for still stars, calmer and easier on the battery) and **Colours from the cover** (tint the screens from the song that's playing).
-- **Updates sit at the bottom:** the update bar (download / install progress), the **Update automatically** switch, the version number and a **Check for updates** button. A small dot on the sliders button shows when there is an update to act on.
+- **Updates sit at the bottom:** the update bar (download / install progress), the **Update automatically** switch, the version number and a **Check for updates** button. A small dot on the gear button shows when there is an update to act on.
 
 ### Updates
 - The app checks this repo's **GitHub Releases** on start (at most every 6 hours) and downloads new versions on Wi-Fi only.
@@ -90,11 +99,12 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 
 ## Screens
 
-Swipe sideways or use the bottom bar to move between four tabs:
+Swipe sideways or use the bottom bar to move between five tabs:
 
 | Tab | What it does |
 | --- | --- |
 | **Home** | Greeting, moon phase, quick tiles, Made for you, your Constellations, **Scan the sky**, and the **Settings** button (or swipe right) |
+| **Search** | Search your songs, playlists and artists as you type; recent searches; Browse all |
 | **Songs** | The full library, playlists and the visible queue |
 | **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, volume, sleep timer |
 | **Download** | The paste-a-link song download wizard |
@@ -168,15 +178,20 @@ The app never installs by itself while music is playing or a download is running
 
 ---
 
-## Your settings
+## Your settings and song lists
 
-Saved as plain text in:
+Everything lives in one folder, `/storage/emulated/0/Moonlight/`. Copy it to a new phone and the app picks up where it left off.
 
 ```
-/storage/emulated/0/Moonlight/settings.txt
+settings.txt    your settings (audio.* lines)
+downloads.txt   every song downloaded from a link: date, saved name, playlist, link, file path
+favorites.txt   your liked songs: date liked, title, artist, album, playlist, length, file path
+recents.txt     your recently played songs (newest first, up to 100), same details
 ```
 
-(`audio.*` lines). You can edit it while the app is closed. To move over from Novel Reader, copy its `audio.*` lines from `Novel/settings.txt` into this file.
+All are plain text, one song per line, **tab separated** with a `#` comment header, so they open in any text editor or spreadsheet. The app rewrites `favorites.txt` and `recents.txt` whenever your liked or played songs change, and if the app's own copy is ever empty (a fresh install, cleared data) it **restores your favourites and recents from these files** on the first scan. `downloads.txt` is what powers the "already downloaded" warning.
+
+`settings.txt` can be edited while the app is closed. To move over from Novel Reader, copy its `audio.*` lines from `Novel/settings.txt` into it.
 
 ---
 
@@ -217,6 +232,8 @@ moonlight/
 │   │   ├── spotify-ui.js          Home / Songs / Now playing / Download tabs
 │   │   ├── song-download.js       Download wizard
 │   │   ├── settings-menu.js       Settings drawer: swipe gesture and switches
+│   │   ├── song-search.js         Search tab: matching, ranking, results
+│   │   ├── song-memory.js         downloads.txt / favorites.txt / recents.txt, duplicate links and names
 │   │   ├── app-update.js          Update bar and switch
 │   │   ├── settings-file.js       Mirrors settings to settings.txt
 │   │   ├── moon-phase.js, moon-theme.js   Moon-phase badge and theme
