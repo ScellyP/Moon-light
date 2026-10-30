@@ -58,7 +58,7 @@ class AppUpdater(
     private val onState: (String) -> Unit,
 ) {
     companion object {
-        const val OWNER_REPO = "Chirag-S-Reddy/Moonlight"
+        const val OWNER_REPO = "ScellyP/Moon-light"
         private const val LATEST_URL = "https://api.github.com/repos/$OWNER_REPO/releases/latest"
         private const val INSTALL_ACTION = "com.scell.moonlight.UPDATE_INSTALL_RESULT"
         private const val PREFS = "updater"
@@ -206,10 +206,15 @@ class AppUpdater(
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 val code = conn.responseCode
                 if (code == 404) {
-                    // No Release published yet: nothing to update to.
+                    // No Release found: nothing to update to. When the user asked, say so plainly (a wrong
+                    // repository name or a private repository look exactly like "up to date" otherwise).
                     forgetRelease()
                     prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
-                    setState("uptodate", manual = manual)
+                    if (manual) {
+                        fail("check", "No release found at $OWNER_REPO. The repository must be public and have a published Release.", manual)
+                    } else {
+                        setState("uptodate", manual = manual)
+                    }
                     return@Thread
                 }
                 if (code == 403 || code == 429) {
@@ -246,7 +251,11 @@ class AppUpdater(
                 if (found == null) {
                     // A Release without an APK (still uploading, or made by hand): not an update yet.
                     forgetRelease()
-                    setState("uptodate", manual = manual)
+                    if (manual) {
+                        fail("check", "The newest release ($tag) has no APK attached yet. Try again in a few minutes.", manual)
+                    } else {
+                        setState("uptodate", manual = manual)
+                    }
                     return@Thread
                 }
                 newVersion = tag
