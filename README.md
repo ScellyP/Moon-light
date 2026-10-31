@@ -1,4 +1,4 @@
-⁷# 🌙 Moonlight
+# 🌙 Moonlight
 
 A music player for Android with a Spotify-style interface and a moon-and-stars theme. Moonlight plays the music already stored on your phone, keeps playing in the background, and can even download songs from links and file them into playlists for you.
 
