@@ -322,3 +322,21 @@ Failed or redone builds never change the version. This is separate from Android'
 ## Credits
 
 Built with [Media3 / ExoPlayer](https://developer.android.com/media/media3), [youtubedl-android](https://github.com/JunkFood02/youtubedl-android) (yt-dlp, ffmpeg) and the Lora, Newsreader, Manrope and Atkinson typefaces.
+
+## If a download says "Sign in to confirm you're not a bot"
+
+That is YouTube's own bot check, not a bug in the app, and it comes and goes with your network. The app keeps its bundled
+yt-dlp on the **nightly** channel (checked before the first download of each run, at most every 6 hours, and once more after a
+failed download), then retries with player clients that need no sign-in token. If it still fails:
+
+1. In the Download tab, tap **Sign in** next to "YouTube: not signed in" (it also appears under the error). Sign in on
+   Google's own page; the app then saves the login cookies in its private storage (no other app can read them) and uses
+   them for every download. Cookies expire eventually: sign out and in again. If Google refuses the sign-in inside the app,
+   use option 3.
+2. Change network (Wi-Fi <-> mobile data) and turn any VPN off. Blocks are mostly about the IP address.
+3. Or put a `cookies.txt` exported from your own browser into `/storage/emulated/0/Moonlight/` (Netscape format, for example
+   with a "cookies.txt" browser extension, exported while logged in to YouTube). The app uses a copy for each download and
+   never changes your file. The in-app sign-in is used first when both exist.
+
+Cookies give access to that YouTube login: the in-app sign-in keeps them private, but a `cookies.txt` in `Moonlight` is readable by other apps with file access. YouTube can also flag accounts
+that download heavily, so a spare account is the safer choice.

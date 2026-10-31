@@ -230,6 +230,11 @@ class MainActivity : ComponentActivity() {
         },
     )
 
+    // "Sign in to YouTube" for downloads that YouTube blocks with its bot check (see YouTubeSignIn.kt).
+    private val youTubeSignIn = YouTubeSignIn(this) { status, message ->
+        callPage("onYouTubeSignIn", JSONObject.quote(status) + ", " + JSONObject.quote(message))
+    }
+
     /** Asks for notification access and folder access in one go, once per
      * launch. Called from onCreate and (if the page asks before then)
      * from tryAutoReconnect(). */
@@ -1167,6 +1172,19 @@ class MainActivity : ComponentActivity() {
 
 
 
+
+        // YouTube sign-in for the downloader. youtubeSignInStatus: "signed-in" | "signed-out".
+        // youtubeSignIn opens the sign-in page; the result arrives as window.onYouTubeSignIn(status, message).
+        @JavascriptInterface
+        fun youtubeSignInStatus(): String = youTubeSignIn.status()
+
+        @JavascriptInterface
+        fun youtubeSignIn() {
+            runOnUiThread { youTubeSignIn.start() }
+        }
+
+        @JavascriptInterface
+        fun youtubeSignOut(): Boolean = youTubeSignIn.signOut()
 
         // The playlist files in /storage/emulated/0/Moonlight/playlists/ (see SongLibrary.kt).
         // listPlaylists: every readable playlist as a JSON array; each song has `available` (its file

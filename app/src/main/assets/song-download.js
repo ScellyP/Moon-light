@@ -424,6 +424,38 @@
   // The native side calls this.
   root.onSongDownloadStatus = function (jobId, status, message) { wizard.report(jobId, status, message); };
 
+  /* ---- YouTube sign-in -------------------------------------------------------------------------
+     YouTube sometimes refuses downloads with "Sign in to confirm you're not a bot". Signing in once inside the
+     app (native side: YouTubeSignIn.kt) saves the login cookies in the app's private storage, and every
+     download then uses them. The login page is Google's own: the app never sees the password.
+       native -> window.onYouTubeSignIn(status, message)   status "signed-in" | "signed-out"
+     Outside the Android app (or in an older build) there is no bridge and no line is shown. */
+  let ytNote = '';
+  root.onYouTubeSignIn = function (status, message) { ytNote = message || ''; render(); };
+
+  function ytStatus() {
+    const b = bridge();
+    try { return b && typeof b.youtubeSignInStatus === 'function' ? String(b.youtubeSignInStatus()) : ''; } catch (e) { return ''; }
+  }
+
+  // "YouTube: signed in [Sign out]" / "YouTube: not signed in [Sign in]"; `prominent` makes Sign in the main button.
+  function buildYouTubeLine(prominent) {
+    const status = ytStatus();
+    if (!status) return null;
+    const signedIn = status === 'signed-in';
+    const wrap = el('div', 'dl-yt-wrap');
+    const row = el('div', 'dl-yt');
+    row.appendChild(el('span', 'dl-yt-text', signedIn ? 'YouTube: signed in' : 'YouTube: not signed in'));
+    row.appendChild(button(signedIn ? 'Sign out' : 'Sign in', (prominent && !signedIn ? 'dl-primary' : 'dl-secondary') + ' dl-yt-btn', () => {
+      const b = bridge();
+      try { if (signedIn) b.youtubeSignOut(); else b.youtubeSignIn(); } catch (e) { /* no bridge: nothing to do */ }
+      if (signedIn) render();      // signing in reports back through onYouTubeSignIn
+    }));
+    wrap.appendChild(row);
+    if (ytNote) { wrap.appendChild(el('p', 'dl-hint', ytNote)); ytNote = ''; }
+    return wrap;
+  }
+
   /* ---- step 1 ---------------------------------------------------------- */
 
   /* Links already downloaded before (downloads.txt, any form of the same link) are not downloaded again
@@ -534,6 +566,8 @@
     const box = el('div', 'dl-step');
     box.appendChild(button('Click to paste', 'dl-primary dl-big', pasteFromClipboard));
     if (s.message) box.appendChild(el('p', 'dl-msg', s.message));
+    const yt = buildYouTubeLine(false);
+    if (yt) box.appendChild(yt);
     return box;
   }
 
@@ -546,6 +580,9 @@
       box.appendChild(mark);
       box.appendChild(el('h2', 'dl-title', 'Download failed'));
       box.appendChild(el('p', 'dl-msg dl-err', item.error));
+      // YouTube's bot check: the way out is right here, then Retry.
+      const yt = /not a bot|sign in to confirm/i.test(String(item.error || '')) ? buildYouTubeLine(true) : null;
+      if (yt) box.appendChild(yt);
       const row = el('div', 'dl-row');
       row.appendChild(button('Retry', 'dl-primary', () => wizard.retryDownload()));
       row.appendChild(button('Skip', 'dl-secondary', () => wizard.skip()));
