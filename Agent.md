@@ -25,6 +25,7 @@ do not share code, only the music folder.**
 - `app/src/main/assets/settings-file.js` — mirrors the audio settings to `/storage/emulated/0/Moonlight/settings.txt`.
 - `app/src/main/assets/app-update.js` + `AppUpdater.kt` — in-app updates from this repo's GitHub Releases.
 - `app/src/main/assets/version.js` — `APP_VERSION`.
+- `app/src/main/assets/splash.js` + `#ml-splash` in `index.html` — the launch screen (app icon, `splash-icon.png`) painted from the first frame and lifted once every script has run and the fonts are ready (min 500 ms, hard cap 2 s).
 - `app/src/main/java/com/scell/moonlight/MainActivity.kt` — Android host: WebView, storage + notification permissions,
   `connectNativePlayer()`, the bridge, `runAudioScan()`, `serveAudio()`. Music folder `Novel/Audio` (`audioRoot`, kept so the
   existing library works), own folder `Moonlight/` (`playerRoot`, settings only).
@@ -407,6 +408,8 @@ Nothing requested yet for this app. Ideas that came up while carving it out, **n
 reader's); a night rule (see the open question above).
 
 ## Structure change log
+
+- **v1.06.00 — Purple default colour scheme, launch screen.** The default accent is now `#bc44dd` (`--accent`, `--accent-strong` `#cb6fe5`, `--accent-ink` `#19051e`, and every hard-coded `rgba(188,68,221,…)` glow/shadow in `index.html`; `PlaybackService.ACCENT_FALLBACK` matches). The cover tint still recolours the panel from album art when it is on. New launch screen: `#ml-splash` + `splash.js` (see the project map). New launcher icons (adaptive foreground/background/monochrome). Not run on a device.
 
 - **v1.03.01 — Termux updater, honest update messages.** `tools/update-moonlight.sh`: curl -> GitHub `releases/latest` -> the `.apk` asset (checksum = the `digest` line after the .apk's `name`) -> download to `~/storage/downloads/Moonlight` (or `~/moonlight-updates`) -> verify sha256 -> install by root (`su`), else Shizuku (`rish -c "pm install -r"`), else `termux-open --view` (Android installer, one tap). Versions compared numerically; `--check`, `--force`, `--installed vX`, `MOONLIGHT_REPO`. It remembers the installed tag in `~/.moonlight-installed-version` only when it knows the install happened (root/Shizuku, or the user answers yes). Reason: an app built while `OWNER_REPO` still named the old repository gets 404 and used to answer "You're up to date" forever; `AppUpdater.check(manual=true)` now fails with "No release found at <repo>…" for 404 and "…has no APK attached yet" for an APK-less release (background checks stay silent). Also: no stray top line/padding on `#app-version` inside the Settings menu. Tests: `tests/update-script.test.js` (runs the real script with mock curl/termux-open/rish/su).
 

@@ -73,11 +73,11 @@
   --muted: #a3a8b6;         /* secondary text, 7.6:1 on panel */
   --faint: #7a7f8f;         /* tertiary text, 4.6:1 on panel: still legible, clearly quieter */
 
-  --accent: #e8a83e;        /* the lamp */
-  --accent-strong: #f2bb5c;
-  --accent-ink: #1a1305;    /* text that sits ON amber */
-  --accent-soft: rgba(232, 168, 62, .13);
-  --accent-line: rgba(232, 168, 62, .42);
+  --accent: #bc44dd;        /* the moon glow (default colour scheme) */
+  --accent-strong: #cb6fe5;
+  --accent-ink: #19051e;    /* text that sits ON the accent */
+  --accent-soft: rgba(188, 68, 221, .13);
+  --accent-line: rgba(188, 68, 221, .42);
   --danger: #e77a6a;
 
   --r-sm: 8px;
@@ -172,7 +172,7 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
   width: 78vmin;
   height: 78vmin;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(232,168,62,.20), rgba(232,168,62,.06) 55%, transparent 75%);
+  background: radial-gradient(closest-side, rgba(188,68,221,.20), rgba(188,68,221,.06) 55%, transparent 75%);
   animation: lampIn 1.4s var(--ease) both;
 }
 
@@ -816,7 +816,7 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 .dial-tick.major { stroke: var(--faint); stroke-width: 2.5; }
 #dial-handle {
   fill: var(--text); stroke: var(--panel); stroke-width: 4;
-  filter: drop-shadow(0 2px 8px rgba(232,168,62,.45));
+  filter: drop-shadow(0 2px 8px rgba(188,68,221,.45));
   transition: r .14s ease;
 }
 #dial-wrap.dragging #dial-handle { r: 15; }
@@ -970,7 +970,7 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
   background: var(--accent) !important;
   color: var(--accent-ink) !important;
   font-size: 24px !important;
-  box-shadow: 0 6px 22px rgba(232,168,62,.28);
+  box-shadow: 0 6px 22px rgba(188,68,221,.28);
 }
 #audio-play-btn:hover:not(:disabled) { background: var(--accent-strong) !important; }
 #audio-play-btn:disabled { background: var(--raised) !important; color: var(--faint) !important; box-shadow: none; }
@@ -1220,7 +1220,7 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 #welcome .steps b { color: var(--text); font-weight: 600; }
 
 #welcome.is-loading .wl-mark { animation: breathe 2.4s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(232,168,62,.0); } 50% { box-shadow: 0 0 0 10px rgba(232,168,62,.10); } }
+@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(188,68,221,.0); } 50% { box-shadow: 0 0 0 10px rgba(188,68,221,.10); } }
 
 #bottom-nav { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 56px; gap: 10px; }
 #bottom-nav button {
@@ -1831,7 +1831,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   box-shadow: 0 1px 4px rgba(0,0,0,.5);
   transition: transform .26s var(--ease), width .18s var(--ease), background-color .2s ease;
 }
-.switch.on { background: rgba(232,168,62,.28); border-color: var(--accent); }
+.switch.on { background: rgba(188,68,221,.28); border-color: var(--accent); }
 .switch.on::after { transform: translateX(20px); background: var(--accent-strong); }
 .switch:active::after { width: 28px; }
 .switch.on:active::after { transform: translateX(14px); }
@@ -1920,7 +1920,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #audio-controls button.active { color: var(--accent); }
 #audio-controls button:active:not(:disabled) { transform: scale(.88); background: var(--panel-2); }
 #audio-controls #audio-prev-btn, #audio-controls #audio-next-btn { color: var(--text); }
-#audio-play-btn { width: 64px !important; height: 64px !important; font-size: 26px !important; box-shadow: 0 8px 24px rgba(232,168,62,.3); }
+#audio-play-btn { width: 64px !important; height: 64px !important; font-size: 26px !important; box-shadow: 0 8px 24px rgba(188,68,221,.3); }
 #audio-play-btn:active:not(:disabled) { transform: scale(.92); }
 /* Playing halo: a ring that scales + fades (transform/opacity only; the old
    box-shadow ring stays as the static fallback). */
@@ -1952,7 +1952,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 /* ---- Reader surface ---------------------------------------------------------------------------------- */
 #bottom-nav button { border-radius: 12px; min-height: 52px; }
 #bottom-nav button:active:not(:disabled) { transform: scale(.975); background: var(--raised); }
-#bottom-next:not(:disabled):active { background: rgba(232,168,62,.22); }
+#bottom-next:not(:disabled):active { background: rgba(188,68,221,.22); }
 #welcome .steps { border-radius: var(--r-lg); }
 /* The loading ring animates transform/opacity instead of box-shadow. */
 #welcome .wl-mark { position: relative; }
@@ -2052,7 +2052,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #splash-book::before {
   content: ""; position: absolute; left: 50%; bottom: -26px;
   width: 190px; height: 34px; margin-left: -95px; border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(232,168,62,.42), rgba(232,168,62,.10) 62%, transparent 100%);
+  background: radial-gradient(closest-side, rgba(188,68,221,.42), rgba(188,68,221,.10) 62%, transparent 100%);
   animation: fbGlow 2.4s ease-in-out infinite alternate;
 }
 
@@ -2071,7 +2071,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   top: 0; left: 0; width: 168px; height: 120px; border-radius: 7px;
   background: #0e1118;
   border: 1.5px solid var(--accent);
-  box-shadow: 0 18px 44px rgba(0,0,0,.65), 0 0 30px rgba(232,168,62,.16);
+  box-shadow: 0 18px 44px rgba(0,0,0,.65), 0 0 30px rgba(188,68,221,.16);
   transform: translateZ(-12px);
 }
 .fb-base { width: var(--pw); transform: translateZ(-8px); background: #161b27; }
@@ -3318,8 +3318,37 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-badge.same { color: #2a1d05; background: #e6b450; }
 .dl-drop { align-self: flex-start; margin-top: 10px; min-height: 44px; }
 </style>
+<style id="ml-splash-style">
+/* Launch screen: the app icon on the app background, shown from the first paint and lifted by
+   splash.js as soon as the page is built (a short, capped wait). Plain CSS, so it needs no JS to appear. */
+#ml-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0b0d12;
+  transition: opacity .3s ease, visibility 0s linear .3s;
+}
+#ml-splash.leaving { opacity: 0; visibility: hidden; pointer-events: none; }
+#ml-splash.gone { display: none; }
+#ml-splash img {
+  width: 104px;
+  height: 104px;
+  border-radius: 24px;
+  box-shadow: 0 0 0 1px rgba(188,68,221,.35), 0 12px 44px rgba(188,68,221,.28);
+  animation: mlSplashIn .45s cubic-bezier(.22, 1, .36, 1) both;
+}
+#ml-splash.leaving img { transform: scale(1.06); transition: transform .3s ease; }
+@keyframes mlSplashIn { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #ml-splash, #ml-splash img { animation-duration: .01s !important; transition-duration: .01s !important; }
+}
+</style>
 </head>
 <body class="player-app">
+<div id="ml-splash" aria-hidden="true"><img src="splash-icon.png" alt="" width="104" height="104"></div>
 <!-- Icon sprite: 24x24 grid, 1.75px stroke, round caps/joins (set in .ico). -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
   <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 6.5C10.4 5.2 8 4.5 4.5 4.5v13c3.5 0 5.9.7 7.5 2 1.6-1.3 4-2 7.5-2v-13c-3.5 0-5.9.7-7.5 2Z"/><path d="M12 6.5v13"/></symbol>
@@ -3673,6 +3702,7 @@ body.settings-open #srch-input { pointer-events: none; }
   </div>
 </div>
 
+<script src="splash.js"></script>
 <script src="version.js"></script>
 <script src="settings-file.js"></script>
 <script src="audio-player.js"></script>

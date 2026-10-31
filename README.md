@@ -315,7 +315,6 @@ Failed or redone builds never change the version. This is separate from Android'
 - The music folder is fixed at `Novel/Audio` (no folder picker yet).
 - Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed.
 - Some leftover CSS from the Novel Reader app is still in `index.html` (harmless).
-- The launcher icon is still the reader's.
 
 ---
 

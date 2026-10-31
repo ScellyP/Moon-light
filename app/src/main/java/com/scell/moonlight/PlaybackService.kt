@@ -97,7 +97,7 @@ private class AlwaysOngoingMediaNotificationProvider(
 
         // Modern look: tint and colourise the notification from the cover
         // art (a deep shade of its dominant colour), falling back to the
-        // app's amber accent. Android 13+ restyles media notifications
+        // app's purple accent. Android 13+ restyles media notifications
         // itself; this covers older versions and the tinted accents.
         val art = mediaSession.player.mediaMetadata.artworkData
         n.color = art?.let { dominantColor(it) } ?: ACCENT_FALLBACK
@@ -106,7 +106,7 @@ private class AlwaysOngoingMediaNotificationProvider(
     }
 
     private companion object {
-        const val ACCENT_FALLBACK = 0xFFE8A83E.toInt()
+        const val ACCENT_FALLBACK = 0xFFBC44DD.toInt()
 
         /** Average colour of a tiny decode of the art, darkened so the
          * white notification text always has strong contrast. */
