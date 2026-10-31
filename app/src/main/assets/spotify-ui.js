@@ -609,7 +609,8 @@
       }
     }
 
-    return allTracks.filter((track) => track.playlist === playlistName);
+    // A song can be in several playlists now (`playlists`); older scan results only have `playlist`.
+    return allTracks.filter((track) => (Array.isArray(track.playlists) ? track.playlists.indexOf(playlistName) !== -1 : track.playlist === playlistName));
   }
 
   function getArtworkFor(track) {

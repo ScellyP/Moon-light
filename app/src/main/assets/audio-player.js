@@ -245,6 +245,7 @@ window.NovelAudio = (function () {
       }
 
       AudioFeatures.emit('libraryChanged');
+      try { this.migrateCuratedToFiles(); } catch (e) { /* playlist files are an addition: never break the scan */ }
       // First scan of this launch: bring back the liked / recent songs from their text files if the app lost them.
       try { if (window.SongMemory) window.SongMemory.restore(); } catch (e) { /* non-fatal */ }
       AudioUI.setNote(state.tracks.length ? '' : 'No audio files found in /storage/emulated/0/Novel/Audio.');
@@ -292,14 +293,99 @@ window.NovelAudio = (function () {
      * stable menu order. Files with no `playlist` (sitting directly in
      * Audio/) are excluded here — they're still playable, just as part
      * of "All songs" only, since there's no dedicated filter for them. */
+    // The playlists a track belongs to: `playlists` (its old folder plus every playlist file that
+    // lists it, from the native scan), or just the single `playlist` of an older scan result.
+    _namesOf(t) {
+      if (Array.isArray(t.playlists)) return t.playlists;
+      return t.playlist ? [t.playlist] : [];
+    },
+
     getPlaylists() {
       const names = new Set();
-      state.tracks.forEach(t => { if (t.playlist) names.add(t.playlist); });
+      state.tracks.forEach(t => { this._namesOf(t).forEach(n => names.add(n)); });
       return Array.from(names).sort((a, b) => a.localeCompare(b));
     },
 
     tracksInPlaylist(name) {
-      return state.tracks.filter(t => t.playlist === name);
+      return state.tracks.filter(t => this._namesOf(t).indexOf(name) !== -1);
+    },
+
+    /* ---- Search over the local song records ---------------------------------
+       One normalised text per song (title, every artist, album artist, album, genre), built once from
+       the canonical record the native scan sends. Case-insensitive, accents and full-width forms folded,
+       surrounding space trimmed, any Unicode text. A query matches when every word of it appears
+       somewhere in that text (partial words are fine: "bey" finds "Beyonc\u00e9"). Nothing leaves the phone. */
+    normalize(s) {
+      return String(s == null ? '' : s)
+        .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+    },
+
+    searchKey(t) {
+      if (t._sk === undefined) {
+        const artists = Array.isArray(t.artists) && t.artists.length ? t.artists : [t.artist];
+        // A missing tag stays missing: empty fields add nothing. The title is the tag, or the file name.
+        t._sk = [t.title].concat(artists, [t.albumArtist, t.album, t.genre])
+          .map(x => this.normalize(x)).filter(Boolean).join('\n');
+      }
+      return t._sk;
+    },
+
+    // Tracks matching `query`, in library order. An empty query matches nothing.
+    search(query) {
+      const words = this.normalize(query).split(' ').filter(Boolean);
+      if (!words.length) return [];
+      return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
+    },
+
+    /* ---- Playlist files (see SongLibrary.kt) --------------------------------
+       The playlists as readable JSON files with ordered song references. Songs whose file is gone
+       come back with `available: false` and stay listed. [] outside the Android app. */
+    playlistFiles() {
+      const b = window.AndroidBridge;
+      if (!b || !b.listPlaylists) return [];
+      try {
+        const list = JSON.parse(b.listPlaylists() || '[]');
+        return Array.isArray(list) ? list : [];
+      } catch (e) { return []; }
+    },
+
+    /* Copies each curated list (kept in the app's prefs) into its own playlist file, once. The prefs copy
+       is left exactly as it is, so nothing is lost or changed; the native side never overwrites an existing
+       file, which makes repeating this harmless. A song is stored by its ref (see below); one
+       whose file is missing is stored too (shown as unavailable later). */
+    migrateCuratedToFiles() {
+      const b = window.AndroidBridge;
+      if (!b || !b.savePlaylist) return;
+      let done = [];
+      try { done = JSON.parse(localStorage.getItem('moonlight_curatedFilesDone') || '[]'); } catch (e) { done = []; }
+      if (!Array.isArray(done)) done = [];
+      let changed = false;
+      (state.features.customPlaylists ? state.features.customPlaylists.lists : []).forEach(p => {
+        const key = String(p.id);
+        if (done.indexOf(key) !== -1) return;
+        const songs = [];
+        (p.ids || []).forEach(id => {
+          // A song is stored by its ref: "Songs/x.mp3" (Moonlight/Songs) or "Audio/Folder/x.mp3" (the old
+          // Novel/Audio folder), the same form the native scan reports in `ref`.
+          const sid = String(id);
+          const t = this.getTrack(id);
+          let ref = t && t.ref ? t.ref : '';
+          if (!ref) {
+            const a = /\/Moonlight\/Songs\/(.+)$/.exec(sid);
+            const b = /\/Novel\/Audio\/(.+)$/.exec(sid);
+            ref = a ? 'Songs/' + a[1] : b ? 'Audio/' + b[1] : '';
+          }
+          if (!ref) return;
+          songs.push({ ref: ref, title: t ? t.title : ref.replace(/^.*\//, '').replace(/\.[^.]+$/, '') });
+        });
+        const manifest = { id: 'curated-' + key.replace(/[^0-9a-z]/gi, ''), name: p.name, source: 'curated',
+          legacy: { curatedId: key }, songs: songs };
+        let ok = false;
+        try { ok = !!b.savePlaylist(JSON.stringify(manifest), false); } catch (e) { ok = false; }
+        if (ok) { done.push(key); changed = true; }
+      });
+      if (changed) { try { localStorage.setItem('moonlight_curatedFilesDone', JSON.stringify(done)); } catch (e) { /* retried next scan */ } }
     },
 
     /* Track ids for whatever `state.activePlaylist` currently selects —
@@ -2706,6 +2792,10 @@ window.NovelAudio = (function () {
         AudioEngine.toggle();
       }
     },
+
+    // Local search over the indexed song records, and the playlist files (read-only here).
+    searchTracks(query) { return MediaLibrary.search(query); },
+    getPlaylistFiles() { return MediaLibrary.playlistFiles(); },
 
     // Native bridge callback — see MediaLibrary.scan() for the contract.
     onAudioListed(tracks) {

@@ -221,6 +221,7 @@ class MainActivity : ComponentActivity() {
     // and song-download.js).
     private val songDownloader = SongDownloader(
         activity = this,
+        library = { songLibrary },
         onStatus = { jobId, status, message ->
             callPage(
                 "onSongDownloadStatus",
@@ -256,6 +257,13 @@ class MainActivity : ComponentActivity() {
     // documented in the README's "Audio player" section.
     private val audioRoot = File("/storage/emulated/0/Novel/Audio")
 
+    // The shared Songs folder, in this app's own folder next to settings.txt and the playlist files
+    // (Moonlight/playlists/): see SongLibrary.kt. New downloads go here; Novel/Audio is still read.
+    private val songsRoot = File(playerRoot, "Songs")
+
+    // `lazy`, because songDownloader (declared above) needs it only when a job runs.
+    private val songLibrary: SongLibrary by lazy { SongLibrary(audioRoot, songsRoot, File(playerRoot, "playlists")) }
+
 
 
     // The in-app updater (GitHub Releases -> download -> PackageInstaller): see AppUpdater.kt and the
@@ -273,7 +281,8 @@ class MainActivity : ComponentActivity() {
      * all-files access. A path is accepted only when it is a file:// URI (or
      * a plain absolute path), the real file after resolving "..", symlinks and
      * percent-encoding lies inside the Audio folder, it exists, and it has a
-     * recognised audio extension. Returns the resolved File, or null.
+     * recognised audio extension. "Inside the Audio folder" means inside Novel/Audio or inside the
+     * shared Moonlight/Songs folder. Returns the resolved File, or null.
      */
     private fun resolveAudioFile(path: String?): File? {
         return try {
@@ -283,8 +292,9 @@ class MainActivity : ComponentActivity() {
             if (scheme != null && !scheme.equals("file", ignoreCase = true)) return null
             val raw = (if (scheme == null) path else uri.path) ?: return null
             val file = File(raw).canonicalFile
-            val root = audioRoot.canonicalFile
-            if (!file.path.startsWith(root.path + File.separator)) return null
+            val inAudio = file.path.startsWith(audioRoot.canonicalFile.path + File.separator)
+            val inSongs = file.path.startsWith(songsRoot.canonicalFile.path + File.separator)
+            if (!inAudio && !inSongs) return null
             if (!file.isFile) return null
             if (!audioExtensions.contains(file.extension.lowercase())) return null
             file
@@ -441,6 +451,9 @@ class MainActivity : ComponentActivity() {
                 if (target.scheme != "https" || target.host != appHost) return plainResponse(403)
                 if (request.method != "GET") return plainResponse(405)
                 val path = target.path ?: return plainResponse(404)
+                if (path.startsWith("/songs/")) {
+                    return serveAudio(path.removePrefix("/songs/"), request.requestHeaders, songsRoot)
+                }
                 if (path.startsWith("/audio/")) {
                     return serveAudio(path.removePrefix("/audio/"), request.requestHeaders)
                 }
@@ -1155,6 +1168,25 @@ class MainActivity : ComponentActivity() {
 
 
 
+        // The playlist files in /storage/emulated/0/Moonlight/playlists/ (see SongLibrary.kt).
+        // listPlaylists: every readable playlist as a JSON array; each song has `available` (its file
+        // exists), so a missing song is shown as unavailable and never silently dropped. "[]" = none yet,
+        // null = storage not accessible yet.
+        @JavascriptInterface
+        fun listPlaylists(): String? {
+            if (!hasStoragePermission()) return null
+            return try { songLibrary.listJson() } catch (e: Exception) { null }
+        }
+
+        // savePlaylist: writes one playlist file (checked and cleaned first: the page is not trusted).
+        // overwrite = false never replaces an existing playlist, so a repeated migration is harmless.
+        @JavascriptInterface
+        fun savePlaylist(json: String, overwrite: Boolean): Boolean {
+            if (!hasStoragePermission()) return false
+            if (json.length > 2_000_000) return false
+            return try { songLibrary.save(JSONObject(json), overwrite) } catch (e: Exception) { false }
+        }
+
         // Rescan button / explicit scan: always walk the folder again and
         // report the result to audio-player.js's MediaLibrary (see runAudioScan()).
         @JavascriptInterface
@@ -1365,6 +1397,7 @@ class MainActivity : ComponentActivity() {
         return try {
             if (!audioRoot.exists()) audioRoot.mkdirs()
             if (!playerRoot.exists()) playerRoot.mkdirs()
+            if (!songsRoot.exists()) songsRoot.mkdirs()
             audioRoot.isDirectory
         } catch (e: Exception) {
             false
@@ -1515,20 +1548,34 @@ class MainActivity : ComponentActivity() {
                 // tracks in the same playlist folder stay grouped together.
                 // Folders starting with a dot are skipped: Audio/.staging/ holds songs of the Download
                 // tab that are not named or placed yet.
-                val audioFiles = audioRoot.walkTopDown()
+                // Two places are read: the old music folder (Novel/Audio, one sub-folder per playlist,
+                // listed first as before) and the shared Moonlight/Songs folder where downloads go.
+                fun walk(root: File): List<File> = if (!root.isDirectory) emptyList() else root.walkTopDown()
                     .filter { it.isFile && audioExtensions.contains(it.extension.lowercase()) }
-                    .filter { f -> f.toRelativeString(audioRoot).split(File.separatorChar).none { it.startsWith(".") } }
-                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) {
-                        it.toRelativeString(audioRoot)
-                    })
+                    .filter { f -> f.toRelativeString(root).split(File.separatorChar).none { it.startsWith(".") } }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.toRelativeString(root) })
                     .toList()
+                val audioFiles = (walk(audioRoot) + walk(songsRoot))
+                    // One record per real file: a file reachable twice (a symlink or a copy of the
+                    // folder layout) is indexed once, under the first path in scan order.
+                    .distinctBy { try { it.canonicalPath } catch (e: Exception) { it.absolutePath } }
+
+                // Shared Songs folder + old folder playlists -> playlist files. Never touches a
+                // music file, never overwrites a playlist file, safe to run on every scan.
+                try {
+                    songLibrary.ensureSongsDir()
+                    songLibrary.migrateFolders(audioFiles)
+                } catch (e: Exception) {
+                    // Playlist files are an addition: the scan must work without them.
+                }
+                val membership = try { songLibrary.membership() } catch (e: Exception) { emptyMap() }
 
                 val cache = loadTagCache()
                 val results = arrayOfNulls<JSONObject>(audioFiles.size)
                 val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
                 audioFiles.forEachIndexed { i, f ->
                     pool.execute {
-                        results[i] = try { buildTrackJson(f, cache) } catch (e: Exception) { null }
+                        results[i] = try { buildTrackJson(f, cache, membership) } catch (e: Exception) { null }
                     }
                 }
                 pool.shutdown()
@@ -1551,23 +1598,46 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun buildTrackJson(f: File, cache: java.util.concurrent.ConcurrentHashMap<String, JSONObject>): JSONObject {
+    private fun buildTrackJson(
+        f: File,
+        cache: java.util.concurrent.ConcurrentHashMap<String, JSONObject>,
+        membership: Map<String, List<String>> = emptyMap(),
+    ): JSONObject {
         val obj = JSONObject()
         obj.put("id", f.absolutePath)
         obj.put("path", Uri.fromFile(f).toString()) // percent-encodes spaces etc. correctly
-        val relativePath = f.toRelativeString(audioRoot).replace(File.separatorChar, '/')
+        val inSongs = f.absolutePath.startsWith(songsRoot.absolutePath + File.separator)
+        val root = if (inSongs) songsRoot else audioRoot
+        val relativePath = f.toRelativeString(root).replace(File.separatorChar, '/')
+        // The canonical local reference: what playlist files store ("Songs/a.mp3", "Audio/Folder/a.mp3";
+        // see SongLibrary.kt).
+        val ref = songLibrary.refFor(f) ?: ((if (inSongs) "Songs/" else "Audio/") + relativePath)
+        obj.put("ref", ref)
+        obj.put("artworkRef", Uri.fromFile(f).toString())   // cover art is loaded lazily from this file
         // Address the page's <audio> element uses (see serveAudio()).
-        obj.put("webUrl", "https://$appHost/audio/" + Uri.encode(relativePath, "/"))
-        // First path segment under Audio/ is the playlist; no '/' = no playlist.
+        obj.put("webUrl", "https://$appHost/" + (if (inSongs) "songs/" else "audio/") + Uri.encode(relativePath, "/"))
+        // Old folder layout: the first path segment under Novel/Audio is the playlist; a file directly
+        // in Audio/ has none. Moonlight/Songs is the shared store, not a playlist.
         val slashIndex = relativePath.indexOf('/')
-        if (slashIndex > 0) obj.put("playlist", relativePath.substring(0, slashIndex))
-        else obj.put("playlist", JSONObject.NULL)
+        val legacyPlaylist = if (!inSongs && slashIndex > 0) relativePath.substring(0, slashIndex) else null
+        if (legacyPlaylist != null) obj.put("playlist", legacyPlaylist) else obj.put("playlist", JSONObject.NULL)
+        obj.put("inSongs", inSongs)
+
+        // Every playlist the song belongs to: its old folder plus the playlist files that list it.
+        // `playlist` (single) stays for older screens; the first one is used when only a file lists it.
+        val names = LinkedHashSet<String>()
+        if (legacyPlaylist != null) names.add(legacyPlaylist)
+        membership[ref]?.let { names.addAll(it) }
+        if (legacyPlaylist == null && names.isNotEmpty()) obj.put("playlist", names.first())
+        obj.put("playlists", JSONArray(names.toList()))
 
         val size = f.length()
         val modified = f.lastModified()
         val hit = cache[f.absolutePath]
         val tags: JSONObject
-        if (hit != null && hit.optLong("s", -1L) == size && hit.optLong("m", -1L) == modified) {
+        // Entries cached before the genre/album-artist fields existed are read again once.
+        if (hit != null && hit.optLong("s", -1L) == size && hit.optLong("m", -1L) == modified &&
+            hit.getJSONObject("t").has("tagsV")) {
             tags = hit.getJSONObject("t")
         } else {
             tags = JSONObject()
@@ -1661,20 +1731,50 @@ class MainActivity : ComponentActivity() {
      * MediaMetadataRetriever is a real native-memory leak, not just a
      * dangling Java object, so this can't be left to the garbage collector.
      */
+    /**
+     * The distinct artist names of a song from its artist and album-artist tags. A tag may hold several
+     * names separated by ";" or a line break (not "/" or "&": "AC/DC" and "Simon & Garfunkel" are one
+     * name). Names are compared case-insensitively and ignoring accents, and the first spelling wins.
+     */
+    private fun distinctArtists(vararg tags: String): List<String> {
+        val seen = LinkedHashMap<String, String>()
+        for (t in tags) for (part in t.split(';', '\n', '\u0000')) {
+            val name = part.trim()
+            if (name.isEmpty()) continue
+            val key = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
+                .replace(Regex("\\p{M}+"), "").lowercase(java.util.Locale.ROOT)
+            if (!seen.containsKey(key)) seen[key] = name
+        }
+        return seen.values.toList()
+    }
+
     private fun readAudioTags(f: File, obj: JSONObject) {
         val retriever = MediaMetadataRetriever()
+        obj.put("tagsV", 2)
+        // Fields a file does not carry stay empty: nothing is made up. Only the title falls back to the
+        // file name, and `titleFromTag` says which of the two it is.
         try {
             retriever.setDataSource(f.absolutePath)
-            val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?.takeIf { it.isNotBlank() } ?: f.nameWithoutExtension
-            val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
-            val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: ""
+            fun tag(key: Int): String = retriever.extractMetadata(key)?.trim() ?: ""
+            val tagTitle = tag(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            val artist = tag(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+            val albumArtist = tag(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+            val album = tag(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+            val genre = tag(MediaMetadataRetriever.METADATA_KEY_GENRE)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
+            val hasVideo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
 
-            obj.put("title", title)
+            obj.put("title", tagTitle.ifEmpty { f.nameWithoutExtension })
+            obj.put("titleFromTag", tagTitle.isNotEmpty())
             obj.put("artist", artist)
+            obj.put("albumArtist", albumArtist)
+            // One entry per distinct person even when artist and album artist repeat each other
+            // ("A; A", "A" + "a"): a song stays ONE row, and each artist is listed once.
+            obj.put("artists", JSONArray(distinctArtists(artist, albumArtist)))
             obj.put("album", album)
+            obj.put("genre", genre)
+            obj.put("mediaType", if (hasVideo) "video" else "audio")
             obj.put("durationSec", durationMs / 1000.0)
         } catch (e: Exception) {
             // Malformed tags, unsupported codec for tag-reading, etc. —
@@ -1682,8 +1782,13 @@ class MainActivity : ComponentActivity() {
             // its tags, so it stays in the list with filename-based
             // fallbacks rather than being dropped.
             obj.put("title", f.nameWithoutExtension)
+            obj.put("titleFromTag", false)
             obj.put("artist", "")
+            obj.put("albumArtist", "")
+            obj.put("artists", JSONArray())
             obj.put("album", "")
+            obj.put("genre", "")
+            obj.put("mediaType", "audio")
             obj.put("durationSec", 0.0)
         } finally {
             try {
@@ -1757,8 +1862,8 @@ class MainActivity : ComponentActivity() {
      * the WebView's media player needs for seeking. Runs on a WebView
      * background thread.
      */
-    private fun serveAudio(relativePath: String, headers: Map<String, String>): WebResourceResponse {
-        val file = resolveAudioFile(File(audioRoot, relativePath).path) ?: return plainResponse(404)
+    private fun serveAudio(relativePath: String, headers: Map<String, String>, root: File = audioRoot): WebResourceResponse {
+        val file = resolveAudioFile(File(root, relativePath).path) ?: return plainResponse(404)
         return try {
             val length = file.length()
             var start = 0L

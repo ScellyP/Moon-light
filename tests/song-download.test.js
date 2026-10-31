@@ -11,7 +11,7 @@ const SD = require('../app/src/main/assets/song-download.js');
 let n = 0;
 function check(name, fn) { fn(); n++; console.log('ok -', name); }
 
-const STAGED = (i) => '/storage/emulated/0/Novel/Audio/.staging/s_' + i + '/Song ' + i + ' (Official).mp3';
+const STAGED = (i) => '/storage/emulated/0/Moonlight/Songs/.staging/s_' + i + '/Song ' + i + ' (Official).mp3';
 
 // A wizard wired to a fake native side that records what it was asked and lets a test answer.
 function setup({ failStage = null } = {}) {
@@ -339,7 +339,7 @@ check('the staging folder is inside the music folder, and the music scan skips i
   const kdir = path.join(__dirname, '../app/src/main/java/com/scell/moonlight');
   const kt = fs.readFileSync(path.join(kdir, 'MainActivity.kt'), 'utf8');
   const dl = fs.readFileSync(path.join(kdir, 'SongDownloader.kt'), 'utf8');
-  assert.ok(dl.includes('STAGING_DIR = "/storage/emulated/0/Novel/Audio/.staging"'));
+  assert.ok(dl.includes('STAGING_DIR = "/storage/emulated/0/Moonlight/Songs/.staging"'));
   assert.ok(dl.includes('AUDIO_DIR = "/storage/emulated/0/Novel/Audio"'));
   assert.ok(/walkTopDown\(\)[\s\S]{0,400}startsWith\("\."\)/.test(kt), 'the scan must skip folders that start with a dot');
 });

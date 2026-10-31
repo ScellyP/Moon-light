@@ -17,7 +17,7 @@ const M = require(path.join(ASSETS, 'song-memory.js'));
 let n = 0;
 function check(name, fn) { try { fn(); } catch (e) { console.log('FAIL -', name); throw e; } n++; console.log('ok -', name); }
 
-const STAGED = (i, name) => '/storage/emulated/0/Novel/Audio/.staging/s_' + i + '/' + name + '.mp3';
+const STAGED = (i, name) => '/storage/emulated/0/Moonlight/Songs/.staging/s_' + i + '/' + name + '.mp3';
 
 /* ---------------------------------------------------------------- the wizard on its own */
 check('a placed song is reported with its link, final path and playlist', () => {

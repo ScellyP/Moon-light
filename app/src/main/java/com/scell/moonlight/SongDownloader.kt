@@ -45,15 +45,21 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class SongDownloader(
     private val activity: ComponentActivity,
+    /** The shared Songs folder and the playlist files (see SongLibrary.kt). */
+    private val library: () -> SongLibrary,
     /** Reports a result to the page. Always called on the main thread. */
     private val onStatus: (jobId: String, status: String, message: String) -> Unit,
 ) {
 
     companion object {
-        /** Where downloads wait until they are named and placed. */
-        const val STAGING_DIR = "/storage/emulated/0/Novel/Audio/.staging"
+        /**
+         * Where downloads wait until they are named and placed: a hidden folder inside the shared Songs
+         * folder (Moonlight/Songs/.staging). Folders starting with a dot are skipped by the music scan,
+         * and the move into Songs/ stays on the same storage, so it is instant.
+         */
+        const val STAGING_DIR = "/storage/emulated/0/Moonlight/Songs/.staging"
 
-        /** The music library; playlists are its sub-folders. */
+        /** The old music folder (one sub-folder per playlist). Still read, never written to by downloads. */
         const val AUDIO_DIR = "/storage/emulated/0/Novel/Audio"
 
         /** Is [path] a file inside the staging folder? (Nothing else may be moved or renamed.) */
@@ -230,16 +236,18 @@ class SongDownloader(
             return report(jobId, "failed", "That playlist name has no usable letters or numbers.")
         }
 
+        // Every song lands in the one shared Songs folder. The playlist the user chose only gets a
+        // REFERENCE to it (a line in the playlist's file), never a folder or a second copy.
+        val lib = library()
         val staged = File(path)
         val stem = name.ifEmpty { staged.nameWithoutExtension }
-        val destDir = if (cleanedFolder.isEmpty()) File(AUDIO_DIR) else File(AUDIO_DIR, cleanedFolder)
-        if (!destDir.isDirectory && !destDir.mkdirs() && !destDir.isDirectory) {
-            return report(jobId, "failed", "Can't create ${destDir.path}. Allow \"All files access\" for this app.")
+        if (!lib.ensureSongsDir()) {
+            return report(jobId, "failed", "Can't create ${lib.songsDir.path}. Allow \"All files access\" for this app.")
         }
-        val target = File(destDir, stem + "." + staged.extension)
+        val target = File(lib.songsDir, stem + "." + staged.extension)
         if (target.exists()) {
             return report(jobId, "failed",
-                "A song called \u201c$stem\u201d is already in ${cleanedFolder.ifEmpty { "All songs" }}. Change the name.")
+                "A song called \u201c$stem\u201d is already in your Songs. Change the name.")
         }
 
         // With a name, the title tag is rewritten into a second file first, so a failure leaves the
@@ -265,7 +273,29 @@ class SongDownloader(
             false
         }
         copy?.let { if (it.exists()) it.delete() }
-        if (!moved) return report(jobId, "failed", "Could not move the song into ${cleanedFolder.ifEmpty { "Audio" }}.")
+        if (!moved) return report(jobId, "failed", "Could not move the song into Songs.")
+
+        // Register the song with the playlist. If that fails, undo the move so the staged song is back
+        // and "Try again" works (a leftover copy in Songs would make the retry say "already there").
+        if (cleanedFolder.isNotEmpty()) {
+            val ref = lib.refFor(target)
+            val added = try {
+                lib.migrateFolder(cleanedFolder)              // an old folder playlist keeps its songs
+                ref != null && lib.addSong(cleanedFolder, ref, stem)
+            } catch (e: Exception) {
+                false
+            }
+            if (!added) {
+                if (!staged.exists()) {
+                    if (!target.renameTo(staged)) {
+                        try { target.copyTo(staged, overwrite = false); target.delete() } catch (e: Exception) { /* the song stays in Songs */ }
+                    }
+                } else {
+                    target.delete()
+                }
+                return report(jobId, "failed", "Could not add the song to \u201c$cleanedFolder\u201d. Try again.")
+            }
+        }
 
         staged.delete()
         staged.parentFile?.delete()                           // the song's own now-empty staging folder (only if empty)
