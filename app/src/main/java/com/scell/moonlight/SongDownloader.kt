@@ -72,6 +72,13 @@ class SongDownloader(
          */
         const val FALLBACK_CLIENTS = "youtube:player_client=default,web_embedded,android_vr"
 
+        /**
+         * mp3 bitrate for downloaded songs. YouTube's own audio is about 128-160 kbps, so "0" (the best VBR setting,
+         * ~245 kbps) only re-encoded it into a file twice the size with no audible gain: ~10 MB per song. 160K is
+         * ~4.8 MB for a 4-minute song (200 songs ~1 GB). Raise it here if you ever want bigger files.
+         */
+        const val AUDIO_QUALITY = "160K"
+
         /** Is this YouTube's "Sign in to confirm you're not a bot" check? */
         fun isBotCheck(message: String?): Boolean {
             val m = (message ?: "").lowercase()
@@ -231,7 +238,7 @@ class SongDownloader(
             .addOption("-f", "bestaudio")
             .addOption("-x")
             .addOption("--audio-format", "mp3")
-            .addOption("--audio-quality", "0")
+            .addOption("--audio-quality", AUDIO_QUALITY)
             .addOption("--embed-metadata")
             .addOption("--embed-thumbnail")
             .addOption("--convert-thumbnails", "jpg")
@@ -386,7 +393,7 @@ class SongDownloader(
             val ref = lib.refFor(target)
             val added = try {
                 lib.migrateFolder(cleanedFolder)              // an old folder playlist keeps its songs
-                ref != null && lib.addSong(cleanedFolder, ref, stem)
+                ref != null && lib.addSong(cleanedFolder, ref, stem, target.length())
             } catch (e: Exception) {
                 false
             }

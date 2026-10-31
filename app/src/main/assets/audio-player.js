@@ -244,6 +244,7 @@ window.NovelAudio = (function () {
         if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
       }
 
+      try { this.relinkMovedIds(); } catch (e) { /* a failed relink only leaves old entries unavailable */ }
       AudioFeatures.emit('libraryChanged');
       try { this.migrateCuratedToFiles(); } catch (e) { /* playlist files are an addition: never break the scan */ }
       // First scan of this launch: bring back the liked / recent songs from their text files if the app lost them.
@@ -348,6 +349,58 @@ window.NovelAudio = (function () {
         const list = JSON.parse(b.listPlaylists() || '[]');
         return Array.isArray(list) ? list : [];
       } catch (e) { return []; }
+    },
+
+    /* ---- Songs moved into Moonlight/Songs ---------------------------------------------------------
+       The page knows a song by its path (its id), so moving the file changes the id, and everything that
+       stored the old path (liked songs, hand-picked playlists, history, play counts, ...) would lose it.
+       After each scan, every stored path whose file is gone is pointed at the song's new place when that
+       is certain: the same file name, ONE song in the whole library with that name, and it lies in
+       Moonlight/Songs. Several songs with the same name, or a match outside Songs, leave the old entry
+       alone (it simply stays unavailable) rather than guessing. Playlist FILES are relinked natively
+       (SongLibrary.relinkAndBackfill) with the file size as well. */
+    relinkMovedIds() {
+      const AUDIO = /\.(mp3|m4a|aac|flac|ogg|opus|wav)$/i;
+      if (!state.tracks.some(t => t.inSongs)) return;
+      const known = new Set(state.tracks.map(t => t.id));
+      const base = (str) => String(str).replace(/^.*\//, '').toLowerCase();
+      const byName = {};
+      state.tracks.forEach(t => { const k = base(t.id); (byName[k] = byName[k] || []).push(t); });
+      const seen = {};
+      const consider = (str) => {
+        if (typeof str !== 'string' || str.charAt(0) !== '/' || !AUDIO.test(str) || known.has(str)) return str;
+        if (Object.prototype.hasOwnProperty.call(seen, str)) return seen[str];
+        const list = byName[base(str)] || [];
+        seen[str] = list.length === 1 && list[0].inSongs ? list[0].id : str;
+        return seen[str];
+      };
+      let changed = false;
+      const walk = (v) => {
+        if (Array.isArray(v)) {
+          for (let i = 0; i < v.length; i++) {
+            const x = v[i];
+            if (typeof x === 'string') { const y = consider(x); if (y !== x) { v[i] = y; changed = true; } }
+            else if (x && typeof x === 'object') walk(x);
+          }
+        } else if (v && typeof v === 'object') {
+          Object.keys(v).forEach(k => {
+            const x = v[k];
+            if (typeof x === 'string') { const y = consider(x); if (y !== x) { v[k] = y; changed = true; } }
+            else if (x && typeof x === 'object') walk(x);
+            const nk = consider(k);                       // ids are also used as keys (play counts, ...)
+            if (nk !== k && !Object.prototype.hasOwnProperty.call(v, nk)) { v[nk] = v[k]; delete v[k]; changed = true; }
+          });
+        }
+      };
+      walk(state.features);
+      // The history keeps its own store (see the history feature).
+      const hist = AudioFeatures.history;
+      hist._load();
+      hist.items.forEach(e => {
+        const y = consider(e.id);
+        if (y !== e.id) { e.id = y; e.ref = hist._refOf(y, this.getTrack(y)); changed = true; }
+      });
+      if (changed) { hist._save(); Prefs.save(); }
     },
 
     /* Copies each curated list (kept in the app's prefs) into its own playlist file, once. The prefs copy

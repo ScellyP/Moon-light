@@ -231,7 +231,10 @@ class SongLibrary(
             val s = src.optJSONObject(i) ?: continue
             val ref = s.optString("ref")
             if (!isSafeRef(ref) || !seen.add(ref)) continue          // no duplicates, nothing outside the Audio root
-            songs.put(JSONObject().put("ref", ref).put("title", s.optString("title").take(200)))
+            val entry = JSONObject().put("ref", ref).put("title", s.optString("title").take(200))
+            val size = s.optLong("size", 0L)                       // the file's size in bytes: how a moved song is recognised again
+            if (size > 0L) entry.put("size", size)
+            songs.put(entry)
         }
         clean.put("songs", songs)
         return clean
@@ -287,7 +290,7 @@ class SongLibrary(
      * (also when it was already there).
      */
     @Synchronized
-    fun addSong(name: String, ref: String, title: String): Boolean {
+    fun addSong(name: String, ref: String, title: String, size: Long = 0L): Boolean {
         if (!isSafeRef(ref) || name.isBlank()) return false
         val existing = findByName(name)
         val m = existing ?: JSONObject()
@@ -295,7 +298,9 @@ class SongLibrary(
             .put("songs", JSONArray())
         val songs = m.optJSONArray("songs") ?: JSONArray().also { m.put("songs", it) }
         for (i in 0 until songs.length()) if (songs.optJSONObject(i)?.optString("ref") == ref) return true
-        songs.put(JSONObject().put("ref", ref).put("title", title.take(200)))
+        val entry = JSONObject().put("ref", ref).put("title", title.take(200))
+        if (size > 0L) entry.put("size", size)
+        songs.put(entry)
         return save(m, overwrite = true)
     }
 
@@ -324,23 +329,31 @@ class SongLibrary(
      */
     @Synchronized
     fun migrateFolders(sortedFiles: List<File>): Int {
-        val byFolder = LinkedHashMap<String, MutableList<String>>()
+        // A folder playlist is the first folder under Novel/Audio, or under Moonlight/Songs when a whole
+        // playlist folder was moved there. Entries are (ref, size).
+        val byFolder = LinkedHashMap<String, MutableList<Pair<String, Long>>>()
         for (f in sortedFiles) {
-            val inside = under(audioRoot, f) ?: continue          // only the old music folder has folder playlists
+            val inSongs = under(songsRoot, f)
+            val inAudio = under(audioRoot, f)
+            val prefix: String
+            val inside: String
+            if (inSongs != null) { prefix = SONGS_PREFIX; inside = inSongs }
+            else if (inAudio != null) { prefix = AUDIO_PREFIX; inside = inAudio }
+            else continue
             val slash = inside.indexOf('/')
             if (slash <= 0) continue
             val folder = inside.substring(0, slash)
             if (folder.startsWith(".")) continue
-            byFolder.getOrPut(folder) { mutableListOf() }.add("$AUDIO_PREFIX/$inside")
+            byFolder.getOrPut(folder) { mutableListOf() }.add("$prefix/$inside" to f.length())
         }
         if (byFolder.isEmpty()) return 0
         val known = readAll()
         var created = 0
-        for ((folder, refs) in byFolder) {
+        for ((folder, entries) in byFolder) {
             val done = known.any { it.optJSONObject("legacy")?.optString("folder") == folder }
             if (done) continue
             val songs = JSONArray()
-            for (ref in refs) songs.put(JSONObject().put("ref", ref).put("title", File(ref).nameWithoutExtension))
+            for ((ref, size) in entries) songs.put(JSONObject().put("ref", ref).put("title", File(ref).nameWithoutExtension).put("size", size))
             val m = JSONObject()
                 .put("id", freeId("folder-", folder)).put("name", folder).put("source", "folder")
                 .put("legacy", JSONObject().put("folder", folder)).put("songs", songs)
@@ -350,20 +363,81 @@ class SongLibrary(
     }
 
     /**
-     * [migrateFolders] for one old folder only (what the downloader needs before it adds a song to a
+     * [migrateFolders] for one folder name only (what the downloader needs before it adds a song to a
      * playlist that is still just a folder, so the folder's existing songs are not left out of the new
      * playlist file). True when a playlist file was created.
      */
     @Synchronized
     fun migrateFolder(folder: String): Boolean {
         if (folder.isEmpty() || folder.startsWith(".")) return false
-        val dir = File(audioRoot, folder)
-        if (!dir.isDirectory) return false
-        val files = dir.walkTopDown()
-            .filter { it.isFile && AUDIO_EXTENSIONS.contains(it.extension.lowercase()) }
-            .filter { f -> f.toRelativeString(audioRoot).split(File.separatorChar).none { it.startsWith(".") } }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.toRelativeString(audioRoot) })
-            .toList()
+        val files = listOf(audioRoot, songsRoot).flatMap { root ->
+            val dir = File(root, folder)
+            if (!dir.isDirectory) emptyList<File>() else dir.walkTopDown()
+                .filter { it.isFile && AUDIO_EXTENSIONS.contains(it.extension.lowercase()) }
+                .filter { f -> f.toRelativeString(root).split(File.separatorChar).none { it.startsWith(".") } }
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.toRelativeString(root) })
+                .toList()
+        }
         return migrateFolders(files) > 0
+    }
+
+    /**
+     * Keeps playlists working when songs are moved (for example from Novel/Audio into Moonlight/Songs).
+     * Run after every scan with the files the scan found.
+     *  - A playlist entry whose file is no longer where it was is pointed at the same song's new place. A song is
+     *    recognised by its file name, and by its size when the playlist file knows it (a moved file keeps its size).
+     *    Without a size the new place must be inside Moonlight/Songs, which keeps a deleted song from being
+     *    matched to an unrelated file that happens to share a name. Only ONE match counts: two or more are
+     *    ambiguous, so the entry is left alone (shown as unavailable) rather than guessed.
+     *  - An entry that still has its file gets its size filled in, so a later move can be followed by size too.
+     *  - Two entries that end up on the same file are merged into the first one.
+     * No song file is touched; only playlist files change, and only when something changed. Returns how many
+     * entries were pointed at a new place.
+     */
+    @Synchronized
+    fun relinkAndBackfill(files: List<File>): Int {
+        if (files.isEmpty()) return 0                    // nothing was scanned (storage not ready): change nothing
+        val byName = HashMap<String, MutableList<Pair<String, Long>>>()
+        val present = HashSet<String>()
+        for (f in files) {
+            val ref = refFor(f) ?: continue
+            present.add(ref)
+            byName.getOrPut(f.name.lowercase(Locale.ROOT)) { mutableListOf() }.add(ref to f.length())
+        }
+        var relinked = 0
+        for (m in readAll()) {
+            val songs = m.optJSONArray("songs") ?: continue
+            val kept = JSONArray()
+            val seen = HashSet<String>()
+            var changed = false
+            for (i in 0 until songs.length()) {
+                val s = songs.optJSONObject(i) ?: continue
+                var ref = s.optString("ref")
+                val size = s.optLong("size", 0L)
+                if (ref in present) {
+                    if (size == 0L) {
+                        val f = fileFor(ref)
+                        if (f != null && f.isFile) { s.put("size", f.length()); changed = true }
+                    }
+                } else {
+                    val candidates = (byName[ref.substringAfterLast('/').lowercase(Locale.ROOT)] ?: emptyList<Pair<String, Long>>())
+                        .filter { c -> if (size > 0L) c.second == size else c.first.startsWith("$SONGS_PREFIX/") }
+                    if (candidates.size == 1) {
+                        ref = candidates[0].first
+                        s.put("ref", ref)
+                        s.put("size", candidates[0].second)
+                        changed = true
+                        relinked++
+                    }
+                }
+                if (!seen.add(ref)) { changed = true; continue }
+                kept.put(s)
+            }
+            if (changed) {
+                m.put("songs", kept)
+                save(m, overwrite = true)
+            }
+        }
+        return relinked
     }
 }

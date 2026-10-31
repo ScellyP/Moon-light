@@ -1583,6 +1583,8 @@ class MainActivity : ComponentActivity() {
                 try {
                     songLibrary.ensureSongsDir()
                     songLibrary.migrateFolders(audioFiles)
+                    // Songs moved between folders (e.g. into Moonlight/Songs) keep their playlists.
+                    songLibrary.relinkAndBackfill(audioFiles)
                 } catch (e: Exception) {
                     // Playlist files are an addition: the scan must work without them.
                 }
@@ -1634,10 +1636,11 @@ class MainActivity : ComponentActivity() {
         obj.put("artworkRef", Uri.fromFile(f).toString())   // cover art is loaded lazily from this file
         // Address the page's <audio> element uses (see serveAudio()).
         obj.put("webUrl", "https://$appHost/" + (if (inSongs) "songs/" else "audio/") + Uri.encode(relativePath, "/"))
-        // Old folder layout: the first path segment under Novel/Audio is the playlist; a file directly
-        // in Audio/ has none. Moonlight/Songs is the shared store, not a playlist.
+        // Folder layout: the first folder under Novel/Audio is the playlist; a file directly in Audio/ has
+        // none. The same holds for a folder inside Moonlight/Songs (a playlist folder moved there whole);
+        // a song directly in Moonlight/Songs is in no folder playlist.
         val slashIndex = relativePath.indexOf('/')
-        val legacyPlaylist = if (!inSongs && slashIndex > 0) relativePath.substring(0, slashIndex) else null
+        val legacyPlaylist = if (slashIndex > 0) relativePath.substring(0, slashIndex) else null
         if (legacyPlaylist != null) obj.put("playlist", legacyPlaylist) else obj.put("playlist", JSONObject.NULL)
         obj.put("inSongs", inSongs)
 
