@@ -266,6 +266,45 @@
     return c;
   }
 
+  /* ---- cover art for song rows ----------------------------------------------------------------
+     A song row used to be built with no image at all, so every result showed the placeholder moon-and-note
+     tile. The art is now asked from the app (AndroidBridge.getArtwork, which keeps its own disk cache) and
+     painted into the row's tile a few at a time, so a long result list never blocks typing. Results are
+     remembered for the session: a data: URI, or '' for a song without art. */
+  const artCache = {};
+  const artQueue = [];
+  let artTimer = 0;
+
+  function paintCover(tile, uri) {
+    tile.style.setProperty('--sp-cover', 'url("' + uri + '")');
+    tile.setAttribute('data-sp-cover', '1');
+  }
+
+  function artFor(track) {
+    if (Object.prototype.hasOwnProperty.call(artCache, track.path)) return artCache[track.path];
+    const b = root.AndroidBridge;
+    let uri = '';
+    try { uri = b && typeof b.getArtwork === 'function' ? (b.getArtwork(track.path) || '') : ''; } catch (e) { uri = ''; }
+    artCache[track.path] = uri;
+    return uri;
+  }
+
+  function drainArt() {
+    artTimer = 0;
+    for (let n = 0; n < 4 && artQueue.length; n++) {
+      const job = artQueue.shift();
+      if (job.tile.isConnected === false) continue;          // the results were redrawn meanwhile
+      const uri = artFor(job.track);
+      if (uri) paintCover(job.tile, uri);
+    }
+    if (artQueue.length) artTimer = root.setTimeout(drainArt, 0);
+  }
+
+  function queueArt(tile, track) {
+    artQueue.push({ tile: tile, track: track });
+    if (!artTimer) artTimer = root.setTimeout(drainArt, 0);
+  }
+
   function highlighted(text, tokens, className) {
     const node = el('span', className);
     highlight(text, tokens).forEach((p) => {
@@ -314,7 +353,12 @@
     row.tabIndex = 0;
     row.setAttribute('data-id', track.id);
     if (a && a.getCurrentTrackId && a.getCurrentTrackId() === track.id) row.classList.add('playing');
-    row.appendChild(cover('', tone, 'i-moon-music', 'srch-thumb'));
+    const thumb = cover('', tone, 'i-moon-music', 'srch-thumb');
+    row.appendChild(thumb);
+    if (track.path) {
+      if (Object.prototype.hasOwnProperty.call(artCache, track.path)) { if (artCache[track.path]) paintCover(thumb, artCache[track.path]); }
+      else queueArt(thumb, track);
+    }
     const text = el('span', 'srch-text');
     text.appendChild(highlighted(track.title || '', tokens, 'srch-title'));
     const sub = [track.artist, track.playlist].filter(Boolean).join(' • ');
