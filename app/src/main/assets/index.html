@@ -3074,6 +3074,27 @@ button, a, li, input[type="range"], select, summary, [role="button"] { touch-act
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .sp-tile.active .sp-tile-name, .sp-card.active .sp-card-name { color: var(--sp-accent); }
 
+/* Recently played: one row per song (cover, title, artist), newest first */
+.sp-recent-list { list-style: none; margin: 0; padding: 0 14px; }
+.sp-recent-row { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 6px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); text-align: left; cursor: pointer; transition: background .15s ease; }
+.sp-recent-row:active { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.sp-recent-row .sp-cover { width: 52px; height: 52px; border-radius: 4px; }
+.sp-recent-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-recent-title { font: 600 15px/1.25 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-recent-sub { font: 400 13px/1.3 var(--font-ui); color: var(--sp-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The song that is loaded now: accent colour AND a "Now playing" label with an icon, so colour is not the only cue */
+.sp-recent-row.active .sp-recent-title { color: var(--sp-accent); }
+.sp-recent-now { flex: none; display: flex; align-items: center; gap: 4px; font: 700 11px/1 var(--font-ui); letter-spacing: .4px;
+  text-transform: uppercase; color: var(--sp-accent); }
+.sp-recent-now .ico { width: 16px; height: 16px; }
+/* The file is gone: still listed, dimmed, and it says why */
+.sp-recent-row.gone { opacity: .55; cursor: default; }
+.sp-recent-row.gone:active { background: none; }
+.sp-recent-more { display: block; margin: 4px 20px 0; padding: 8px 14px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text); font: 600 13px/1 var(--font-ui); cursor: pointer; }
+.sp-recent-more[hidden] { display: none; }
+
 /* Covers: the playlist's real art when there is some, otherwise a theme-coloured mosaic */
 .sp-cover { --c1: color-mix(in srgb, var(--accent) 55%, var(--bg)); --c2: color-mix(in srgb, var(--accent) 22%, var(--bg));
   --c3: color-mix(in srgb, var(--accent) 38%, var(--bg)); --c4: color-mix(in srgb, var(--accent) 12%, var(--bg));
@@ -3363,6 +3384,11 @@ body.settings-open #srch-input { pointer-events: none; }
             </div>
           </div>
           <div id="sp-home-grid" aria-label="Quick access"></div>
+          <section id="sp-shelf-recent" class="sp-shelf" aria-label="Recently played" hidden>
+            <h2>Recently played</h2>
+            <ul id="sp-recent-list" class="sp-recent-list"></ul>
+            <button type="button" id="sp-recent-more" class="sp-recent-more" data-sp-recent-more aria-expanded="false" hidden>Show more</button>
+          </section>
           <section id="sp-shelf-made" class="sp-shelf" hidden>
             <h2>Made for you</h2>
             <div id="sp-shelf-made-row" class="sp-shelf-row"></div>

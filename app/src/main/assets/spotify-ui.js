@@ -856,6 +856,9 @@
     madeRow: $('sp-shelf-made-row'),
     lists: $('sp-shelf-lists'),
     listsRow: $('sp-shelf-lists-row'),
+    recent: $('sp-shelf-recent'),
+    recentList: $('sp-recent-list'),
+    recentMore: $('sp-recent-more'),
   };
 
   let homeSignature = '';
@@ -981,11 +984,75 @@
     home.lists.hidden = false;
   }
 
+  /* ---- Recently played: one row per song, from the player's playback history ---------------------------
+     The history (audio-player.js, "history") is newest first and holds every song that started, wherever it
+     was played from (a playlist, Search, the queue), so a song played inside a playlist is its own row. The
+     first RECENT_FIRST rows show, "Show more" opens up to RECENT_MAX. Tapping a row plays that song through
+     the same flow as a Search result (NovelAudio.playTrack), which also moves it to the top of the history. */
+  const RECENT_FIRST = 8;
+  const RECENT_MAX = 30;
+  let recentExpanded = false;
+  let recentSignature = '';
+
+  function stemOfPath(path) { return String(path || '').split(/[\\/]/).pop().replace(/\.[^.]*$/, ''); }
+
+  function makeRecentRow(entry, isCurrent) {
+    const track = entry.track;
+    // The tag title, else the file name; a missing artist stays empty (nothing is made up).
+    const title = (track && track.title) || entry.title || stemOfPath(entry.id);
+    const artist = (track && track.artist) || entry.artist || '';
+    const sub = entry.available ? artist : 'File not available' + (artist ? ' \u2022 ' + artist : '');
+
+    const item = makeElement('li', '');
+    const row = makeButton('sp-recent-row' + (isCurrent ? ' active' : '') + (entry.available ? '' : ' gone'),
+      title + (artist ? ', ' + artist : '') + (isCurrent ? ', now playing' : '') + (entry.available ? '' : ', file not available'));
+    row.setAttribute('data-sp-track', entry.id);
+    if (isCurrent) row.setAttribute('aria-current', 'true');
+    if (!entry.available) row.setAttribute('aria-disabled', 'true');
+    row.appendChild(makeCover(0, 'i-moon-music', track ? getArtworkFor(track) : ''));
+    const text = makeElement('span', 'sp-recent-text');
+    text.appendChild(makeElement('span', 'sp-recent-title', title));
+    if (sub) text.appendChild(makeElement('span', 'sp-recent-sub', sub));
+    row.appendChild(text);
+    if (isCurrent) {
+      const now = makeElement('span', 'sp-recent-now');
+      now.appendChild(makeIcon('i-headphones'));
+      now.appendChild(makeElement('span', '', 'Now playing'));
+      row.appendChild(now);
+    }
+    item.appendChild(row);
+    return item;
+  }
+
+  function syncRecent() {
+    if (!home.recent || !home.recentList) return;
+    const audio = window.NovelAudio;
+    const entries = audio && audio.getHistoryEntries ? audio.getHistoryEntries(RECENT_MAX) : [];
+    const currentId = audio && audio.getCurrentTrackId ? audio.getCurrentTrackId() : null;
+    const shown = entries.slice(0, recentExpanded ? RECENT_MAX : RECENT_FIRST);
+
+    const signature = shown.map((e) => e.id + '\u0001' + (e.available ? 1 : 0) + (e.id === currentId ? 'p' : '') + '\u0001' +
+      (e.track ? e.track.title + '\u0001' + e.track.artist + '\u0001' + (getArtworkFor(e.track) ? 1 : 0) : e.title)).join('\u0002') +
+      '\u0003' + entries.length + (recentExpanded ? 'x' : '');
+    if (signature === recentSignature) return;
+    recentSignature = signature;
+
+    home.recent.hidden = entries.length === 0;
+    fill(home.recentList, shown.map((e) => makeRecentRow(e, e.id === currentId)));
+    if (home.recentMore) {
+      home.recentMore.hidden = entries.length <= RECENT_FIRST;
+      home.recentMore.textContent = recentExpanded ? 'Show less' : 'Show more';
+      home.recentMore.setAttribute('aria-expanded', recentExpanded ? 'true' : 'false');
+    }
+  }
+
   function syncHome() {
     if (!home.grid || !home.madeRow || !home.listsRow) return;
 
     const greeting = greetingForHour(new Date().getHours());
     if (home.greeting && home.greeting.textContent !== greeting) home.greeting.textContent = greeting;
+
+    try { syncRecent(); } catch (error) { /* the rest of Home must still build */ }
 
     const items = readPlaylistRows();
     const signature = items.map((item) => item.name + '\u0001' + item.title + '\u0001' + item.count).join('\u0002');
@@ -1005,6 +1072,21 @@
   if (home.root) home.root.addEventListener('click', (event) => {
     const target = event.target.closest ? event.target : null;
     if (!target) return;
+
+    // Recently played: "Show more / less", or a song row (a file that is gone is listed but cannot start).
+    if (target.closest('[data-sp-recent-more]')) {
+      recentExpanded = !recentExpanded;
+      syncRecent();
+      return;
+    }
+    const recentRow = target.closest('[data-sp-track]');
+    if (recentRow) {
+      if (recentRow.classList.contains('gone')) return;
+      const audio = window.NovelAudio;
+      if (audio && audio.playTrack) audio.playTrack(recentRow.getAttribute('data-sp-track'));
+      scheduleSync();
+      return;
+    }
 
     // "New playlist": the name box lives in the Now playing view, so go there to type it.
     if (target.closest('[data-sp-new]')) {

@@ -1306,6 +1306,7 @@ window.NovelAudio = (function () {
         if (typeof saved.activePlaylist === 'string') state.activePlaylist = saved.activePlaylist;
         if (typeof saved.lastTrackId === 'string') state.lastTrackId = saved.lastTrackId;
         AudioFeatures.restore(saved.features);
+        AudioFeatures.history.migrate(saved.features ? saved.features.history : null);
       } catch (e) { /* corrupt prefs are not worth crashing over */ }
     },
 
@@ -1635,16 +1636,95 @@ window.NovelAudio = (function () {
      Selectable as the virtual playlist '@recent'. */
   AudioFeatures.register({
     id: 'history', label: 'Recently played', status: 'working',
-    defaults: { ids: [] },
+    // NOT part of the audio prefs: those are mirrored to settings.txt, which has to stay small. The history
+    // is its own bounded store, newest first, at most MAX entries of a few hundred bytes, in localStorage
+    // under `moonlight_history`. recents.txt (song-memory.js) is its durable copy next to settings.txt.
+    defaults: {},
+    persistKeys: [],
     MAX: 100,
+    KEY: 'moonlight_history',
+    items: [],                    // [{ id, ref, t, title, artist }]: id = the song's path, ref = its canonical local identity
+    _loaded: false,
+
+    // The canonical local identity of a song: "Songs/x.mp3" (Moonlight/Songs) or "Audio/Folder/x.mp3"
+    // (the old Novel/Audio folder). The scan reports it as `ref`; this works it out from the path otherwise.
+    _refOf(id, track) {
+      if (track && track.ref) return track.ref;
+      const str = String(id);
+      let m = /\/Moonlight\/Songs\/(.+)$/.exec(str);
+      if (m) return 'Songs/' + m[1];
+      m = /\/Novel\/Audio\/(.+)$/.exec(str);
+      return m ? 'Audio/' + m[1] : '';
+    },
+    _load() {
+      if (this._loaded) return;
+      this._loaded = true;
+      try {
+        const d = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+        if (d && Array.isArray(d.items)) {
+          this.items = d.items.filter(e => e && typeof e.id === 'string' && e.id).slice(0, this.MAX).map(e => ({
+            id: e.id, ref: typeof e.ref === 'string' ? e.ref : '', t: +e.t || 0,
+            title: typeof e.title === 'string' ? e.title.slice(0, 200) : '',
+            artist: typeof e.artist === 'string' ? e.artist.slice(0, 200) : '',
+          }));
+        }
+      } catch (e) { this.items = []; }
+    },
+    _save() { try { localStorage.setItem(this.KEY, JSON.stringify({ v: 1, items: this.items })); } catch (e) { /* storage full: non-fatal */ } },
+
+    // Once: older versions kept the ids inside the audio prefs (and so inside settings.txt). Prefs.load()
+    // hands that old list over here; it is only used when this store is still empty.
+    migrate(old) {
+      this._load();
+      if (this.items.length || !old || !Array.isArray(old.ids)) return;
+      this.items = old.ids.filter(x => typeof x === 'string' && x).slice(0, this.MAX)
+        .map(id => ({ id: id, ref: this._refOf(id), t: 0, title: '', artist: '' }));
+      this._save();
+    },
+
     trackStart(track) {
       if (!track) return;
-      const s = state.features.history;
-      s.ids = [track.id].concat(s.ids.filter(id => id !== track.id)).slice(0, this.MAX);
-      Prefs.save();
+      this._load();
+      const ref = this._refOf(track.id, track);
+      const entry = { id: track.id, ref: ref, t: Date.now(),
+        title: String(track.title || '').slice(0, 200), artist: String(track.artist || '').slice(0, 200) };
+      // One entry per song, newest first. The same song under another path (the folder was moved) is the same entry.
+      this.items = [entry].concat(this.items.filter(e => e.id !== entry.id && !(ref && e.ref === ref))).slice(0, this.MAX);
+      this._save();
+      Prefs.save();       // lets song-memory.js notice the change and rewrite recents.txt
     },
-    getIds() { return state.features.history.ids.slice(); },
-    clear() { state.features.history.ids = []; Prefs.save(); },
+
+    // The library record of an entry: by path, else by its canonical identity.
+    _resolve(e) {
+      let t = MediaLibrary.getTrack(e.id);
+      if (!t && e.ref) t = state.tracks.find(x => x.ref === e.ref) || null;
+      return t;
+    },
+
+    // Entries newest first, each with the current library record (`track`, null when the file is not in the
+    // library any more) and `id` = that record's id. Entries that resolve to the same song appear once.
+    getEntries(limit) {
+      this._load();
+      const seen = new Set();
+      const out = [];
+      for (const e of this.items) {
+        const track = this._resolve(e);
+        const id = track ? track.id : e.id;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push({ id: id, ref: e.ref, t: e.t, title: e.title, artist: e.artist, track: track, available: !!track });
+        if (limit && out.length >= limit) break;
+      }
+      return out;
+    },
+    getIds() { return this.getEntries().map(e => e.id); },
+    setIds(ids) {
+      this._load();
+      this.items = ids.filter(x => typeof x === 'string' && x).slice(0, this.MAX)
+        .map(id => ({ id: id, ref: this._refOf(id, MediaLibrary.getTrack(id)), t: 0, title: '', artist: '' }));
+      this._save();
+    },
+    clear() { this.items = []; this._loaded = true; this._save(); Prefs.save(); },
   });
 
   /* ---- Shuffle round ---------------------------------------------------------
@@ -2615,6 +2695,8 @@ window.NovelAudio = (function () {
       return now;
     },
     getHistoryIds() { return AudioFeatures.history.getIds().slice(); },
+    // Recently played songs for Home: newest first, each { id, title, artist, track, available }.
+    getHistoryEntries(limit) { return AudioFeatures.history.getEntries(limit); },
     setLikedIds(ids) {
       if (!Array.isArray(ids)) return false;
       state.features.likes.ids = ids.filter((x) => typeof x === 'string');
@@ -2624,7 +2706,7 @@ window.NovelAudio = (function () {
     },
     setHistoryIds(ids) {
       if (!Array.isArray(ids)) return false;
-      state.features.history.ids = ids.filter((x) => typeof x === 'string').slice(0, 100);
+      AudioFeatures.history.setIds(ids);
       Prefs.save();
       AudioUI.render();
       return true;
