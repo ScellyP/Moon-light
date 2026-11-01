@@ -380,6 +380,12 @@
       heart.replaceChildren(icon('i-heart', now ? 'fill' : ''));
     });
     row.appendChild(heart);
+    const more = el('button', 'srch-more');
+    more.type = 'button';
+    more.setAttribute('data-song-more', track.id);
+    more.setAttribute('aria-label', 'Song options for ' + (track.title || 'this song'));
+    more.appendChild(icon('sp-more', ''));
+    row.appendChild(more);
     onActivate(row, () => playSong(track));
     return row;
   }

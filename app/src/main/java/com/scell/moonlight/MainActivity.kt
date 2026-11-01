@@ -266,6 +266,9 @@ class MainActivity : ComponentActivity() {
     // (Moonlight/playlists/): see SongLibrary.kt. New downloads go here; Novel/Audio is still read.
     private val songsRoot = File(playerRoot, "Songs")
 
+    // Your edits to song titles / artists / albums (an overlay, the files are never changed): see SongEdits.kt.
+    private val songEdits = SongEdits(File(playerRoot, "song-edits.json"))
+
     // `lazy`, because songDownloader (declared above) needs it only when a job runs.
     private val songLibrary: SongLibrary by lazy { SongLibrary(audioRoot, songsRoot, File(playerRoot, "playlists")) }
 
@@ -1173,6 +1176,54 @@ class MainActivity : ComponentActivity() {
 
 
 
+        // ---- Song options ("..." menu) ----------------------------------------------------------------
+        // songEditSave / songEditReset change what the app SHOWS for a song (title, artist, album); the music
+        // file is not touched (see SongEdits.kt). They return the song's new info as JSON, or null on failure.
+        @JavascriptInterface
+        fun songEditSave(path: String, title: String, artist: String, album: String): String? {
+            if (!hasStoragePermission()) return null
+            val f = resolveAudioFile(path) ?: return null
+            if (!songEdits.set(f, title, artist, album)) return null
+            return try { songInfoJson(f) } catch (e: Exception) { null }
+        }
+
+        @JavascriptInterface
+        fun songEditReset(path: String): String? {
+            if (!hasStoragePermission()) return null
+            val f = resolveAudioFile(path) ?: return null
+            if (!songEdits.clear(f)) return null
+            return try { songInfoJson(f) } catch (e: Exception) { null }
+        }
+
+        // playlistAddSong / playlistRemoveSong put a song into / take it out of the playlist called `name`
+        // (a playlist file, or an old folder playlist, which is turned into a playlist file first so its other
+        // songs stay). No music file is moved, copied or deleted.
+        @JavascriptInterface
+        fun playlistAddSong(name: String, path: String): Boolean {
+            if (!hasStoragePermission() || name.isBlank()) return false
+            val f = resolveAudioFile(path) ?: return false
+            val ref = songLibrary.refFor(f) ?: return false
+            return try {
+                songLibrary.migrateFolder(name.trim())
+                songLibrary.addSong(name.trim(), ref, f.nameWithoutExtension, f.length())
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun playlistRemoveSong(name: String, path: String): Boolean {
+            if (!hasStoragePermission() || name.isBlank()) return false
+            val f = resolveAudioFile(path) ?: return false
+            val ref = songLibrary.refFor(f) ?: return false
+            return try {
+                songLibrary.migrateFolder(name.trim())
+                songLibrary.removeSong(name.trim(), ref)
+            } catch (e: Exception) {
+                false
+            }
+        }
+
         // YouTube sign-in for the downloader. youtubeSignInStatus: "signed-in" | "signed-out".
         // youtubeSignIn opens the sign-in page; the result arrives as window.onYouTubeSignIn(status, message).
         @JavascriptInterface
@@ -1589,13 +1640,14 @@ class MainActivity : ComponentActivity() {
                     // Playlist files are an addition: the scan must work without them.
                 }
                 val membership = try { songLibrary.membership() } catch (e: Exception) { emptyMap() }
+                val exclusions = try { songLibrary.exclusions() } catch (e: Exception) { emptyMap() }
 
                 val cache = loadTagCache()
                 val results = arrayOfNulls<JSONObject>(audioFiles.size)
                 val pool = java.util.concurrent.Executors.newFixedThreadPool(4)
                 audioFiles.forEachIndexed { i, f ->
                     pool.execute {
-                        results[i] = try { buildTrackJson(f, cache, membership) } catch (e: Exception) { null }
+                        results[i] = try { buildTrackJson(f, cache, membership, exclusions) } catch (e: Exception) { null }
                     }
                 }
                 pool.shutdown()
@@ -1622,6 +1674,7 @@ class MainActivity : ComponentActivity() {
         f: File,
         cache: java.util.concurrent.ConcurrentHashMap<String, JSONObject>,
         membership: Map<String, List<String>> = emptyMap(),
+        exclusions: Map<String, Set<String>> = emptyMap(),
     ): JSONObject {
         val obj = JSONObject()
         obj.put("id", f.absolutePath)
@@ -1640,7 +1693,9 @@ class MainActivity : ComponentActivity() {
         // none. The same holds for a folder inside Moonlight/Songs (a playlist folder moved there whole);
         // a song directly in Moonlight/Songs is in no folder playlist.
         val slashIndex = relativePath.indexOf('/')
-        val legacyPlaylist = if (slashIndex > 0) relativePath.substring(0, slashIndex) else null
+        var legacyPlaylist = if (slashIndex > 0) relativePath.substring(0, slashIndex) else null
+        // Taken out of its folder's playlist by the user ("Remove from this playlist"): the folder no longer counts.
+        if (legacyPlaylist != null && exclusions[legacyPlaylist.lowercase()]?.contains(ref) == true) legacyPlaylist = null
         if (legacyPlaylist != null) obj.put("playlist", legacyPlaylist) else obj.put("playlist", JSONObject.NULL)
         obj.put("inSongs", inSongs)
 
@@ -1666,7 +1721,32 @@ class MainActivity : ComponentActivity() {
             cache[f.absolutePath] = JSONObject().put("s", size).put("m", modified).put("t", tags)
         }
         for (k in tags.keys()) obj.put(k, tags.get(k))
+        applySongEdit(f, obj)
         return obj
+    }
+
+    /** Lays the user's edit of this song (title / artist / album) over what its file says. */
+    private fun applySongEdit(f: File, obj: JSONObject) {
+        val e = songEdits.get(f) ?: return
+        val title = e.optString("title")
+        if (title.isNotEmpty()) { obj.put("title", title); obj.put("titleFromTag", false) }
+        val artist = e.optString("artist")
+        if (artist.isNotEmpty()) {
+            obj.put("artist", artist)
+            obj.put("artists", JSONArray(distinctArtists(artist, obj.optString("albumArtist"))))
+        }
+        val album = e.optString("album")
+        if (album.isNotEmpty()) obj.put("album", album)
+        obj.put("edited", true)
+    }
+
+    /** The fields the page shows for a song after an edit was saved or reset. */
+    private fun songInfoJson(f: File): String {
+        val t = buildTrackJson(f, loadTagCache())
+        val out = JSONObject()
+        for (k in listOf("title", "titleFromTag", "artist", "artists", "album", "edited")) if (t.has(k)) out.put(k, t.get(k))
+        if (!out.has("edited")) out.put("edited", false)
+        return out.toString()
     }
 
     /**

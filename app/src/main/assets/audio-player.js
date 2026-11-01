@@ -339,6 +339,14 @@ window.NovelAudio = (function () {
       return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
     },
 
+    // Shows a song's new info after an edit (from the native side): title, artist, album and the artist list.
+    infoRev: 0,
+    applyInfo(track, info) {
+      this.infoRev++;
+      ['title', 'artist', 'artists', 'album', 'titleFromTag', 'edited'].forEach(k => { if (info[k] !== undefined) track[k] = info[k]; });
+      delete track._sk;                       // the search text is built again from the new info
+    },
+
     /* ---- Playlist files (see SongLibrary.kt) --------------------------------
        The playlists as readable JSON files with ordered song references. Songs whose file is gone
        come back with `available: false` and stay listed. [] outside the Android app. */
@@ -483,6 +491,22 @@ window.NovelAudio = (function () {
 
     current() {
       return state.queue[state.queueIndex] || null;
+    },
+
+    // "Add to Queue": the song plays right after the one that is playing now. Picking another playlist or a
+    // rescan builds the queue from the playlist again, which drops it. False when it is the song playing now.
+    addNext(id) {
+      if (!MediaLibrary.getTrack(id)) return false;
+      if (state.queue[state.queueIndex] === id) return false;
+      const old = state.queue.indexOf(id);
+      if (old !== -1) {
+        state.queue.splice(old, 1);
+        if (old < state.queueIndex) state.queueIndex--;
+      }
+      state.queue.splice(state.queueIndex + 1, 0, id);
+      if (this._originalOrder.indexOf(id) === -1) this._originalOrder.push(id);   // turning shuffle off keeps it
+      AudioUI.render();
+      return true;
     },
 
     /* SHUFFLE = a "round". Every song of the selection is played once, in random order, before any
@@ -2615,7 +2639,8 @@ window.NovelAudio = (function () {
       // while a specific playlist is selected, since every visible row
       // already belongs to it.
       const showPlaylistTags = state.activePlaylist === 'all' && MediaLibrary.getPlaylists().length > 0;
-      const queueKey = showPlaylistTags + '|' + state.queue.map(id => {
+      // infoRev changes when a song's title / artist is edited, so the rows are redrawn with the new names.
+      const queueKey = showPlaylistTags + '|' + MediaLibrary.infoRev + '|' + state.queue.map(id => {
         const t = MediaLibrary.getTrack(id);
         return id + ':' + (t ? t.durationSec + (t.playlist || '') : '');
       }).join(',');
@@ -2663,6 +2688,10 @@ window.NovelAudio = (function () {
         dur.className = 'audio-track-duration';
         dur.textContent = formatTime(t.durationSec);
         li.appendChild(dur);
+
+        // The "..." at the right edge of the row is drawn by CSS (li::after) and its tap is handled by
+        // song-menu.js: a big library has thousands of rows, and an extra element per row made the list slower.
+
 
         els.queue.appendChild(li);
       });
@@ -2747,6 +2776,151 @@ window.NovelAudio = (function () {
       AudioUI.render();
       return now;
     },
+    /* ---- Song options (the "..." menu, song-menu.js) ---------------------------------------------
+       A playlist is addressed by a key: 'list:<id>' for a hand-picked list kept in the app, 'name:<name>' for a
+       playlist file / old folder playlist. */
+    getTrackRecord(id) { return MediaLibrary.getTrack(id) || null; },
+
+    // The key of the playlist now shown in the Songs list, or '' for All songs / Liked / Recent (not editable).
+    getActivePlaylistKey() {
+      const sel = state.activePlaylist || 'all';
+      if (sel.indexOf('@list:') === 0) return 'list:' + sel.slice(6);
+      if (sel === 'all' || sel.charAt(0) === '@') return '';
+      return 'name:' + sel;
+    },
+
+    getPlaylistTargets() {
+      const out = [];
+      AudioFeatures.customPlaylists.list().forEach(p => out.push({ key: 'list:' + p.id, name: p.name, count: p.count }));
+      const names = new Set(MediaLibrary.getPlaylists());
+      MediaLibrary.playlistFiles().forEach(m => { if (m && m.source !== 'curated' && m.name) names.add(m.name); });
+      Array.from(names).sort((a, b) => a.localeCompare(b))
+        .forEach(n => out.push({ key: 'name:' + n, name: n, count: MediaLibrary.tracksInPlaylist(n).length }));
+      return out;
+    },
+
+    // Keys of the playlists that hold this song.
+    getSongPlaylists(id) {
+      const keys = [];
+      AudioFeatures.customPlaylists.list().forEach(p => {
+        const ids = AudioFeatures.customPlaylists.getIds(p.id) || [];
+        if (ids.indexOf(id) !== -1) keys.push('list:' + p.id);
+      });
+      const t = MediaLibrary.getTrack(id);
+      if (t) MediaLibrary._namesOf(t).forEach(n => keys.push('name:' + n));
+      return keys;
+    },
+
+    // Makes a new hand-picked playlist holding this song; returns its key, or null.
+    createPlaylistWith(name, id) {
+      const pid = AudioFeatures.customPlaylists.create(name, id ? [id] : []);
+      if (pid === null) return null;
+      this._playlistsChanged();
+      return 'list:' + pid;
+    },
+
+    addSongToPlaylist(key, id) {
+      const track = MediaLibrary.getTrack(id);
+      if (!track || typeof key !== 'string') return false;
+      if (key.indexOf('list:') === 0) {
+        if (!AudioFeatures.customPlaylists.addTracks(key.slice(5), [id])) return false;
+      } else if (key.indexOf('name:') === 0) {
+        const name = key.slice(5);
+        const b = window.AndroidBridge;
+        let ok = false;
+        try { ok = !!(b && b.playlistAddSong && b.playlistAddSong(name, track.path)); } catch (e) { ok = false; }
+        if (!ok) return false;
+        const names = MediaLibrary._namesOf(track).slice();
+        if (names.indexOf(name) === -1) names.push(name);
+        track.playlists = names;
+        if (!track.playlist) track.playlist = name;
+      } else { return false; }
+      this._playlistsChanged();
+      return true;
+    },
+
+    removeSongFromPlaylist(key, id) {
+      const track = MediaLibrary.getTrack(id);
+      if (!track || typeof key !== 'string') return false;
+      if (key.indexOf('list:') === 0) {
+        if (!AudioFeatures.customPlaylists.removeTrack(key.slice(5), id)) return false;
+      } else if (key.indexOf('name:') === 0) {
+        const name = key.slice(5);
+        const b = window.AndroidBridge;
+        let ok = false;
+        try { ok = !!(b && b.playlistRemoveSong && b.playlistRemoveSong(name, track.path)); } catch (e) { ok = false; }
+        if (!ok) return false;
+        track.playlists = MediaLibrary._namesOf(track).filter(n => n !== name);
+        if (track.playlist === name) track.playlist = track.playlists[0] || null;
+      } else { return false; }
+      this._playlistsChanged();
+      return true;
+    },
+
+    // After a playlist changed: refresh what the Songs list shows (the queue keeps the song that is playing).
+    _playlistsChanged() {
+      AudioFeatures.emit('libraryChanged');
+      AudioUI.selectPlaylist(state.activePlaylist);
+    },
+
+    addToQueue(id) { return PlaybackQueue.addNext(id); },
+
+    // "Go to Queue": shows the song in the Songs list (opening the playlist it belongs to when it is not in the
+    // list now), scrolled to it and flashed. The caller has already switched to the Songs tab.
+    revealSong(id) {
+      if (state.queue.indexOf(id) === -1) {
+        const t = MediaLibrary.getTrack(id);
+        if (!t) return false;
+        AudioUI.selectPlaylist(t.playlist || 'all');
+      }
+      if (!els.queue) return false;
+      const li = Array.prototype.find.call(els.queue.children, n => n.dataset && n.dataset.trackId === id);
+      if (!li) return false;
+      if (li.scrollIntoView) li.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      li.classList.remove('reveal');
+      void li.offsetWidth;                       // lets the flash start over when used twice in a row
+      li.classList.add('reveal');
+      setTimeout(() => { li.classList.remove('reveal'); }, 1800);
+      return true;
+    },
+
+    // "Play on loop": plays the song and turns repeat-one on; again to turn it off.
+    isLoopingSong(id) { return state.repeat === 'one' && state.currentTrackId === id; },
+    loopSong(id) {
+      if (this.isLoopingSong(id)) { state.repeat = 'off'; Prefs.save(); AudioUI.render(); return false; }
+      if (state.currentTrackId !== id && !this.playTrack(id)) return false;
+      state.repeat = 'one';
+      Prefs.save();
+      AudioUI.render();
+      return true;
+    },
+
+    // Edit what the app shows for a song (title / artist / album). The music file is not changed.
+    // Returns the new info, or null when it could not be saved (not in the Android app, no storage access).
+    editSong(id, fields) {
+      const track = MediaLibrary.getTrack(id);
+      const b = window.AndroidBridge;
+      if (!track || !b || !b.songEditSave) return null;
+      let info = null;
+      try { info = JSON.parse(b.songEditSave(track.path, fields.title || '', fields.artist || '', fields.album || '') || 'null'); } catch (e) { info = null; }
+      return info ? this._songInfoChanged(track, info) : null;
+    },
+    resetSongEdit(id) {
+      const track = MediaLibrary.getTrack(id);
+      const b = window.AndroidBridge;
+      if (!track || !b || !b.songEditReset) return null;
+      let info = null;
+      try { info = JSON.parse(b.songEditReset(track.path) || 'null'); } catch (e) { info = null; }
+      return info ? this._songInfoChanged(track, info) : null;
+    },
+    _songInfoChanged(track, info) {
+      MediaLibrary.applyInfo(track, info);
+      AudioFeatures.emit('libraryChanged');
+      Prefs.save();                    // song-memory.js rewrites favorites.txt / recents.txt with the new names
+      AudioUI.render();
+      return info;
+    },
+
     getHistoryIds() { return AudioFeatures.history.getIds().slice(); },
     // Recently played songs for Home: newest first, each { id, title, artist, track, available }.
     getHistoryEntries(limit) { return AudioFeatures.history.getEntries(limit); },

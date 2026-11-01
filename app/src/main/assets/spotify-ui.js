@@ -237,6 +237,14 @@
         }
         break;
 
+      case 'songmenu': {
+        const a = window.NovelAudio;
+        const id = a && a.getCurrentTrackId ? a.getCurrentTrackId() : null;
+        closeSheet();
+        if (id && window.SongMenu) window.SongMenu.open(id, '');
+        break;
+      }
+
       case 'sleep':
         if (el.sleepOptions) el.sleepOptions.classList.toggle('hidden');
         break;
@@ -1003,7 +1011,7 @@
     const artist = (track && track.artist) || entry.artist || '';
     const sub = entry.available ? artist : 'File not available' + (artist ? ' \u2022 ' + artist : '');
 
-    const item = makeElement('li', '');
+    const item = makeElement('li', 'sp-recent-item');
     const row = makeButton('sp-recent-row' + (isCurrent ? ' active' : '') + (entry.available ? '' : ' gone'),
       title + (artist ? ', ' + artist : '') + (isCurrent ? ', now playing' : '') + (entry.available ? '' : ', file not available'));
     row.setAttribute('data-sp-track', entry.id);
@@ -1021,6 +1029,13 @@
       row.appendChild(now);
     }
     item.appendChild(row);
+    if (entry.available) {
+      // The "..." button: song options (song-menu.js).
+      const more = makeButton('sp-recent-more-btn', 'Song options for ' + title);
+      more.setAttribute('data-song-more', entry.id);
+      more.appendChild(makeIcon('sp-more'));
+      item.appendChild(more);
+    }
     return item;
   }
 

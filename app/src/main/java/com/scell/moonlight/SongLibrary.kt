@@ -237,6 +237,16 @@ class SongLibrary(
             songs.put(entry)
         }
         clean.put("songs", songs)
+        // Songs taken out of a playlist that is still backed by a folder: without this the folder would
+        // put them straight back, because a song in the folder belongs to that playlist by location.
+        val excluded = JSONArray()
+        val exSeen = HashSet<String>()
+        val exSrc = raw.optJSONArray("excluded") ?: JSONArray()
+        for (i in 0 until minOf(exSrc.length(), MAX_SONGS)) {
+            val r = exSrc.optString(i)
+            if (isSafeRef(r) && exSeen.add(r)) excluded.put(r)
+        }
+        if (excluded.length() > 0) clean.put("excluded", excluded)
         return clean
     }
 
@@ -297,27 +307,65 @@ class SongLibrary(
             .put("id", freeId("pl-", name)).put("name", name.trim().take(60)).put("source", "user")
             .put("songs", JSONArray())
         val songs = m.optJSONArray("songs") ?: JSONArray().also { m.put("songs", it) }
-        for (i in 0 until songs.length()) if (songs.optJSONObject(i)?.optString("ref") == ref) return true
-        val entry = JSONObject().put("ref", ref).put("title", title.take(200))
-        if (size > 0L) entry.put("size", size)
-        songs.put(entry)
+        var changed = false
+        // Adding a song that was taken out of this folder-backed playlist brings it back.
+        val ex = m.optJSONArray("excluded")
+        if (ex != null) {
+            val keep = JSONArray()
+            for (i in 0 until ex.length()) if (ex.optString(i) != ref) keep.put(ex.optString(i)) else changed = true
+            if (changed) m.put("excluded", keep)
+        }
+        var present = false
+        for (i in 0 until songs.length()) if (songs.optJSONObject(i)?.optString("ref") == ref) present = true
+        if (!present) {
+            val entry = JSONObject().put("ref", ref).put("title", title.take(200))
+            if (size > 0L) entry.put("size", size)
+            songs.put(entry)
+            changed = true
+        }
+        if (!changed) return true
         return save(m, overwrite = true)
     }
 
-    /** Takes a reference back out of the playlist called [name] (used to undo a failed placement). */
+    /**
+     * Takes a song out of the playlist called [name]. No file is deleted. When the playlist is still backed by a
+     * folder and the song lies in that folder, it is also recorded as excluded, so the folder does not put it
+     * back. Also used to undo a failed placement. True when the playlist file is in the wanted state.
+     */
     @Synchronized
     fun removeSong(name: String, ref: String): Boolean {
         val m = findByName(name) ?: return true
-        val songs = m.optJSONArray("songs") ?: return true
+        val songs = m.optJSONArray("songs") ?: JSONArray()
         val kept = JSONArray()
         var changed = false
         for (i in 0 until songs.length()) {
             val s = songs.optJSONObject(i)
             if (s != null && s.optString("ref") == ref) changed = true else if (s != null) kept.put(s)
         }
+        val folder = m.optJSONObject("legacy")?.optString("folder").orEmpty()
+        val inFolder = folder.isNotEmpty() && (ref.startsWith("$AUDIO_PREFIX/$folder/") || ref.startsWith("$SONGS_PREFIX/$folder/"))
+        if (inFolder) {
+            val ex = m.optJSONArray("excluded") ?: JSONArray().also { m.put("excluded", it) }
+            var has = false
+            for (i in 0 until ex.length()) if (ex.optString(i) == ref) has = true
+            if (!has) { ex.put(ref); changed = true }
+        }
         if (!changed) return true
         m.put("songs", kept)
         return save(m, overwrite = true)
+    }
+
+    /** playlist name (lower case) -> refs taken out of it (see [removeSong]). Used by the scan. */
+    @Synchronized
+    fun exclusions(): Map<String, Set<String>> {
+        val out = HashMap<String, Set<String>>()
+        for (m in readAll()) {
+            val ex = m.optJSONArray("excluded") ?: continue
+            val set = HashSet<String>()
+            for (i in 0 until ex.length()) set.add(ex.optString(i))
+            if (set.isNotEmpty()) out[m.optString("name").trim().lowercase(Locale.ROOT)] = set
+        }
+        return out
     }
 
     /* ------------------------------------------------------------------ migration */
