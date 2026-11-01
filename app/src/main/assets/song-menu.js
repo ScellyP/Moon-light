@@ -304,18 +304,45 @@
     const form = el('form', 'sm-form');
 
     const fields = {};
+    const order = ['title', 'artist', 'album'];
+
+    // A box grows with its text (up to its max height in CSS), so a long title or album is readable, not cut off.
+    const grow = (box) => {
+      if (typeof box.scrollHeight !== 'number') return;
+      box.style.height = 'auto';
+      box.style.height = box.scrollHeight + 2 + 'px';
+    };
+
     [['title', 'Title', track.title], ['artist', 'Artist', track.artist], ['album', 'Album', track.album]].forEach(([key, label, value]) => {
       const wrap = el('label', 'sm-field');
       wrap.appendChild(el('span', 'sm-field-label', label));
-      const input = el('input', 'sm-input');
-      input.type = 'text';
+      const input = el('textarea', 'sm-input');
+      input.rows = 1;
       input.maxLength = 200;
       input.value = value || '';
       input.setAttribute('data-sm-field', key);
+      input.setAttribute('enterkeyhint', key === 'album' ? 'done' : 'next');
+      input.addEventListener('input', () => {
+        if (/[\r\n]/.test(input.value)) input.value = input.value.replace(/[\r\n]+/g, ' ');     // one line of data: Enter never adds a break
+        grow(input);
+      });
+      // Enter: on to the next box, and Save from the last one.
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const next = fields[order[order.indexOf(key) + 1]];
+        if (next) next.focus(); else if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new root.Event('submit', { cancelable: true }));
+      });
+      // The keyboard slides up after the tap: bring the box into view once the sheet has moved above it.
+      input.addEventListener('focus', () => {
+        root.setTimeout(() => { if (input.scrollIntoView) input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 300);
+      });
       fields[key] = input;
       wrap.appendChild(input);
       form.appendChild(wrap);
     });
+    root.setTimeout(() => { order.forEach((k) => grow(fields[k])); }, 0);
+
     form.appendChild(el('p', 'sm-hint',
       'Several artists: separate them with ; \u2013 for example \u201cA; B\u201d. This only changes how Moonlight shows the song. The music file is not changed.'));
 

@@ -828,6 +828,10 @@ class MainActivity : ComponentActivity() {
     private fun reportInsets(insets: WindowInsetsCompat) {
         reportInset("onStatusBarInset", insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top)
         reportInset("onNavBarInset", insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
+        // The keyboard's height from the bottom of the screen (0 when it is hidden). The page is drawn edge to
+        // edge, so the keyboard covers it instead of pushing it up; the song options sheet uses this to lift itself
+        // above the keyboard while you type (--kb-height, see player-app.js).
+        reportInset("onImeInset", insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

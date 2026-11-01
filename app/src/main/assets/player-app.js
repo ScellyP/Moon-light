@@ -25,6 +25,13 @@
     var value = typeof px === 'number' && px >= 0 ? px : 0;
     document.documentElement.style.setProperty('--nav-bar-height', value + 'px');
   };
+  // The on-screen keyboard's height (0 = hidden). Sheets that hold text boxes sit above it (--kb-height); while
+  // it is up the system navigation bar is behind it, so html.kb-open also drops the space reserved for that bar.
+  window.onImeInset = function (px) {
+    var value = typeof px === 'number' && px > 0 ? px : 0;
+    document.documentElement.style.setProperty('--kb-height', value + 'px');
+    document.documentElement.classList.toggle('kb-open', value > 0);
+  };
 
   /* ---- message dialog ---- */
   var dialogLayer = document.getElementById('dialog-layer');
