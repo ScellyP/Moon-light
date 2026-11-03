@@ -3345,19 +3345,39 @@ mark.srch-hit { background: none; color: inherit; font-weight: 800; }
 .srch-recent-ico { width: 36px; display: inline-flex; justify-content: center; color: var(--faint); }
 .srch-recent .srch-title { flex: 1; }
 .srch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.srch-tile {
+.srch-tile, .srch-cat {
   --tile: color-mix(in srgb, var(--accent) 45%, var(--bg));
   position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 6px; min-height: 92px; padding: 12px; overflow: hidden; border: 0; border-radius: 8px; text-align: left; cursor: pointer; font: inherit; color: var(--text);
   background: var(--tile); content-visibility: auto; contain-intrinsic-size: auto 92px;
 }
-.srch-tile[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
-.srch-tile[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
-.srch-tile[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
-.srch-tile[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
-.srch-tile[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
+.srch-tile[data-tone="1"], .srch-cat[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
+.srch-tile[data-tone="2"], .srch-cat[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
+.srch-tile[data-tone="3"], .srch-cat[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
+.srch-tile[data-tone="4"], .srch-cat[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
+.srch-tile[data-tone="5"], .srch-cat[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
 .srch-tile[data-sp-cover]::after { content: ""; position: absolute; right: -14px; bottom: -10px; width: 62px; height: 62px; border-radius: 4px; transform: rotate(25deg); background: var(--sp-cover) center / cover; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
 .srch-tile-name { font-size: 15px; font-weight: 700; line-height: 1.2; max-width: 80%; overflow-wrap: anywhere; z-index: 1; }
 .srch-tile-sub { font-size: 12px; color: color-mix(in srgb, var(--text) 78%, transparent); z-index: 1; }
+/* category pages and the "From your library" rail */
+.srch-page-head { display: flex; align-items: center; gap: 6px; padding: 4px 0 10px; }
+.srch-back { flex: none; width: 44px; height: 44px; margin-left: -10px; border: 0; border-radius: 50%; background: none; color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.srch-back .ico { width: 24px; height: 24px; }
+.srch-page-text { min-width: 0; }
+.srch-page-text h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.srch-page-text p { margin: 2px 0 0; font-size: 13px; color: var(--faint); }
+.srch-rail { display: flex; gap: 12px; overflow-x: auto; margin: 0 -20px; padding: 2px 20px 8px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.srch-rail::-webkit-scrollbar { display: none; }
+.srch-card { position: relative; flex: 0 0 142px; height: 190px; padding: 12px; border: 0; border-radius: 12px; overflow: hidden; text-align: left; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
+  color: var(--text); background: var(--tile, color-mix(in srgb, var(--accent) 30%, #3a2a5a)); scroll-snap-align: start; cursor: pointer; }
+.srch-card[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
+.srch-card[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
+.srch-card[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
+.srch-card[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
+.srch-card[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
+.srch-card[data-sp-cover] { background: linear-gradient(transparent 38%, rgba(0,0,0,.72)), var(--sp-cover) center / cover; }
+.srch-card-name { font-size: 15px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.srch-card-sub { font-size: 12px; opacity: .85; }
+.srch-card-tag .srch-card-name { font-size: 17px; }
 .srch-empty, .srch-none p { color: var(--faint); font-size: 14px; line-height: 1.5; }
 .srch-none { padding: 36px 6px; text-align: center; }
 .srch-none h2 { margin: 0 0 8px; font-size: 18px; }
@@ -3536,6 +3556,8 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" data-srch-filter="songs" aria-pressed="false">Songs</button>
             <button type="button" data-srch-filter="playlists" aria-pressed="false">Playlists</button>
             <button type="button" data-srch-filter="artists" aria-pressed="false">Artists</button>
+            <button type="button" data-srch-filter="albums" aria-pressed="false">Albums</button>
+            <button type="button" data-srch-filter="genres" aria-pressed="false">Genres</button>
           </div>
           <div id="srch-body" data-state="empty"></div>
         </section>

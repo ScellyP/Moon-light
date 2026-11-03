@@ -2763,6 +2763,9 @@ window.NovelAudio = (function () {
 
     /* Search tab and song memory (song-search.js, song-memory.js). */
     getTracks() { return state.tracks; },
+    isScanning() { return !!state.scanning; },
+    // Changes whenever a song's info or playlists were edited, so caches built from them (Search) know to refresh.
+    getInfoRev() { return MediaLibrary.infoRev; },
     getCurrentTrackId() { return state.currentTrackId; },
     getTrackInfo(id) {
       const t = MediaLibrary.getTrack(id);
@@ -2859,6 +2862,7 @@ window.NovelAudio = (function () {
 
     // After a playlist changed: refresh what the Songs list shows (the queue keeps the song that is playing).
     _playlistsChanged() {
+      MediaLibrary.infoRev++;
       AudioFeatures.emit('libraryChanged');
       AudioUI.selectPlaylist(state.activePlaylist);
     },

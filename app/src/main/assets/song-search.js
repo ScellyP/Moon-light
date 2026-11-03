@@ -3,11 +3,12 @@
 
    Type in the box and the results appear as you type: a "Top result", then Songs, Playlists and
    Artists, with the letters you typed highlighted. Filter chips (All / Songs / Playlists / Artists)
-   narrow it down. With nothing typed it shows your recent searches and a "Browse all" grid of your
-   playlists.
+   narrow it down. With nothing typed it shows your recent searches, category tiles made from your own
+   library (Artists, Albums, Genres, Liked songs, All songs), a "From your library" rail and a "Browse all"
+   grid of your playlists.
 
-   The matching works on every word you type: a song must match ALL of them, in its title, artist,
-   album or playlist name (accents and capitals do not matter; a small typo is forgiven). Matches at
+   The matching works on every word you type: a song must match ALL of them, in its title, any credited
+   artist (also the ones only in the "artist; artist" tag and the album artist), album, genre or playlist name (accents and capitals do not matter; a small typo is forgiven). Matches at
    the start of a word beat matches in the middle; the title counts most.
 
    The first half is pure (the tests run it); the second half builds the tab.
@@ -31,6 +32,7 @@
   const W_ARTIST = { start: 70, contain: 45, fuzzy: 25 };
   const W_ALBUM = { start: 50, contain: 30, fuzzy: 15 };
   const W_LIST = { start: 40, contain: 25, fuzzy: 10 };
+  const W_GENRE = { start: 40, contain: 25, fuzzy: 10 };
 
   function field(text) {
     const n = normalizeText(text);
@@ -64,10 +66,32 @@
   }
 
   // One entry per track, worked out once (normalising thousands of names on every key press would lag).
+  // Every artist a song credits, one entry per distinct person: the artists list the scan builds (it splits
+  // "A; B" and adds the album artist), else the artist tag as written. Shown spelling = the first one seen.
+  function creditedArtists(t) {
+    const seen = new Map();
+    const add = (name) => {
+      const shown = String(name || '').trim();
+      const key = normalizeText(shown);
+      if (key && !seen.has(key)) seen.set(key, shown);
+    };
+    if (Array.isArray(t.artists) && t.artists.length) t.artists.forEach(add);
+    else add(t.artist);
+    add(t.albumArtist);
+    return Array.from(seen.values());
+  }
+
   function indexTracks(tracks) {
-    return (tracks || []).map((t) => ({
-      track: t, title: field(t.title), artist: field(t.artist), album: field(t.album), list: field(t.playlist),
-    }));
+    return (tracks || []).map((t) => {
+      const names = creditedArtists(t);
+      return {
+        track: t, title: field(t.title), artist: field(t.artist), album: field(t.album), list: field(t.playlist),
+        genre: field(t.genre),
+        // all credited artists in one field, so a search for any of them finds the song
+        artistAll: field(names.join(' ') + ' ' + (t.artist || '')),
+        names: names.map((n) => ({ shown: n, f: field(n) })),
+      };
+    });
   }
 
   /* Searches the library.
@@ -82,7 +106,7 @@
     const o = opts || {};
     const q = normalizeText(query);
     const tokens = q ? q.split(' ') : [];
-    const result = { tokens: tokens, songs: [], playlists: [], artists: [], top: null };
+    const result = { tokens: tokens, songs: [], playlists: [], artists: [], albums: [], genres: [], top: null };
     if (!tokens.length) return result;
 
     const liked = new Set(o.liked || []);
@@ -93,6 +117,7 @@
       for (let i = 0; i < tokens.length; i++) {
         const s = Math.max(
           fieldScore(tokens[i], e.title, W_TITLE), fieldScore(tokens[i], e.artist, W_ARTIST),
+          fieldScore(tokens[i], e.artistAll, W_ARTIST), fieldScore(tokens[i], e.genre, W_GENRE),
           fieldScore(tokens[i], e.album, W_ALBUM), fieldScore(tokens[i], e.list, W_LIST));
         if (!s) return;                      // every word must match somewhere
         total += s;
@@ -119,15 +144,17 @@
     });
     result.playlists.sort((a, b) => b.score - a.score);
 
-    // Artists: one entry per distinct artist name (the spelling most songs use).
+    // Artists: one entry per distinct person (the spelling most songs use). A song credited to "A; B" counts
+    // for both, so searching either name lists them.
     const byArtist = new Map();
     index.forEach((e) => {
-      if (!e.artist.n) return;
-      let a = byArtist.get(e.artist.n);
-      if (!a) { a = { f: e.artist, names: new Map(), count: 0 }; byArtist.set(e.artist.n, a); }
-      a.count++;
-      const shown = String(e.track.artist).trim();
-      a.names.set(shown, (a.names.get(shown) || 0) + 1);
+      e.names.forEach((nm) => {
+        if (!nm.f.n) return;
+        let a = byArtist.get(nm.f.n);
+        if (!a) { a = { f: nm.f, names: new Map(), count: 0 }; byArtist.set(nm.f.n, a); }
+        a.count++;
+        a.names.set(nm.shown, (a.names.get(nm.shown) || 0) + 1);
+      });
     });
     byArtist.forEach((a) => {
       let total = 0;
@@ -143,6 +170,30 @@
     });
     result.artists.sort((a, b) => (b.score - a.score) || (b.count - a.count));
 
+    // Albums and genres of your own library, matched on their name.
+    collections(index).albums.forEach((al) => {
+      let total = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        const s = fieldScore(tokens[i], al.f, W_TITLE);
+        if (!s) return;
+        total += s;
+      }
+      if (al.f.n === q) total += 250;
+      result.albums.push({ name: al.name, artist: al.artist, count: al.count, first: al.first, score: total });
+    });
+    result.albums.sort((a, b) => (b.score - a.score) || (b.count - a.count));
+    collections(index).genres.forEach((g) => {
+      let total = 0;
+      for (let i = 0; i < tokens.length; i++) {
+        const s = fieldScore(tokens[i], g.f, W_TITLE);
+        if (!s) return;
+        total += s;
+      }
+      if (g.f.n === q) total += 250;
+      result.genres.push({ name: g.name, count: g.count, score: total });
+    });
+    result.genres.sort((a, b) => (b.score - a.score) || (b.count - a.count));
+
     // The top result: the best match of any kind. A playlist or artist named exactly as typed wins.
     const best = [];
     if (result.songs[0]) best.push({ type: 'song', item: result.songs[0].track, score: result.songs[0].score });
@@ -151,6 +202,54 @@
     best.sort((a, b) => b.score - a.score);
     result.top = best[0] ? { type: best[0].type, item: best[0].item } : null;
     return result;
+  }
+
+  /* The albums and genres of the library, grouped from an index (worked out once per index).
+       albums: [{ name, artist, count, first (a track of it), f }]   genres: [{ name, count, f }]
+     A song with no album tag is in no album, one with no genre in no genre: nothing is made up. */
+  const collectionsCache = new WeakMap();
+  function collections(index) {
+    let c = collectionsCache.get(index);
+    if (c) return c;
+    const albums = new Map();
+    const genres = new Map();
+    index.forEach((e) => {
+      const t = e.track;
+      if (e.album.n) {
+        let a = albums.get(e.album.n);
+        if (!a) {
+          a = { name: String(t.album).trim(), artist: String(t.albumArtist || t.artist || '').trim(), count: 0, first: t, f: e.album };
+          albums.set(e.album.n, a);
+        }
+        a.count++;
+      }
+      if (e.genre.n) {
+        let g = genres.get(e.genre.n);
+        if (!g) { g = { name: String(t.genre).trim(), count: 0, f: e.genre }; genres.set(e.genre.n, g); }
+        g.count++;
+      }
+    });
+    c = { albums: Array.from(albums.values()), genres: Array.from(genres.values()) };
+    collectionsCache.set(index, c);
+    return c;
+  }
+
+  // The songs of one album / genre (by name, ignoring capitals and accents), in the order of the library.
+  function collectionTracks(index, kind, name) {
+    const key = normalizeText(name);
+    return index.filter((e) => (kind === 'genre' ? e.genre.n : e.album.n) === key).map((e) => e.track);
+  }
+
+  // Every artist of the library with the number of songs: [{ name, count }], most songs first.
+  function allArtists(index) {
+    const by = new Map();
+    index.forEach((e) => e.names.forEach((nm) => {
+      if (!nm.f.n) return;
+      let a = by.get(nm.f.n);
+      if (!a) { a = { name: nm.shown, count: 0 }; by.set(nm.f.n, a); }
+      a.count++;
+    }));
+    return Array.from(by.values()).sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name));
   }
 
   /* [text] cut into pieces, each { text, hit }, where hit marks the letters that match the typed words
@@ -191,7 +290,8 @@
     return [t].concat(list.filter((x) => normalizeText(x) !== key)).slice(0, max || 8);
   }
 
-  const api = { searchLibrary: searchLibrary, indexTracks: indexTracks, highlight: highlight, addRecentSearch: addRecentSearch };
+  const api = { searchLibrary: searchLibrary, indexTracks: indexTracks, highlight: highlight, addRecentSearch: addRecentSearch,
+    collections: collections, collectionTracks: collectionTracks, allArtists: allArtists, creditedArtists: creditedArtists };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined' || !document.getElementById) return;
 
@@ -213,10 +313,14 @@
   const SONGS_MAX = 100;
 
   let filter = 'all';
+  let browse = null;          // a category page opened from the landing tiles: { kind: 'artists'|'albums'|'genres'|'liked'|'songs'|'album'|'genre', name }
+  let scanTimer = 0;
+  let scanPolls = 0;
   let timer = 0;
   let index = null;
   let indexFor = null;
   let indexLen = -1;
+  let indexRev = -1;
   let recent = [];
   try { recent = JSON.parse(root.localStorage.getItem(RECENT_KEY) || '[]').filter((x) => typeof x === 'string').slice(0, 8); } catch (e) { recent = []; }
 
@@ -249,7 +353,9 @@
 
   function currentIndex() {
     const t = tracks();
-    if (!index || indexFor !== t || indexLen !== t.length) { index = indexTracks(t); indexFor = t; indexLen = t.length; }
+    const a = audio();
+    const rev = a && a.getInfoRev ? a.getInfoRev() : 0;      // an edited title / artist / playlist rebuilds the index
+    if (!index || indexFor !== t || indexLen !== t.length || indexRev !== rev) { index = indexTracks(t); indexFor = t; indexLen = t.length; indexRev = rev; }
     return index;
   }
 
@@ -420,6 +526,48 @@
     return n;
   }
 
+  function albumRow(album, tokens, tone) {
+    const n = el('div', 'srch-row');
+    n.setAttribute('role', 'button');
+    n.tabIndex = 0;
+    const thumb = cover('', tone, 'i-moon-music', 'srch-thumb');
+    n.appendChild(thumb);
+    if (album.first && album.first.path) {
+      if (Object.prototype.hasOwnProperty.call(artCache, album.first.path)) { if (artCache[album.first.path]) paintCover(thumb, artCache[album.first.path]); }
+      else queueArt(thumb, album.first);
+    }
+    const text = el('span', 'srch-text');
+    text.appendChild(highlighted(album.name, tokens, 'srch-title'));
+    text.appendChild(el('span', 'srch-sub', 'Album' + (album.artist ? ' \u2022 ' + album.artist : '') + ' \u2022 ' + songsText(album.count)));
+    n.appendChild(text);
+    onActivate(n, () => openCollection('album', album.name));
+    return n;
+  }
+
+  function genreRow(genre, tokens, tone) {
+    const n = el('div', 'srch-row');
+    n.setAttribute('role', 'button');
+    n.tabIndex = 0;
+    const av = el('span', 'srch-avatar', '#');
+    av.setAttribute('data-tone', String(tone % 4));
+    n.appendChild(av);
+    const text = el('span', 'srch-text');
+    text.appendChild(highlighted(genre.name, tokens, 'srch-title'));
+    text.appendChild(el('span', 'srch-sub', 'Genre \u2022 ' + songsText(genre.count)));
+    n.appendChild(text);
+    onActivate(n, () => openCollection('genre', genre.name));
+    return n;
+  }
+
+  // An album or a genre of your library as a page of its songs (so a tap shows exactly those songs).
+  function openCollection(kind, name) {
+    rememberQuery(name);
+    browse = { kind: kind, name: name };
+    input.value = '';
+    filter = 'all';
+    run();
+  }
+
   function topCard(top, tokens) {
     const card = el('div', 'srch-top');
     card.setAttribute('role', 'button');
@@ -466,9 +614,160 @@
 
   /* ---- the two states of the tab ---- */
 
+  // The library is still being read: say so instead of an empty page.
+  function indexingNote() {
+    const a = audio();
+    const yes = !!(a && a.isScanning && a.isScanning() && !tracks().length);
+    if (!yes) scanPolls = 0;
+    return yes;
+  }
+
+  function loadingState() {
+    const box = el('div', 'srch-none');
+    box.setAttribute('role', 'status');
+    box.appendChild(el('h2', null, 'Indexing your library\u2026'));
+    box.appendChild(el('p', null, 'Search is ready as soon as your music has been read.'));
+    return box;
+  }
+
+  // Look again until the scan is finished (gives up after ~3.5 min). Called AFTER the box is on the page.
+  function pollScan() {
+    clearTimeout(scanTimer);
+    if (++scanPolls < 300) scanTimer = setTimeout(run, 700);
+  }
+
+  // Back from a category page (or an album / genre page) to the landing page. True when something was open.
+  function back() {
+    if (!browse) return false;
+    browse = null;
+    run();
+    return true;
+  }
+
+  function pageHead(title, sub) {
+    const head = el('div', 'srch-page-head');
+    const b = el('button', 'srch-back');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Back');
+    b.appendChild(icon('i-chev-left'));
+    b.addEventListener('click', back);
+    head.appendChild(b);
+    const text = el('div', 'srch-page-text');
+    text.appendChild(el('h2', null, title));
+    if (sub) text.appendChild(el('p', null, sub));
+    head.appendChild(text);
+    return head;
+  }
+
+  const BROWSE_SONGS_MAX = 300;
+
+  function renderBrowse() {
+    const a = audio();
+    const idx = currentIndex();
+    const col = collections(idx);
+    body.replaceChildren();
+    body.setAttribute('data-state', 'browse');
+    let title = '';
+    let sub = '';
+    let list = [];
+    if (browse.kind === 'artists') {
+      const artists = allArtists(idx);
+      title = 'Artists'; sub = artists.length + (artists.length === 1 ? ' artist' : ' artists');
+      body.appendChild(pageHead(title, sub));
+      artists.forEach((x, i) => body.appendChild(artistRow(x, [], i)));
+      return;
+    }
+    if (browse.kind === 'albums') {
+      const albums = col.albums.slice().sort((x, y) => x.name.localeCompare(y.name));
+      title = 'Albums'; sub = albums.length + (albums.length === 1 ? ' album' : ' albums');
+      body.appendChild(pageHead(title, sub));
+      albums.forEach((x, i) => body.appendChild(albumRow(x, [], i)));
+      return;
+    }
+    if (browse.kind === 'genres') {
+      const genres = col.genres.slice().sort((x, y) => (y.count - x.count) || x.name.localeCompare(y.name));
+      title = 'Genres'; sub = genres.length + (genres.length === 1 ? ' genre' : ' genres');
+      body.appendChild(pageHead(title, sub));
+      genres.forEach((x, i) => body.appendChild(genreRow(x, [], i)));
+      return;
+    }
+    if (browse.kind === 'liked') {
+      const ids = new Set(a && a.getLikedIds ? a.getLikedIds() : []);
+      list = tracks().filter((t) => ids.has(t.id));
+      title = 'Liked Songs';
+    } else if (browse.kind === 'album' || browse.kind === 'genre') {
+      list = collectionTracks(idx, browse.kind, browse.name);
+      title = browse.name;
+      sub = (browse.kind === 'album' ? 'Album' : 'Genre') + ' \u2022 ' + songsText(list.length);
+    } else {
+      list = tracks().slice().sort((x, y) => String(x.title).localeCompare(String(y.title)));
+      title = 'All songs';
+    }
+    if (!sub) sub = songsText(list.length);
+    body.appendChild(pageHead(title, sub));
+    if (!list.length) { body.appendChild(el('p', 'srch-empty', 'Nothing here yet.')); return; }
+    list.slice(0, BROWSE_SONGS_MAX).forEach((t, i) => body.appendChild(songRow(t, [], i)));
+    if (list.length > BROWSE_SONGS_MAX) body.appendChild(el('p', 'srch-empty', 'Showing the first ' + BROWSE_SONGS_MAX + '. Type in the search box to find the rest.'));
+  }
+
+  // Tiles made from your own library: only the categories that have something in them.
+  function categoryTiles() {
+    const a = audio();
+    const idx = currentIndex();
+    const col = collections(idx);
+    const likedIds = new Set(a && a.getLikedIds ? a.getLikedIds() : []);
+    const liked = tracks().filter((t) => likedIds.has(t.id)).length;
+    const artists = allArtists(idx).length;
+    const total = tracks().length;
+    return [
+      { kind: 'artists', title: 'Artists', sub: artists + (artists === 1 ? ' artist' : ' artists'), n: artists },
+      { kind: 'albums', title: 'Albums', sub: col.albums.length + (col.albums.length === 1 ? ' album' : ' albums'), n: col.albums.length },
+      { kind: 'genres', title: 'Genres', sub: col.genres.length + (col.genres.length === 1 ? ' genre' : ' genres'), n: col.genres.length },
+      { kind: 'liked', title: 'Liked Songs', sub: songsText(liked), n: liked },
+      { kind: 'songs', title: 'All songs', sub: songsText(total), n: total },
+    ].filter((t) => t.n > 0);
+  }
+
+  // "From your library": your biggest albums and genres as cards (nothing here comes from outside the phone).
+  function discoverRail() {
+    const idx = currentIndex();
+    const col = collections(idx);
+    const albums = col.albums.slice().sort((x, y) => (y.count - x.count) || x.name.localeCompare(y.name)).slice(0, 8);
+    const genres = col.genres.slice().sort((x, y) => (y.count - x.count) || x.name.localeCompare(y.name)).slice(0, 6);
+    if (albums.length + genres.length < 2) return null;
+    const s = section('From your library');
+    const rail = el('div', 'srch-rail');
+    albums.forEach((al, i) => {
+      const card = el('button', 'srch-card');
+      card.type = 'button';
+      card.setAttribute('data-tone', String(i % 6));
+      if (al.first && al.first.path) {
+        if (Object.prototype.hasOwnProperty.call(artCache, al.first.path)) { if (artCache[al.first.path]) paintCover(card, artCache[al.first.path]); }
+        else queueArt(card, al.first);
+      }
+      card.appendChild(el('span', 'srch-card-name', al.name));
+      card.appendChild(el('span', 'srch-card-sub', songsText(al.count)));
+      card.addEventListener('click', () => openCollection('album', al.name));
+      rail.appendChild(card);
+    });
+    genres.forEach((g, i) => {
+      const card = el('button', 'srch-card srch-card-tag');
+      card.type = 'button';
+      card.setAttribute('data-tone', String((i + 3) % 6));
+      card.appendChild(el('span', 'srch-card-name', '#' + g.name.toLowerCase().replace(/\s+/g, '')));
+      card.appendChild(el('span', 'srch-card-sub', songsText(g.count)));
+      card.addEventListener('click', () => openCollection('genre', g.name));
+      rail.appendChild(card);
+    });
+    s.appendChild(rail);
+    return s;
+  }
+
   function renderEmpty() {
+    if (browse) { renderBrowse(); return; }
     body.replaceChildren();
     body.setAttribute('data-state', 'empty');
+    if (indexingNote()) { body.appendChild(loadingState()); pollScan(); return; }
     if (recent.length) {
       const s = section('Recent searches', {
         label: 'Clear all',
@@ -491,10 +790,29 @@
           renderEmpty();
         });
         row.appendChild(x);
-        onActivate(row, () => { input.value = text; filter = 'all'; run(); });
+        onActivate(row, () => { browse = null; input.value = text; filter = 'all'; run(); });
         s.appendChild(row);
       });
       body.appendChild(s);
+    }
+
+    const cats = categoryTiles();
+    if (cats.length) {
+      const s = section('Browse your library');
+      const grid = el('div', 'srch-grid');
+      cats.forEach((c, i) => {
+        const tile = el('button', 'srch-cat');                // like a playlist tile, but a category of the library
+        tile.type = 'button';
+        tile.setAttribute('data-tone', String((i + 1) % 6));
+        tile.appendChild(el('span', 'srch-tile-name', c.title));
+        tile.appendChild(el('span', 'srch-tile-sub', c.sub));
+        tile.addEventListener('click', () => { browse = { kind: c.kind }; run(); });
+        grid.appendChild(tile);
+      });
+      s.appendChild(grid);
+      body.appendChild(s);
+      const rail = discoverRail();
+      if (rail) body.appendChild(rail);
     }
 
     const rows = playlistRows();
@@ -533,11 +851,14 @@
     body.replaceChildren();
     body.setAttribute('data-state', 'results');
     const tokens = found.tokens;
-    const total = found.songs.length + found.playlists.length + found.artists.length;
+    const total = found.songs.length + found.playlists.length + found.artists.length + found.albums.length + found.genres.length;
     const status = el('div', 'srch-status', total ? total + (total === 1 ? ' result' : ' results') : 'No results');
     status.setAttribute('role', 'status');
     body.appendChild(status);
-    if (!total) { body.appendChild(noResults(q)); return; }
+    if (!total) {
+      if (indexingNote()) { body.appendChild(loadingState()); pollScan(); } else body.appendChild(noResults(q));
+      return;
+    }
 
     if (filter === 'all' && found.top) {
       const s = section('Top result');
@@ -562,6 +883,16 @@
       found.artists.slice(0, filter === 'all' ? 3 : 50).forEach((r, i) => s.appendChild(artistRow(r, tokens, i)));
       body.appendChild(s);
     }
+    if ((filter === 'all' || filter === 'albums') && found.albums.length) {
+      const s = section('Albums');
+      found.albums.slice(0, filter === 'all' ? 3 : 50).forEach((r, i) => s.appendChild(albumRow(r, tokens, i)));
+      body.appendChild(s);
+    }
+    if ((filter === 'all' || filter === 'genres') && found.genres.length) {
+      const s = section('Genres');
+      found.genres.slice(0, filter === 'all' ? 3 : 50).forEach((r, i) => s.appendChild(genreRow(r, tokens, i)));
+      body.appendChild(s);
+    }
     // A chosen filter with nothing in it.
     if (filter !== 'all' && body.children.length === 1) body.appendChild(noResults(q));
   }
@@ -580,6 +911,8 @@
     if (clearBtn) clearBtn.hidden = !input.value;
     if (chipsEl) chipsEl.hidden = !q;
     syncChips();
+    if (q) browse = null;                           // typing leaves a category page
+    if (chipsEl) chipsEl.hidden = !q;
     if (!q) { filter = 'all'; syncChips(); renderEmpty(); return; }
     renderResults(q);
   }
@@ -616,5 +949,6 @@
   }
   run();
 
-  root.SongSearch = { run: run, setQuery: (text) => { input.value = text; filter = 'all'; run(); } };
+  // back(): leaves a category / album / genre page; true when it did (the Back button asks first).
+  root.SongSearch = { run: run, back: back, setQuery: (text) => { browse = null; input.value = text; filter = 'all'; run(); } };
 })(typeof window !== 'undefined' ? window : this);

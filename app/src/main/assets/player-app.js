@@ -108,6 +108,8 @@
       if (close) close.click();
       return true;
     }
+    // A Search category / album / genre page: Back returns to the Search landing page first.
+    if (panel.getAttribute('data-view') === 'search' && window.SongSearch && window.SongSearch.back && window.SongSearch.back()) return true;
     if (panel.getAttribute('data-view') !== 'library' && window.SpotifyUI && window.SpotifyUI.setView) {
       window.SpotifyUI.setView('library');
       return true;
