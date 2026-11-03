@@ -100,6 +100,7 @@
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
     // The song options sheet (the "..." menu, song-menu.js) is on top of everything it was opened from, so it goes first.
+    if (window.SongDownload && window.SongDownload.closeCrop && window.SongDownload.closeCrop()) return true;
     if (window.SongMenu && window.SongMenu.isOpen()) { window.SongMenu.close(); return true; }
     if (window.SettingsMenu && window.SettingsMenu.isOpen()) { window.SettingsMenu.close(); return true; }
     var sheet = document.getElementById('sp-sheet');

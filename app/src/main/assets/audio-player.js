@@ -339,6 +339,49 @@ window.NovelAudio = (function () {
       return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
     },
 
+    // A song was deleted from the phone: forget it everywhere the page keeps it (the library, the queue, the shuffle
+    // round, likes, hand-picked playlists, history). If it was the song playing, the song that slides into its place
+    // starts, or playback just ends when nothing is left.
+    forget(id, wasCurrent) {
+      const at = state.queue.indexOf(id);
+      state.tracks = state.tracks.filter(t => t.id !== id);
+      if (at !== -1) {
+        state.queue.splice(at, 1);
+        if (at < state.queueIndex) state.queueIndex--;
+      }
+      PlaybackQueue._originalOrder = PlaybackQueue._originalOrder.filter(x => x !== id);
+      const cyc = PlaybackQueue._cycle();
+      cyc.played = (cyc.played || []).filter(x => x !== id);
+      PlaybackQueue._saveCycle();
+      const purge = (v) => {
+        if (Array.isArray(v)) {
+          for (let i = v.length - 1; i >= 0; i--) {
+            if (v[i] === id) v.splice(i, 1);
+            else if (v[i] && typeof v[i] === 'object') purge(v[i]);
+          }
+        } else if (v && typeof v === 'object') {
+          Object.keys(v).forEach(k => {
+            if (k === id) delete v[k];
+            else if (v[k] && typeof v[k] === 'object') purge(v[k]);
+          });
+        }
+      };
+      purge(state.features);
+      const hist = AudioFeatures.history;
+      hist._load();
+      hist.items = hist.items.filter(e => e.id !== id);
+      hist._save();
+      this.infoRev++;
+      if (wasCurrent) {
+        state.currentTrackId = null;
+        const next = at !== -1 ? state.queue[Math.min(at, state.queue.length - 1)] : null;
+        if (next) { state.queueIndex = state.queue.indexOf(next); AudioEngine.play(next); }
+        else state.queueIndex = -1;
+      }
+      Prefs.save();
+      AudioUI.render();
+    },
+
     // Shows a song's new info after an edit (from the native side): title, artist, album and the artist list.
     infoRev: 0,
     applyInfo(track, info) {
@@ -610,6 +653,28 @@ window.NovelAudio = (function () {
         state.queueIndex = currentId ? state.queue.indexOf(currentId) : (state.queue.length ? 0 : -1);
       }
       AudioUI.render();
+    },
+
+    // The shuffle button. Starts a brand-new shuffle of the songs now shown and plays it from its first song. The
+    // old round is forgotten (nothing is pinned to the front or skipped), and the new shuffle never opens with the
+    // song that was just playing when there is another to choose. Returns false when the list is empty.
+    startNewShuffle() {
+      const ids = MediaLibrary.currentSelectionIds();
+      if (!ids.length) return false;
+      const before = state.currentTrackId;
+      state.shuffle = true;
+      const cyc = this._cycle();
+      cyc.played = [];
+      this._saveCycle();
+      state.currentTrackId = null;
+      this.buildFrom(ids);
+      if (state.queue.length > 1 && state.queue[0] === before) {
+        const k = 1 + Math.floor(Math.random() * (state.queue.length - 1));
+        const tmp = state.queue[0]; state.queue[0] = state.queue[k]; state.queue[k] = tmp;
+      }
+      state.queueIndex = 0;
+      AudioEngine.play(state.queue[0]);
+      return true;
     },
 
     cycleRepeat() {
@@ -2073,15 +2138,33 @@ window.NovelAudio = (function () {
         else AudioUI.render();
       });
 
-      // Switching shuffle on while nothing is playing also starts the music: a random song first,
-      // then the rest in shuffled order. While a song is playing it only reshuffles what comes
-      // next, and switching shuffle off never starts anything.
+      // Shuffle: every tap starts a NEW shuffle of the songs now shown and plays it from its first song. Holding
+      // the button (about half a second) turns shuffle off. Both shuffle buttons (the player's and the Songs tab's)
+      // behave the same; the Songs tab's one forwards its click to this one, so the hold is watched on both.
+      const HOLD_MS = 550;
+      const hold = { timer: 0, fired: false };
+      const beginHold = () => {
+        hold.fired = false;
+        clearTimeout(hold.timer);
+        hold.timer = setTimeout(() => {
+          hold.fired = true;
+          PlaybackQueue.setShuffle(false);
+          Prefs.save();
+          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Shuffle off');
+        }, HOLD_MS);
+      };
+      const endHold = () => clearTimeout(hold.timer);
+      [els.shuffleBtn, document.getElementById('sp-album-shuffle')].forEach((b) => {
+        if (!b || !b.addEventListener) return;
+        b.addEventListener('pointerdown', beginHold);
+        ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => b.addEventListener(t, endHold));
+      });
       els.shuffleBtn.addEventListener('click', () => {
-        const startShuffled = !state.shuffle && !state.playing;
-        PlaybackQueue.setShuffle(!state.shuffle, !startShuffled);
-        Prefs.save();
-        const first = startShuffled ? PlaybackQueue.current() : null;
-        if (first) AudioEngine.play(first);
+        if (hold.fired) { hold.fired = false; return; }          // that was a hold: shuffle was just turned off
+        if (PlaybackQueue.startNewShuffle()) {
+          Prefs.save();
+          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('New shuffle');
+        }
       });
 
       els.repeatBtn.addEventListener('click', () => {
@@ -2899,6 +2982,21 @@ window.NovelAudio = (function () {
       return true;
     },
 
+    // Deletes the song file from the phone for good, then forgets it everywhere. The caller asks the user first.
+    // False when it could not be deleted (not in the Android app, no storage access, file in use).
+    deleteSong(id) {
+      const track = MediaLibrary.getTrack(id);
+      const b = window.AndroidBridge;
+      if (!track || !b || typeof b.songDelete !== 'function') return false;
+      const wasCurrent = state.currentTrackId === id;
+      if (wasCurrent) AudioEngine.pause();                      // let go of the file first
+      let ok = false;
+      try { ok = !!b.songDelete(track.path); } catch (e) { ok = false; }
+      if (!ok) return false;
+      MediaLibrary.forget(id, wasCurrent);
+      return true;
+    },
+
     // Edit what the app shows for a song (title / artist / album). The music file is not changed.
     // Returns the new info, or null when it could not be saved (not in the Android app, no storage access).
     editSong(id, fields) {
@@ -3006,6 +3104,19 @@ window.NovelAudio = (function () {
       const id = state.currentTrackId;
       return !id || MediaLibrary.currentSelectionIds().includes(id);
     },
+
+    // The songs of any playlist by the name used in the UI ('all', '@list:3', '@liked', 'Lo-fi'): the Songs-list order.
+    getPlaylistTracks(name) {
+      if (!name || name === 'all') return state.tracks.slice();
+      const virtual = AudioFeatures.selectionFor(name);
+      if (virtual) return virtual.map(id => MediaLibrary.getTrack(id)).filter(Boolean);
+      return MediaLibrary.tracksInPlaylist(name);
+    },
+
+    // The shuffle button: a NEW shuffle of the playlist now shown, played from the first song of that shuffle.
+    // Every tap shuffles again; holding the button turns shuffle off (shuffleOff).
+    startNewShuffle() { return PlaybackQueue.startNewShuffle(); },
+    shuffleOff() { PlaybackQueue.setShuffle(false); Prefs.save(); },
 
     // The Play button inside a playlist: when the loaded song is NOT in that playlist, drop it and
     // start the playlist from its top song instead of carrying on with the other song. Returns

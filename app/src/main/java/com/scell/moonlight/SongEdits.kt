@@ -69,6 +69,18 @@ class SongEdits(private val file: File) {
         return false
     }
 
+    /** Removes an edit by its key (see [keyFor]); used when the song file has been deleted. True when it is gone. */
+    @Synchronized
+    fun removeKey(key: String): Boolean {
+        val edits = load()
+        if (!edits.has(key)) return true
+        val previous = edits.opt(key)
+        edits.remove(key)
+        if (write(edits)) return true
+        edits.put(key, previous)
+        return false
+    }
+
     /** Removes the edit of this song (back to the file's own info). */
     @Synchronized
     fun clear(f: File): Boolean = set(f, null, null, null)

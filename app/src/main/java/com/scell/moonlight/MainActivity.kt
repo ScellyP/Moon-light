@@ -269,6 +269,26 @@ class MainActivity : ComponentActivity() {
     // Your edits to song titles / artists / albums (an overlay, the files are never changed): see SongEdits.kt.
     private val songEdits = SongEdits(File(playerRoot, "song-edits.json"))
 
+    // Covers you chose for playlists: small JPEGs in Moonlight/playlist-covers (see PlaylistCovers.kt).
+    private val playlistCovers = PlaylistCovers(File(playerRoot, "playlist-covers"))
+    private var pendingCoverKey: String? = null
+    private val pickPlaylistCover = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        val key = pendingCoverKey
+        pendingCoverKey = null
+        if (key != null && uri != null) {
+            Thread {
+                val ok = try {
+                    val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    val jpeg = CoverCrop.shrink(bytes)
+                    jpeg != null && playlistCovers.save(key, jpeg)
+                } catch (e: Exception) {
+                    false
+                }
+                runOnUiThread { callPage("onPlaylistCoverPicked", JSONObject.quote(key) + ", " + ok) }
+            }.start()
+        }
+    }
+
     // `lazy`, because songDownloader (declared above) needs it only when a job runs.
     private val songLibrary: SongLibrary by lazy { SongLibrary(audioRoot, songsRoot, File(playerRoot, "playlists")) }
 
@@ -1180,6 +1200,62 @@ class MainActivity : ComponentActivity() {
 
 
 
+        // ---- Playlist covers ------------------------------------------------------------------------------
+        // A playlist is addressed by the name the page uses for it ("all", "@list:3", "Lo-fi"). playlistCoverGet
+        // returns the chosen cover as a data: URI, or "" when the playlist has none (it then shows its automatic
+        // mosaic). playlistCoverSave takes any picture as a data: URI (a song's cover); playlistCoverPick opens the
+        // gallery and answers through window.onPlaylistCoverPicked(key, ok); playlistCoverClear goes back to automatic.
+        @JavascriptInterface
+        fun playlistCoverGet(key: String): String {
+            val bytes = playlistCovers.get(key) ?: return ""
+            return "data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+        }
+
+        @JavascriptInterface
+        fun playlistCoverSave(key: String, dataUri: String): Boolean {
+            if (!hasStoragePermission() || key.isBlank() || key.length > 200) return false
+            val comma = dataUri.indexOf(',')
+            if (comma < 0 || dataUri.length > 12_000_000) return false
+            return try {
+                val jpeg = CoverCrop.shrink(Base64.decode(dataUri.substring(comma + 1), Base64.DEFAULT)) ?: return false
+                playlistCovers.save(key, jpeg)
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun playlistCoverClear(key: String): Boolean = hasStoragePermission() && playlistCovers.clear(key)
+
+        @JavascriptInterface
+        fun playlistCoverPick(key: String) {
+            if (!hasStoragePermission() || key.isBlank()) return
+            runOnUiThread {
+                pendingCoverKey = key
+                try { pickPlaylistCover.launch("image/*") } catch (e: Exception) { pendingCoverKey = null }
+            }
+        }
+
+        // songStageCrop: which square of the downloaded song's thumbnail becomes its cover (x, y = top-left corner,
+        // size = side, all as fractions of the picture, see CoverCrop). Used when the song is saved.
+        @JavascriptInterface
+        fun songStageCrop(path: String, x: Float, y: Float, size: Float): Boolean = songDownloader.setCrop(path, x, y, size)
+
+        // songDelete: deletes the song FILE from the phone for good (no recycle bin) and forgets it: its entries in the
+        // playlist files and its edit. Only a song inside Moonlight/Songs or Novel/Audio can be deleted. True when the
+        // file is gone. The page confirms with the user first and removes the song from its own lists.
+        @JavascriptInterface
+        fun songDelete(path: String): Boolean {
+            if (!hasStoragePermission()) return false
+            val f = resolveAudioFile(path) ?: return false
+            val ref = songLibrary.refFor(f)
+            val editKey = SongEdits.keyFor(f)
+            if (!f.delete() && f.exists()) return false
+            try { songEdits.removeKey(editKey) } catch (e: Exception) { /* a stale edit does no harm */ }
+            try { if (ref != null) songLibrary.removeSongEverywhere(ref) } catch (e: Exception) { /* shown as unavailable until the next scan fixes it */ }
+            return true
+        }
+
         // ---- Song options ("..." menu) ----------------------------------------------------------------
         // songEditSave / songEditReset change what the app SHOWS for a song (title, artist, album); the music
         // file is not touched (see SongEdits.kt). They return the song's new info as JSON, or null on failure.
@@ -1717,7 +1793,7 @@ class MainActivity : ComponentActivity() {
         val tags: JSONObject
         // Entries cached before the genre/album-artist fields existed are read again once.
         if (hit != null && hit.optLong("s", -1L) == size && hit.optLong("m", -1L) == modified &&
-            hit.getJSONObject("t").has("tagsV")) {
+            hit.getJSONObject("t").optInt("tagsV", 0) >= 3) {
             tags = hit.getJSONObject("t")
         } else {
             tags = JSONObject()
@@ -1855,7 +1931,7 @@ class MainActivity : ComponentActivity() {
 
     private fun readAudioTags(f: File, obj: JSONObject) {
         val retriever = MediaMetadataRetriever()
-        obj.put("tagsV", 2)
+        obj.put("tagsV", 3)
         // Fields a file does not carry stay empty: nothing is made up. Only the title falls back to the
         // file name, and `titleFromTag` says which of the two it is.
         try {
@@ -1881,6 +1957,12 @@ class MainActivity : ComponentActivity() {
             obj.put("genre", genre)
             obj.put("mediaType", if (hasVideo) "video" else "audio")
             obj.put("durationSec", durationMs / 1000.0)
+            // The web page the song was downloaded from (kept for a future "Share"): our own WOAS tag, or the
+            // "purl" tag yt-dlp writes. Only MP3s carry it; a song without it simply has no `source`.
+            if (f.extension.equals("mp3", ignoreCase = true)) {
+                val src = Id3Tag.readSourceUrl(f)
+                if (!src.isNullOrEmpty()) obj.put("source", src)
+            }
         } catch (e: Exception) {
             // Malformed tags, unsupported codec for tag-reading, etc. —
             // the file may still be playable even though we couldn't read

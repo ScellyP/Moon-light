@@ -108,6 +108,10 @@ class SongDownloader(
     private val downloading = HashSet<String>()                     // the stage jobs among them
     private val cancelled = Collections.synchronizedSet(HashSet<String>())
     private var engineReady = false
+    // Per staged song: the part of its thumbnail you chose for the cover (x, y, size: fractions, see CoverCrop), and
+    // the web page it was downloaded from (written into the song as its source link when it is saved).
+    private val crops = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
+    private val sources = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val updateTried = AtomicBoolean(false)
     private val nightlyChecked = AtomicBoolean(false)
 
@@ -138,6 +142,15 @@ class SongDownloader(
     fun place(jobId: String, path: String, name: String, folder: String): Boolean {
         if (!begin(jobId, isDownload = false)) return false
         pool.execute { runPlace(jobId, path, SongNames.cleanSongName(name), folder) }
+        return true
+    }
+
+    /** Remembers which square of the staged song's thumbnail becomes its cover. False when [path] is not a staged song. */
+    fun setCrop(path: String, x: Float, y: Float, size: Float): Boolean {
+        if (!isStagedPath(path)) return false
+        if (size < 0f) { crops.remove(path); return true }                // back to the whole thumbnail
+        if (x.isNaN() || y.isNaN() || size.isNaN() || x < 0f || y < 0f || x > 1f || y > 1f || size < 0.05f || size > 1f) return false
+        crops[path] = floatArrayOf(x, y, size)
         return true
     }
 
@@ -220,6 +233,7 @@ class SongDownloader(
                 runDir.deleteRecursively()
                 return report(jobId, "failed", "The download finished but no song file was made.")
             }
+            sources[song.absolutePath] = url                       // becomes the song's source link when it is saved
             report(jobId, "done", song.absolutePath)
         } catch (e: Exception) {
             runDir.deleteRecursively()
@@ -362,18 +376,27 @@ class SongDownloader(
                 "A song called \u201c$stem\u201d is already in your Songs. Change the name.")
         }
 
-        // With a name, the title tag is rewritten into a second file first, so a failure leaves the
-        // staged song untouched. ".part" is not an audio extension, so the music scan ignores it.
+        // The song's tags are rewritten into a second file first, so a failure leaves the staged song untouched:
+        // the new title (when it was given a name), the cover cut from the thumbnail (when you chose a part of it)
+        // and the source link. ".part" is not an audio extension, so the music scan ignores the copy.
+        // Renaming needs the new title inside the file, so a failure there stops the save; the cover and the
+        // source link are extras: without a rename a failure just leaves them out.
         var source = staged
         var copy: File? = null
-        if (name.isNotEmpty()) {
-            copy = File(staged.parentFile, ".retag_" + UUID.randomUUID().toString().take(8) + ".part")
+        val crop = crops[path]
+        val sourceUrl = sources[path]
+        if (name.isNotEmpty() || crop != null || sourceUrl != null) {
+            val temp = File(staged.parentFile, ".retag_" + UUID.randomUUID().toString().take(8) + ".part")
             try {
-                Id3Title.copyWithTitle(staged, copy, name)
-                source = copy
+                val cover = if (crop != null) CoverCrop.crop(Id3Tag.readCover(staged), crop[0], crop[1], crop[2]) else null
+                Id3Tag.copyWith(staged, temp, name.ifEmpty { null }, cover, sourceUrl)
+                copy = temp
+                source = temp
             } catch (e: Exception) {
-                copy.delete()
-                return report(jobId, "failed", "Could not change the song's title (${e.message ?: "unknown error"}).")
+                temp.delete()
+                if (name.isNotEmpty()) {
+                    return report(jobId, "failed", "Could not change the song's title (${e.message ?: "unknown error"}).")
+                }
             }
         }
 
@@ -409,6 +432,8 @@ class SongDownloader(
             }
         }
 
+        crops.remove(path)
+        sources.remove(path)
         staged.delete()
         staged.parentFile?.delete()                           // the song's own now-empty staging folder (only if empty)
         report(jobId, "done", target.absolutePath)

@@ -30,6 +30,8 @@
                AndroidBridge.discardStagedSongs()                   deletes the staging folder
                AndroidBridge.readClipboard()                        the clipboard's text
                AndroidBridge.getArtwork(path)                       the thumbnail (data: URL or "")
+               AndroidBridge.songStageCrop(path, x, y, size)        the square of the thumbnail to use as the cover
+                                                                    (fractions; size -1 = the whole picture)
      native -> window.onSongDownloadStatus(jobId, "running"|"done"|"failed", message)
                exactly one done/failed per job; the message of a "done" is a file
                path (the staged file for stageSong, the song's new path for placeSong).
@@ -336,6 +338,18 @@
   }
 
   const api = { parseLinks, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf };
+  // The square frame: `size` is its side as a fraction of the picture's SHORTER side (0.3..1); (cx, cy) is where
+  // its centre is wanted, in picture pixels. The frame is kept inside the picture. x, y, size go to the app.
+  function cropRect(iw, ih, size, cx, cy) {
+    const shorter = Math.min(iw, ih);
+    const frac = Math.max(0.3, Math.min(1, Number(size) || 1));
+    const side = Math.max(1, shorter * frac);
+    const left = Math.min(iw - side, Math.max(0, cx - side / 2));
+    const top = Math.min(ih - side, Math.max(0, cy - side / 2));
+    return { left: left, top: top, side: side, x: left / iw, y: top / ih, size: side / shorter };
+  }
+  api.cropRect = cropRect;
+
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof document === 'undefined' || !document.getElementById) return;
 
@@ -400,6 +414,134 @@
       cover.setAttribute('data-sp-cover', '1');
     }
     return cover;
+  }
+
+
+  /* ---- Choosing which part of the thumbnail becomes the cover ------------------------------------------
+     YouTube thumbnails are wide (16:9) but a cover is square. In the naming step the picture is tappable: it opens
+     a window with the whole thumbnail and a square frame you drag (and zoom with the slider). On Done the page
+     shows the cut-out as the preview and tells the app (AndroidBridge.songStageCrop(path, x, y, size): the
+     frame's top-left corner and side as fractions of the picture); the app cuts it from the song's own embedded
+     picture when the song is saved and writes it in as the cover. Cancel or Reset keeps the whole thumbnail, the
+     way it was before this existed. */
+
+
+  let cropLayer = null;
+
+  function closeCrop() {
+    if (!cropLayer) return false;
+    if (cropLayer.parentNode) cropLayer.parentNode.removeChild(cropLayer);
+    cropLayer = null;
+    return true;
+  }
+
+  function openCrop(item) {
+    if (!item || !item.fullArt || cropLayer) return;
+    const b = bridge();
+    const layer = el('div', 'dl-crop');
+    layer.setAttribute('role', 'dialog');
+    layer.setAttribute('aria-modal', 'true');
+    layer.setAttribute('aria-label', 'Choose the cover');
+    const box = el('div', 'dl-crop-box');
+    box.appendChild(el('h3', null, 'Choose the cover'));
+    box.appendChild(el('p', 'dl-hint', 'Drag the square to pick the part of the picture that becomes the cover.'));
+    const stage = el('div', 'dl-crop-stage');
+    const img = el('img');
+    img.alt = '';
+    img.src = item.fullArt;
+    const frame = el('div', 'dl-crop-frame');
+    stage.appendChild(img);
+    stage.appendChild(frame);
+    box.appendChild(stage);
+
+    const zoomRow = el('label', 'dl-crop-zoom');
+    zoomRow.appendChild(el('span', null, 'Zoom'));
+    const zoom = el('input');
+    zoom.type = 'range';
+    zoom.min = '30';
+    zoom.max = '100';
+    zoom.value = String(Math.round(((item.crop && item.crop.size) || 1) * 100));
+    zoom.setAttribute('aria-label', 'Zoom');
+    zoomRow.appendChild(zoom);
+    box.appendChild(zoomRow);
+
+    let iw = 0;
+    let ih = 0;
+    let cx = 0;
+    let cy = 0;
+    const current = () => cropRect(iw, ih, Number(zoom.value) / 100, cx, cy);
+    const draw = () => {
+      if (!iw) return;
+      const r = current();
+      frame.style.left = (r.left / iw * 100) + '%';
+      frame.style.top = (r.top / ih * 100) + '%';
+      frame.style.width = (r.side / iw * 100) + '%';
+      frame.style.height = (r.side / ih * 100) + '%';
+    };
+    img.addEventListener('load', () => {
+      iw = img.naturalWidth || 0;
+      ih = img.naturalHeight || 0;
+      if (!iw || !ih) return;
+      const had = item.crop;
+      cx = had ? (had.x * iw + (had.size * Math.min(iw, ih)) / 2) : iw / 2;
+      cy = had ? (had.y * ih + (had.size * Math.min(iw, ih)) / 2) : ih / 2;
+      draw();
+    });
+
+    // Dragging: the frame follows the finger (its centre goes where you touch).
+    let dragging = false;
+    const move = (e) => {
+      if (!iw) return;
+      const rect = stage.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      cx = (e.clientX - rect.left) / rect.width * iw;
+      cy = (e.clientY - rect.top) / rect.height * ih;
+      draw();
+    };
+    stage.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      if (stage.setPointerCapture && e.pointerId !== undefined) { try { stage.setPointerCapture(e.pointerId); } catch (err) { /* fine */ } }
+      move(e);
+    });
+    stage.addEventListener('pointermove', (e) => { if (dragging) move(e); });
+    ['pointerup', 'pointercancel'].forEach((t) => stage.addEventListener(t, () => { dragging = false; }));
+    zoom.addEventListener('input', draw);
+
+    const actions = el('div', 'dl-crop-actions');
+    actions.appendChild(button('Cancel', 'dl-secondary', closeCrop));
+    actions.appendChild(button('Whole picture', 'dl-secondary', () => {
+      // Back to the thumbnail as downloaded (the app forgets any cut-out).
+      try { if (b && b.songStageCrop) b.songStageCrop(item.path, 0, 0, -1); } catch (err) { /* nothing to undo */ }
+      item.crop = null;
+      item.art = item.fullArt;
+      closeCrop();
+      render();
+    }));
+    actions.appendChild(button('Done', 'dl-primary', () => {
+      if (!iw) { closeCrop(); return; }
+      const r = current();
+      let ok = false;
+      try { ok = !!(b && b.songStageCrop && b.songStageCrop(item.path, r.x, r.y, r.size)); } catch (err) { ok = false; }
+      if (ok) {
+        // The preview shown in the naming step is the cut-out itself.
+        try {
+          const canvas = document.createElement('canvas');
+          const px = Math.max(1, Math.min(512, Math.round(r.side)));
+          canvas.width = px;
+          canvas.height = px;
+          canvas.getContext('2d').drawImage(img, r.left, r.top, r.side, r.side, 0, 0, px, px);
+          item.art = canvas.toDataURL('image/jpeg', 0.9);
+        } catch (err) { /* the old preview stays; the cut-out is still applied when the song is saved */ }
+        item.crop = { x: r.x, y: r.y, size: r.size };
+      }
+      closeCrop();
+      render();
+    }));
+    box.appendChild(actions);
+    layer.appendChild(box);
+    layer.addEventListener('click', (e) => { if (e.target === layer) closeCrop(); });
+    cropLayer = layer;
+    document.body.appendChild(layer);
   }
 
   const wizard = createWizard({
@@ -612,8 +754,21 @@
       let art = '';
       try { art = (bridge() && bridge().getArtwork && bridge().getArtwork(item.path)) || ''; } catch (e) { art = ''; }
       item.art = art;
+      item.fullArt = art;                      // the whole thumbnail as downloaded, kept for choosing a cover from it
     }
-    box.appendChild(coverNode(item.art, 0, 'i-moon-music', 'dl-thumb'));
+    const thumb = coverNode(item.art, 0, 'i-moon-music', 'dl-thumb');
+    const b0 = bridge();
+    const croppable = !!(item.fullArt && b0 && typeof b0.songStageCrop === 'function');
+    if (croppable) {
+      thumb.setAttribute('role', 'button');
+      thumb.tabIndex = 0;
+      thumb.setAttribute('aria-label', 'Choose which part of the picture is the cover');
+      thumb.setAttribute('data-dl-crop', '1');
+      thumb.addEventListener('click', () => openCrop(item));
+      thumb.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCrop(item); } });
+    }
+    box.appendChild(thumb);
+    if (croppable) box.appendChild(el('p', 'dl-hint', 'Tap the picture to choose which part becomes the cover.'));
 
     const input = el('input', 'dl-input');
     input.type = 'text';
@@ -823,5 +978,6 @@
     close: closeTab,
     isOpen: isShown,
     wizard,
+    closeCrop,
   });
 })(typeof window !== 'undefined' ? window : this);

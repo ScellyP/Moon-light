@@ -188,7 +188,7 @@
 
   /** The cover picture (a data: URL) the Home screen shows for a playlist folder, or '' when it has none yet. */
   function getCover(name) {
-    return coverUrlByName[name] || '';
+    return coverFor(name);
   }
 
   /** Opens a playlist's song list (what tapping it on Home does). Used by the Search tab. */
@@ -199,7 +199,7 @@
 
   window.SpotifyUI = {
     setView, stepView, getCover, refreshTint: () => updateTint(),
-    getPlaylistRows: () => readPlaylistRows(), openPlaylist,
+    getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged,
   };
 
   /* =======================================================================
@@ -281,6 +281,13 @@
     // selection in the row's own handler) opens its song list. The delete
     // button stops propagation, so it never reaches here.
     if (target.closest('#audio-playlist-list li')) return setView('album');
+
+    // The Songs tab's big cover: change the playlist's cover.
+    if (target.closest('#sp-album-cover')) {
+      const key = el.albumCover.getAttribute('data-pl-key') || 'all';
+      if (window.SongMenu && window.SongMenu.openCover) window.SongMenu.openCover(key, getPlaylistTitle());
+      return;
+    }
 
     // Forwarded playback buttons
     if (target.closest('#sp-album-play')) return playPlaylist();
@@ -708,7 +715,9 @@
   /* ---------- applying covers to rows ---------- */
 
   function setRowCover(row, url) {
-    updateHomeCover(row.getAttribute('data-playlist-name'), url);
+    const name = row.getAttribute('data-playlist-name');
+    updateHomeCover(name, url);
+    url = customCover(name) || url;              // a chosen cover is never replaced by the mosaic
     if (url) {
       row.style.setProperty('--sp-cover', 'url("' + url + '")');
       row.setAttribute('data-sp-cover', '1');
@@ -807,7 +816,7 @@
   function restoreRowCovers() {
     if (!el.playlistList) return;
     el.playlistList.querySelectorAll('li[data-playlist-name]').forEach((row) => {
-      const url = coverUrlByName[row.getAttribute('data-playlist-name')];
+      const url = coverFor(row.getAttribute('data-playlist-name'));
       if (url && !row.hasAttribute('data-sp-cover')) {
         row.style.setProperty('--sp-cover', 'url("' + url + '")');
         row.setAttribute('data-sp-cover', '1');
@@ -872,6 +881,43 @@
   let homeSignature = '';
   const coverUrlByName = {};   // playlist name -> mosaic data: URL, kept across row rebuilds
 
+  /* Covers you chose for playlists (a gallery picture, or the cover of one of the playlist's songs). They are kept
+     natively in Moonlight/playlist-covers, win over the generated mosaic everywhere, and the mosaic pass never
+     replaces them: the icon stays as chosen whatever songs play. A playlist is addressed by the name used in
+     this file ('all', '@list:3', 'Lo-fi'). They have nothing to do with the colour theme, which follows only the
+     song that is playing (updateTint reads the player's artwork). */
+  const customCoverCache = {};
+  function customCover(name) {
+    if (Object.prototype.hasOwnProperty.call(customCoverCache, name)) return customCoverCache[name];
+    let uri = '';
+    try {
+      const bridge = window.AndroidBridge;
+      uri = bridge && typeof bridge.playlistCoverGet === 'function' ? (bridge.playlistCoverGet(name) || '') : '';
+    } catch (error) { uri = ''; }
+    customCoverCache[name] = uri;
+    return uri;
+  }
+
+  /** What a playlist shows: the cover you chose, else its mosaic, else ''. */
+  function coverFor(name) {
+    return customCover(name) || coverUrlByName[name] || '';
+  }
+
+  /** A playlist's cover was chosen or cleared: redraw it wherever it appears. */
+  function coverChanged(name) {
+    delete customCoverCache[name];
+    const row = findRow(name);
+    if (row) setRowCover(row, coverUrlByName[name] || '');
+    else updateHomeCover(name, coverUrlByName[name] || '');
+    if (el.albumCover) el.albumCover.removeAttribute('data-pl-sig');
+    scheduleSync();
+  }
+
+  window.onPlaylistCoverPicked = function (name, ok) {
+    if (ok) coverChanged(name);
+    if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(ok ? 'Playlist cover changed' : 'Could not use that picture');
+  };
+
   function readPlaylistRows() {
     if (!el.playlistList) return [];
     return Array.from(el.playlistList.querySelectorAll('li[data-playlist-name]')).map((row, index) => {
@@ -909,7 +955,7 @@
     home.root.querySelectorAll('[data-sp-playlist]').forEach((node) => {
       if (node.getAttribute('data-sp-playlist') !== name) return;
       const cover = node.querySelector('.sp-cover');
-      if (cover) setCoverUrl(cover, url);
+      if (cover) setCoverUrl(cover, coverFor(name));
     });
   }
 
@@ -947,7 +993,7 @@
   function makeTile(item) {
     const tile = makeButton('sp-tile', item.title);
     tile.setAttribute('data-sp-playlist', item.name);
-    tile.appendChild(makeCover(item.tone, 'i-moon-music', coverUrlByName[item.name]));
+    tile.appendChild(makeCover(item.tone, 'i-moon-music', coverFor(item.name)));
     tile.appendChild(makeElement('span', 'sp-tile-name', item.title));
     return tile;
   }
@@ -956,7 +1002,7 @@
     const card = makeElement('div', 'sp-card');
     card.setAttribute('data-sp-playlist', item.name);
     const main = makeButton('sp-card-main', item.title);
-    main.appendChild(makeCover(item.tone, 'i-moon-music', coverUrlByName[item.name]));
+    main.appendChild(makeCover(item.tone, 'i-moon-music', coverFor(item.name)));
     main.appendChild(makeElement('span', 'sp-card-name', item.title));
     main.appendChild(makeElement('span', 'sp-card-sub', captionFor(item)));
     card.appendChild(main);
@@ -1152,6 +1198,21 @@
     }
   }
 
+  /** The Songs tab's big cover is the PLAYLIST's cover (the one you chose, else its mosaic, else a placeholder),
+   *  never the song that is playing: the icon stays as it is while songs change. Tapping it changes the cover. */
+  function syncAlbumCover() {
+    const target = el.albumCover;
+    if (!target) return;
+    const audio = window.NovelAudio;
+    const key = (audio && audio._state && audio._state.activePlaylist) || 'all';
+    const url = coverFor(key);
+    const signature = key + '|' + url.length + url.slice(-16);
+    if (target.getAttribute('data-pl-sig') === signature) return;
+    target.setAttribute('data-pl-sig', signature);
+    target.setAttribute('data-pl-key', key);
+    target.innerHTML = url ? '<img alt="" src="' + url + '">' : '<svg class="ico"><use href="#i-moon-music"/></svg>';
+  }
+
   function getPlaylistTitle() {
     return textOf(el.playlistLabel) || 'All songs';
   }
@@ -1261,7 +1322,7 @@
     syncAlbumHeader(state);
 
     mirrorArtwork(el.miniArt);
-    mirrorArtwork(el.albumCover);
+    syncAlbumCover();
     mirrorArtwork(el.sheetArt);
 
     updateTint();

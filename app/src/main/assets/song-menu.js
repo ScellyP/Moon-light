@@ -12,6 +12,7 @@
      Add to Queue               -> plays right after the song that is playing now
      Go to Queue                -> shows this song in the Songs list, scrolled to and flashed
      Play on loop / Stop looping
+     Delete from device         -> deletes the song FILE for good (after a confirmation), unlike "Remove from this playlist"
 
    HOW A "..." BUTTON ASKS FOR IT
      Any element with data-song-more="<song id>" opens the sheet when tapped. Add data-song-ctx="1" when the
@@ -218,11 +219,44 @@
       close();
     }, { active: looping }));
 
+    // The last row, apart from the rest: deletes the file itself.
+    list.appendChild(row('i-trash', 'Delete from device', () => showDelete(), { danger: true }));
+
     body.appendChild(list);
     const done = button('sm-close', 'Close');
     done.textContent = 'Close';
     done.setAttribute('data-sm-close', '');
     body.appendChild(done);
+  }
+
+  /* ---- view: delete the song from the phone ------------------------------------------------------------- */
+  // Unlike "Remove from this playlist", this deletes the music FILE for good (there is no recycle bin).
+  function showDelete() {
+    const a = audio();
+    const track = trackOf();
+    if (!a || !track) { close(); return; }
+    body.replaceChildren();
+    body.appendChild(backBar('Delete song'));
+    const box = el('div', 'sm-form');
+    box.appendChild(el('p', 'sm-warn-title', '\u201c' + (track.title || 'This song') + '\u201d'));
+    box.appendChild(el('p', 'sm-hint',
+      'This deletes the song file from your phone for good, and takes it out of every playlist, Liked Songs and the history. It cannot be undone.'));
+    const actions = el('div', 'sm-actions');
+    const del = button('sm-btn danger', 'Delete forever');
+    del.textContent = 'Delete forever';
+    del.addEventListener('click', () => {
+      const title = track.title || 'song';
+      const ok = a.deleteSong(track.id);
+      toast(ok ? 'Deleted \u201c' + title + '\u201d' : 'Could not delete the file');
+      close();
+    });
+    const keep = button('sm-btn', 'Cancel');
+    keep.textContent = 'Cancel';
+    keep.addEventListener('click', showMenu);
+    actions.appendChild(del);
+    actions.appendChild(keep);
+    box.appendChild(actions);
+    body.appendChild(box);
   }
 
   /* ---- view: the playlist picker ---------------------------------------------------------------------- */
@@ -375,6 +409,121 @@
     root.setTimeout(() => { try { fields.title.focus(); } catch (err) { /* no keyboard */ } }, 0);
   }
 
+  /* ---- view: change a playlist's cover ----------------------------------------------------------------- */
+  // The cover is kept natively (Moonlight/playlist-covers) and stays as chosen while songs play. It can come from
+  // the gallery or from the cover of one of the playlist's own songs, or go back to the automatic mosaic.
+  let coverCtx = null;           // { name, title }
+
+  function bridge() { return root.AndroidBridge || null; }
+
+  function coverChanged(name) {
+    if (root.SpotifyUI && root.SpotifyUI.coverChanged) root.SpotifyUI.coverChanged(name);
+  }
+
+  function showCover() {
+    if (!coverCtx) { close(); return; }
+    const b = bridge();
+    body.replaceChildren();
+    const zone = el('div', 'sm-drag');
+    zone.appendChild(el('div', 'sm-grip'));
+    const head = el('div', 'sm-head');
+    const tile = el('div', 'sm-cover');
+    tile.appendChild(icon('i-moon-music'));
+    const url = root.SpotifyUI && root.SpotifyUI.getCover ? root.SpotifyUI.getCover(coverCtx.name) : '';
+    if (url) { tile.style.setProperty('--sm-cover', 'url("' + url + '")'); tile.setAttribute('data-sm-cover', '1'); }
+    const text = el('div', 'sm-head-text');
+    text.appendChild(el('div', 'sm-title', coverCtx.title || 'Playlist'));
+    text.appendChild(el('div', 'sm-artist', 'Change the playlist cover'));
+    head.appendChild(tile);
+    head.appendChild(text);
+    zone.appendChild(head);
+    enableSwipeDown(zone);
+    body.appendChild(zone);
+
+    const list = el('div', 'sm-list');
+    list.appendChild(row('i-image', 'Choose from gallery', () => {
+      if (!b || !b.playlistCoverPick) { toast('Only available in the Moonlight app'); return; }
+      b.playlistCoverPick(coverCtx.name);          // the answer comes back through window.onPlaylistCoverPicked
+      close();
+    }));
+    list.appendChild(row('i-moon-music', 'Pick from this playlist\u2019s songs', () => showCoverSongs()));
+    let hasCustom = false;
+    try { hasCustom = !!(b && b.playlistCoverGet && b.playlistCoverGet(coverCtx.name)); } catch (e) { hasCustom = false; }
+    if (hasCustom) {
+      list.appendChild(row('i-refresh', 'Use the automatic cover', () => {
+        let ok = false;
+        try { ok = !!(b && b.playlistCoverClear && b.playlistCoverClear(coverCtx.name)); } catch (e) { ok = false; }
+        if (ok) coverChanged(coverCtx.name);
+        toast(ok ? 'Back to the automatic cover' : 'Could not change the cover');
+        close();
+      }));
+    }
+    body.appendChild(list);
+    const done = button('sm-close', 'Close');
+    done.textContent = 'Close';
+    done.setAttribute('data-sm-close', '');
+    body.appendChild(done);
+  }
+
+  // A grid of the covers of the playlist's songs (only songs that have one), filled in a few at a time.
+  function showCoverSongs() {
+    const a = audio();
+    const b = bridge();
+    if (!coverCtx || !a) { close(); return; }
+    body.replaceChildren();
+    const bar = el('div', 'sm-bar');
+    const back = button('sm-back', 'Back');
+    back.appendChild(icon('i-chev-left'));
+    back.addEventListener('click', showCover);
+    bar.appendChild(back);
+    bar.appendChild(el('div', 'sm-bar-title', 'Pick a song\u2019s cover'));
+    body.appendChild(bar);
+    const grid = el('div', 'sm-grid');
+    const note = el('div', 'sm-empty', 'Looking through the songs\u2026');
+    body.appendChild(note);
+    body.appendChild(grid);
+    const tracks = a.getPlaylistTracks(coverCtx.name).filter((t) => t && t.path);
+    const name = coverCtx.name;
+    let i = 0;
+    let shown = 0;
+    const MAX = 60;
+    const seen = {};
+    const step = () => {
+      if (!isOpen() || !coverCtx || coverCtx.name !== name) return;
+      for (let n = 0; n < 6 && i < tracks.length && shown < MAX; n++, i++) {
+        let uri = '';
+        try { uri = b && b.getArtwork ? (b.getArtwork(tracks[i].path) || '') : ''; } catch (e) { uri = ''; }
+        const sig = uri.length + uri.slice(-40);
+        if (!uri || seen[sig]) continue;               // no cover, or the same picture again (one album)
+        seen[sig] = true;
+        const t = button('sm-tile', 'Use the cover of ' + (tracks[i].title || 'this song'));
+        t.style.setProperty('--sm-cover', 'url("' + uri + '")');
+        t.addEventListener('click', () => {
+          let ok = false;
+          try { ok = !!(b && b.playlistCoverSave && b.playlistCoverSave(name, uri)); } catch (e) { ok = false; }
+          if (ok) coverChanged(name);
+          toast(ok ? 'Playlist cover changed' : 'Could not use that picture');
+          if (ok) close();
+        });
+        grid.appendChild(t);
+        shown++;
+      }
+      if (i < tracks.length && shown < MAX) root.setTimeout(step, 30);
+      else note.textContent = shown ? '' : 'None of these songs has a cover picture.';
+    };
+    step();
+  }
+
+  function openCover(name, title) {
+    build();
+    current = { id: '', ctx: '' };
+    coverCtx = { name: String(name || 'all'), title: title || '' };
+    body.style.transform = '';
+    layer.classList.remove('hidden');
+    showCover();
+    return true;
+  }
+
   /* ---- public ------------------------------------------------------------------------------------------ */
   // ctx: the key of the playlist the song is listed in ('list:3' / 'name:Lo-fi'), or '' when not opened from a playlist.
   function open(id, ctx) {
@@ -388,7 +537,7 @@
     return true;
   }
 
-  root.SongMenu = { open: open, close: close, isOpen: isOpen };
+  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, toast: toast };
 
   // Any "..." button on the page: <button data-song-more="<id>" [data-song-ctx="1"]>.
   const EDGE = 50;                        // px at the right end of a Songs-list row that count as its "..." button

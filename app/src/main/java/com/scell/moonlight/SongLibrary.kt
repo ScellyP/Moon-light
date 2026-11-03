@@ -355,6 +355,38 @@ class SongLibrary(
         return save(m, overwrite = true)
     }
 
+    /**
+     * Forgets a song that was deleted from the phone: takes its entry out of EVERY playlist file (and out of their
+     * "excluded" lists). Returns how many playlist files changed. No music file is touched here.
+     */
+    @Synchronized
+    fun removeSongEverywhere(ref: String): Int {
+        var changedFiles = 0
+        for (m in readAll()) {
+            var changed = false
+            val songs = m.optJSONArray("songs")
+            val kept = JSONArray()
+            if (songs != null) {
+                for (i in 0 until songs.length()) {
+                    val s = songs.optJSONObject(i)
+                    if (s != null && s.optString("ref") == ref) changed = true else if (s != null) kept.put(s)
+                }
+            }
+            val ex = m.optJSONArray("excluded")
+            val keptEx = JSONArray()
+            if (ex != null) {
+                for (i in 0 until ex.length()) {
+                    if (ex.optString(i) == ref) changed = true else keptEx.put(ex.optString(i))
+                }
+            }
+            if (!changed) continue
+            m.put("songs", kept)
+            if (ex != null) m.put("excluded", keptEx)
+            if (save(m, overwrite = true)) changedFiles++
+        }
+        return changedFiles
+    }
+
     /** playlist name (lower case) -> refs taken out of it (see [removeSong]). Used by the scan. */
     @Synchronized
     fun exclusions(): Map<String, Set<String>> {
