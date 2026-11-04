@@ -384,7 +384,9 @@ class SongDownloader(
         var source = staged
         var copy: File? = null
         val crop = crops[path]
-        val sourceUrl = sources[path]
+        // The page it came from: remembered when the download finished, or, if the app was closed in between (a staged
+        // song waits across restarts), the "purl" tag yt-dlp already wrote into the file.
+        val sourceUrl = sources[path] ?: Id3Tag.readSourceUrl(staged)
         if (name.isNotEmpty() || crop != null || sourceUrl != null) {
             val temp = File(staged.parentFile, ".retag_" + UUID.randomUUID().toString().take(8) + ".part")
             try {
