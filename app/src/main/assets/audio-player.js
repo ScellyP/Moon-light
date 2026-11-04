@@ -245,6 +245,7 @@ window.NovelAudio = (function () {
       }
 
       try { this.relinkMovedIds(); } catch (e) { /* a failed relink only leaves old entries unavailable */ }
+      setTimeout(() => { try { this.removeDuplicates(); } catch (e) { /* duplicates are only a tidy-up: never break the scan */ } }, 0);
       AudioFeatures.emit('libraryChanged');
       try { this.migrateCuratedToFiles(); } catch (e) { /* playlist files are an addition: never break the scan */ }
       // First scan of this launch: bring back the liked / recent songs from their text files if the app lost them.
@@ -337,6 +338,152 @@ window.NovelAudio = (function () {
       const words = this.normalize(query).split(' ').filter(Boolean);
       if (!words.length) return [];
       return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
+    },
+
+    /* ---- Duplicate songs ------------------------------------------------------------------------------
+       The same song downloaded twice by accident. Two songs are copies of each other when
+         * they have the same title and the same artist(s) AND play for about the same time (within 2 seconds), so a
+           live version, a remix or a remaster (a different title or length) is never taken for a copy, or
+         * they were downloaded from the same source link (the same video, whatever the tags now say).
+       Songs with no artist tag, or whose title is only the file name, are never matched on title. Of each group the
+       song you most likely care about stays: the one playing now, a liked one, the one in the most playlists, an
+       edited one, then the oldest file. The others are MOVED to Moonlight/Duplicates (nothing is deleted), and
+       everything that pointed at them (playlists, likes, history, the queue) points at the kept song instead.
+       At most 100 songs are moved per scan. Turn it off in Settings. */
+    _normText(s) { return this.normalize ? this.normalize(s) : String(s || '').toLowerCase().trim(); },
+
+    _sourceKey(url) {
+      if (!url) return '';
+      const m = /(?:youtube\.com\/watch\?[^#]*\bv=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/i.exec(String(url));
+      return m ? 'yt:' + m[1] : String(url).trim().toLowerCase().replace(/#.*$/, '');
+    },
+
+    // [{ keep, drop: [...] }]: the groups of copies in `tracks` (nothing is changed).
+    findDuplicates(tracks) {
+      const n = tracks.length;
+      const parent = tracks.map((_, i) => i);
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const join = (a, b) => { const x = find(a), y = find(b); if (x !== y) parent[y] = x; };
+
+      // 1. same title + same artists + about the same length
+      const byKey = new Map();
+      tracks.forEach((t, i) => {
+        if (!(t.durationSec > 0)) return;
+        const title = this._normText(t.title);
+        if (!title || (t.titleFromTag === false && !t.edited)) return;       // a title that is only the file name proves nothing
+        const names = String(t.artist || '').split(';').map(x => this._normText(x)).filter(Boolean).sort();
+        if (!names.length) return;
+        const key = title + '\u0001' + names.join('|');
+        (byKey.get(key) || byKey.set(key, []).get(key)).push(i);
+      });
+      byKey.forEach((idx) => {
+        if (idx.length < 2) return;
+        idx.sort((a, b) => tracks[a].durationSec - tracks[b].durationSec);
+        for (let k = 1; k < idx.length; k++) {
+          if (tracks[idx[k]].durationSec - tracks[idx[k - 1]].durationSec <= 2) join(idx[k - 1], idx[k]);
+        }
+      });
+      // 2. the same source link
+      const bySource = new Map();
+      tracks.forEach((t, i) => {
+        const key = this._sourceKey(t.source);
+        if (key) (bySource.get(key) || bySource.set(key, []).get(key)).push(i);
+      });
+      bySource.forEach((idx) => { for (let k = 1; k < idx.length; k++) join(idx[0], idx[k]); });
+
+      const groups = new Map();
+      for (let i = 0; i < n; i++) { const r = find(i); (groups.get(r) || groups.set(r, []).get(r)).push(i); }
+      const lists = AudioFeatures.customPlaylists.list();
+      const listIds = lists.map(p => AudioFeatures.customPlaylists.getIds(p.id) || []);
+      const out = [];
+      groups.forEach((idx) => {
+        if (idx.length < 2) return;
+        const score = (t) => [
+          t.id === state.currentTrackId ? 1 : 0,
+          AudioFeatures.likes.isLiked(t.id) ? 1 : 0,
+          listIds.filter(ids => ids.indexOf(t.id) !== -1).length + this._namesOf(t).length,
+          t.edited ? 1 : 0,
+        ];
+        const better = (a, b) => {                                  // is song a a better one to keep than b?
+          const x = score(a), y = score(b);
+          for (let k = 0; k < x.length; k++) if (x[k] !== y[k]) return x[k] > y[k];
+          return (a.modified || 0) < (b.modified || 0);             // older file first
+        };
+        const group = idx.map(i => tracks[i]).sort((a, b) => (better(a, b) ? -1 : better(b, a) ? 1 : 0));
+        out.push({ keep: group[0], drop: group.slice(1) });
+      });
+      return out;
+    },
+
+    // After a scan: move the copies out (see above). Quietly does nothing outside the Android app or when switched off.
+    removeDuplicates() {
+      const b = window.AndroidBridge;
+      if (!b || typeof b.songsMergeDuplicates !== 'function') return 0;
+      if (state.features.appSettings && state.features.appSettings.removeDuplicates === false) return 0;     // switched off in Settings
+      if (state.tracks.length < 2 || state.scanning) return 0;
+      const found = this.findDuplicates(state.tracks);
+      if (!found.length) return 0;
+      const pairs = [];
+      found.forEach(g => g.drop.forEach(d => { if (d.id !== state.currentTrackId && pairs.length < 100) pairs.push({ keep: g.keep.path, drop: d.path, keepId: g.keep.id, dropId: d.id }); }));
+      if (!pairs.length) return 0;
+      let moved = [];
+      try { moved = JSON.parse(b.songsMergeDuplicates(JSON.stringify(pairs.map(p => ({ keep: p.keep, drop: p.drop })))) || '[]'); } catch (e) { moved = []; }
+      let count = 0;
+      pairs.forEach(p => { if (moved.indexOf(p.drop) !== -1) { this.mergeInto(p.dropId, p.keepId); count++; } });
+      if (count) {
+        Prefs.save();
+        AudioUI.render();
+        if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(count === 1 ? 'Removed 1 duplicate song' : 'Removed ' + count + ' duplicate songs');
+      }
+      return count;
+    },
+
+    // A duplicate was moved away: everything that pointed at it points at the kept song (no list gets it twice).
+    mergeInto(dropId, keepId) {
+      const drop = this.getTrack(dropId);
+      const keep = this.getTrack(keepId);
+      if (drop && keep) {                                           // the kept song joins the playlists of the dropped one
+        const names = this._namesOf(keep).slice();
+        this._namesOf(drop).forEach(nm => { if (names.indexOf(nm) === -1) names.push(nm); });
+        keep.playlists = names;
+        if (!keep.playlist && names.length) keep.playlist = names[0];
+      }
+      state.tracks = state.tracks.filter(t => t.id !== dropId);
+      const swap = (arr) => {                                       // replace dropId by keepId in a list of ids, keeping it free of repeats
+        const had = arr.indexOf(keepId) !== -1;
+        for (let i = arr.length - 1; i >= 0; i--) {
+          if (arr[i] !== dropId) continue;
+          if (had) arr.splice(i, 1); else arr[i] = keepId;
+        }
+      };
+      const at = state.queue.indexOf(dropId);
+      if (at !== -1) {
+        if (state.queue.indexOf(keepId) !== -1) { state.queue.splice(at, 1); if (at < state.queueIndex) state.queueIndex--; }
+        else state.queue[at] = keepId;                              // the kept song takes its place in the queue
+      }
+      swap(PlaybackQueue._originalOrder);
+      const cyc = PlaybackQueue._cycle(); cyc.played = cyc.played || []; swap(cyc.played); PlaybackQueue._saveCycle();
+      const walk = (v) => {
+        if (Array.isArray(v)) {
+          swap(v);
+          v.forEach(x => { if (x && typeof x === 'object') walk(x); });
+        } else if (v && typeof v === 'object') {
+          Object.keys(v).forEach(k => {
+            if (typeof v[k] === 'string' && v[k] === dropId) v[k] = keepId;
+            else if (v[k] && typeof v[k] === 'object') walk(v[k]);
+            if (k === dropId && !Object.prototype.hasOwnProperty.call(v, keepId)) { v[keepId] = v[k]; delete v[k]; }
+            else if (k === dropId) delete v[k];
+          });
+        }
+      };
+      walk(state.features);
+      const hist = AudioFeatures.history;
+      hist._load();
+      const seenIds = new Set();
+      hist.items = hist.items.map(e => (e.id === dropId ? Object.assign({}, e, { id: keepId }) : e))
+        .filter(e => { if (seenIds.has(e.id)) return false; seenIds.add(e.id); return true; });
+      hist._save();
+      this.infoRev++;
     },
 
     // A song was deleted from the phone: forget it everywhere the page keeps it (the library, the queue, the shuffle
@@ -1886,10 +2033,11 @@ window.NovelAudio = (function () {
      setSetting; settings-menu.js applies them to the page.
        btAutoStart  start playing on its own when the app opens with Bluetooth audio connected
        animatedSky  the twinkling stars behind the screens (off = still stars, calmer, easier on battery)
-       coverTint    colour the screens from the current cover art */
+       coverTint    colour the screens from the current cover art
+       removeDuplicates  after a scan, move copies of the same song (same title and artist, or the same source link) out of the library */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, animatedSky: true, coverTint: true },
+    defaults: { btAutoStart: true, animatedSky: true, coverTint: true, removeDuplicates: true },
   });
 
   /* ---- Remember the last song ---------------------------------------------------
@@ -2866,6 +3014,10 @@ window.NovelAudio = (function () {
        A playlist is addressed by a key: 'list:<id>' for a hand-picked list kept in the app, 'name:<name>' for a
        playlist file / old folder playlist. */
     getTrackRecord(id) { return MediaLibrary.getTrack(id) || null; },
+
+    // Copies of the same song (see MediaLibrary.removeDuplicates). Runs by itself after every scan; this runs it now.
+    removeDuplicates() { return MediaLibrary.removeDuplicates(); },
+    findDuplicates() { return MediaLibrary.findDuplicates(state.tracks).map(g => ({ keep: g.keep.id, drop: g.drop.map(d => d.id) })); },
 
     // The key of the playlist now shown in the Songs list, or '' for All songs / Liked / Recent (not editable).
     getActivePlaylistKey() {

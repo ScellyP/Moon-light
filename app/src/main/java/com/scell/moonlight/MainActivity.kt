@@ -269,6 +269,10 @@ class MainActivity : ComponentActivity() {
     // Your edits to song titles / artists / albums (an overlay, the files are never changed): see SongEdits.kt.
     private val songEdits = SongEdits(File(playerRoot, "song-edits.json"))
 
+    // Duplicate songs (same title and artist, or the same source link) are moved here, out of the music folders, so
+    // nothing is lost: delete this folder yourself to get the space back. It is never scanned.
+    private val duplicatesRoot = File(playerRoot, "Duplicates")
+
     // Covers you chose for playlists: small JPEGs in Moonlight/playlist-covers (see PlaylistCovers.kt).
     private val playlistCovers = PlaylistCovers(File(playerRoot, "playlist-covers"))
     private var pendingCoverKey: String? = null
@@ -1241,6 +1245,42 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun songStageCrop(path: String, x: Float, y: Float, size: Float): Boolean = songDownloader.setCrop(path, x, y, size)
 
+        // songsMergeDuplicates: the page found songs that are copies of each other (same title and artist, or the same
+        // source link) and says which one to keep: [{"keep": path, "drop": path}, ...]. Each dropped file is MOVED to
+        // Moonlight/Duplicates (nothing is deleted), and the playlist files point at the kept song instead. Returns the
+        // paths that were moved, as JSON.
+        @JavascriptInterface
+        fun songsMergeDuplicates(json: String): String {
+            val moved = JSONArray()
+            if (!hasStoragePermission() || json.length > 200_000) return moved.toString()
+            val pairs = try { JSONArray(json) } catch (e: Exception) { return moved.toString() }
+            for (i in 0 until minOf(pairs.length(), 200)) {
+                try {
+                    val p = pairs.optJSONObject(i) ?: continue
+                    val keepFile = resolveAudioFile(p.optString("keep")) ?: continue
+                    val dropFile = resolveAudioFile(p.optString("drop")) ?: continue
+                    if (keepFile.canonicalPath == dropFile.canonicalPath) continue
+                    val keepRef = songLibrary.refFor(keepFile) ?: continue
+                    val dropRef = songLibrary.refFor(dropFile) ?: continue
+                    val editKey = SongEdits.keyFor(dropFile)
+                    var dest = File(duplicatesRoot, dropRef)
+                    var n = 2
+                    while (dest.exists()) dest = File(duplicatesRoot, dropRef.substringBeforeLast('.') + " (" + (n++) + ")." + dropFile.extension)
+                    dest.parentFile?.mkdirs()
+                    if (!dropFile.renameTo(dest)) {
+                        dropFile.copyTo(dest, overwrite = false)
+                        if (!dropFile.delete()) { dest.delete(); continue }
+                    }
+                    try { songLibrary.replaceRef(dropRef, keepRef) } catch (e: Exception) { /* the next scan shows it as unavailable */ }
+                    try { songEdits.removeKey(editKey) } catch (e: Exception) { /* a stale edit does no harm */ }
+                    moved.put(p.optString("drop"))
+                } catch (e: Exception) {
+                    // one pair failing must not stop the others
+                }
+            }
+            return moved.toString()
+        }
+
         // songDelete: deletes the song FILE from the phone for good (no recycle bin) and forgets it: its entries in the
         // playlist files and its edit. Only a song inside Moonlight/Songs or Novel/Audio can be deleted. True when the
         // file is gone. The page confirms with the user first and removes the song from its own lists.
@@ -1778,6 +1818,8 @@ class MainActivity : ComponentActivity() {
         if (legacyPlaylist != null && exclusions[legacyPlaylist.lowercase()]?.contains(ref) == true) legacyPlaylist = null
         if (legacyPlaylist != null) obj.put("playlist", legacyPlaylist) else obj.put("playlist", JSONObject.NULL)
         obj.put("inSongs", inSongs)
+        obj.put("size", f.length())                 // with `modified`: which of two duplicate songs is the older copy
+        obj.put("modified", f.lastModified())
 
         // Every playlist the song belongs to: its old folder plus the playlist files that list it.
         // `playlist` (single) stays for older screens; the first one is used when only a file lists it.

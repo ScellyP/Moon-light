@@ -387,6 +387,42 @@ class SongLibrary(
         return changedFiles
     }
 
+    /**
+     * A duplicate song was taken out of the library and [keep] stands in for it: every playlist that listed [drop]
+     * now lists [keep] at the same place (once: a playlist that already had it just loses the extra entry). Returns
+     * how many playlist files changed. No music file is touched here.
+     */
+    @Synchronized
+    fun replaceRef(drop: String, keep: String): Int {
+        var changedFiles = 0
+        for (m in readAll()) {
+            var changed = false
+            val songs = m.optJSONArray("songs")
+            val out = JSONArray()
+            val seen = HashSet<String>()
+            if (songs != null) {
+                for (i in 0 until songs.length()) {
+                    val s = songs.optJSONObject(i) ?: continue
+                    var ref = s.optString("ref")
+                    if (ref == drop) { ref = keep; s.put("ref", keep); s.remove("size"); changed = true }
+                    if (seen.add(ref)) out.put(s) else changed = true
+                }
+            }
+            val ex = m.optJSONArray("excluded")
+            if (ex != null) {
+                val keptEx = JSONArray()
+                for (i in 0 until ex.length()) {
+                    if (ex.optString(i) == drop) changed = true else keptEx.put(ex.optString(i))
+                }
+                if (changed) m.put("excluded", keptEx)
+            }
+            if (!changed) continue
+            m.put("songs", out)
+            if (save(m, overwrite = true)) changedFiles++
+        }
+        return changedFiles
+    }
+
     /** playlist name (lower case) -> refs taken out of it (see [removeSong]). Used by the scan. */
     @Synchronized
     fun exclusions(): Map<String, Set<String>> {
