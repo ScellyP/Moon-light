@@ -4,7 +4,8 @@
    The three dots next to a song (Songs list, Search results, Home's recently played, and the player's own
    "..." sheet) open one bottom sheet, like Spotify's:
 
-     Edit song info             -> title, artist, album (where Spotify has "Share")
+     Edit song info             -> title, artist, album
+     Share song                 -> Android's share sheet with the song's file (mp3) for messaging apps, Bluetooth, Drive...
      Like / Remove from Liked Songs
      Add to playlist            -> a playlist picker (and "New playlist")
      Move to another playlist   -> only when opened from inside a playlist
@@ -12,7 +13,7 @@
      Add to Queue               -> plays right after the song that is playing now
      Go to Queue                -> shows this song in the Songs list, scrolled to and flashed
      Play on loop / Stop looping
-     Delete from device         -> deletes the song FILE for good (after a confirmation), unlike "Remove from this playlist"
+     Delete                     -> deletes the song FILE for good (after a confirmation), unlike "Remove from this playlist"
 
    HOW A "..." BUTTON ASKS FOR IT
      Any element with data-song-more="<song id>" opens the sheet when tapped. Add data-song-ctx="1" when the
@@ -181,6 +182,13 @@
     // Where Spotify has "Share": Edit.
     list.appendChild(row('i-pencil', 'Edit song info', () => showEdit(), { note: track.edited ? 'Edited' : '' }));
 
+    // Sends the song file itself (the mp3) to any app that takes audio: WhatsApp, Telegram, Bluetooth, Drive, mail...
+    list.appendChild(row('i-share', 'Share song', () => {
+      const ok = a.shareSong(track.id);
+      if (!ok) toast('Could not share this song');
+      close();
+    }));
+
     const liked = !!(a.isLiked && a.isLiked(track.id));
     list.appendChild(row('i-heart', liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', () => {
       const now = a.toggleLike(track.id);
@@ -219,8 +227,8 @@
       close();
     }, { active: looping }));
 
-    // The last row, apart from the rest: deletes the file itself.
-    list.appendChild(row('i-trash', 'Delete from device', () => showDelete(), { danger: true }));
+    // The last row: deletes the file itself (after a confirmation). Same colour as the other rows.
+    list.appendChild(row('i-trash', 'Delete', () => showDelete()));
 
     body.appendChild(list);
     const done = button('sm-close', 'Close');

@@ -54,6 +54,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Share button (MainActivity.songShare): gives the chosen song to another app (WhatsApp, Telegram,
+             Bluetooth, Drive, mail...) as a read-only content:// link. Folders: res/xml/share_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.songshare"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
+
         <!-- Background update check (BackgroundUpdater.kt): about every 6 hours, Wi-Fi only. -->
         <service
             android:name=".UpdateJobService"

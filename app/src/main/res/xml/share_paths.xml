@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Folders the share button (MainActivity.songShare) may hand to other apps through FileProvider.
+     Only the two music folders; nothing else on the phone can be shared this way. Paths are relative to
+     /storage/emulated/0/. -->
+<paths>
+    <external-path name="moonlight_songs" path="Moonlight/Songs/" />
+    <external-path name="novel_audio" path="Novel/Audio/" />
+</paths>

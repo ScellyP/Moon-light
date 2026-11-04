@@ -3,6 +3,7 @@ package com.scell.moonlight
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -34,6 +35,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -1294,6 +1296,33 @@ class MainActivity : ComponentActivity() {
             try { songEdits.removeKey(editKey) } catch (e: Exception) { /* a stale edit does no harm */ }
             try { if (ref != null) songLibrary.removeSongEverywhere(ref) } catch (e: Exception) { /* shown as unavailable until the next scan fixes it */ }
             return true
+        }
+
+        // songShare: opens Android's share sheet with the song FILE (the real mp3, not a link) so it can go to WhatsApp,
+        // Telegram, Bluetooth, Drive, mail... The file is handed over through FileProvider (authority "<package>.songshare",
+        // folders in res/xml/share_paths.xml): the other app gets a read-only content:// link, never the real path.
+        // Only a song inside Moonlight/Songs or Novel/Audio can be shared (resolveAudioFile). True when the sheet was opened.
+        @JavascriptInterface
+        fun songShare(path: String): Boolean {
+            if (!hasStoragePermission()) return false
+            val f = resolveAudioFile(path) ?: return false
+            return try {
+                val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = audioMimeType(f.extension)
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TITLE, f.nameWithoutExtension)
+                    clipData = ClipData.newRawUri(f.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(send, "Share song")
+                runOnUiThread {
+                    try { startActivity(chooser) } catch (e: Exception) { /* nothing can take it: nothing to open */ }
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
 
         // ---- Song options ("..." menu) ----------------------------------------------------------------

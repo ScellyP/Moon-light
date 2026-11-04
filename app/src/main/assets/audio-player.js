@@ -3149,6 +3149,16 @@ window.NovelAudio = (function () {
       return true;
     },
 
+    // Opens Android's share sheet with the song's file itself (the mp3), so it can be sent through messaging apps,
+    // Bluetooth, Drive, mail... Playback is not touched. False when it could not be opened (not in the Android app,
+    // no storage access, the file is gone).
+    shareSong(id) {
+      const track = MediaLibrary.getTrack(id);
+      const b = window.AndroidBridge;
+      if (!track || !b || typeof b.songShare !== 'function') return false;
+      try { return !!b.songShare(track.path); } catch (e) { return false; }
+    },
+
     // Edit what the app shows for a song (title / artist / album). The music file is not changed.
     // Returns the new info, or null when it could not be saved (not in the Android app, no storage access).
     editSong(id, fields) {
