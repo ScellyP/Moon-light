@@ -52,6 +52,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - **Visible queue** ("up next") with a playlist tag on each row when browsing All songs.
 - **Shuffle in rounds**: every song in the playlist plays once, in random order, before any song repeats. The app remembers which songs it already played (even after you close it), so reopening never starts on the same song again. With repeat **all**, a new random round starts when the old one ends, and it never opens with the song that just played. **Repeat** has three modes: off / all / one.
 - Shuffle, repeat and next/previous all stay inside the playlist you are playing.
+- **Share a song's link**: the **...** menu has a plain **Share** for songs downloaded in the app. It opens Android's share sheet with the link the song was downloaded from (no file is sent), so a friend can find it themselves.
 - **Share a song**: the **...** menu next to any song has **Share song**. It opens Android's share sheet with the song file itself (the mp3), so you can send it through WhatsApp, Telegram, Bluetooth, Drive, mail or any other app that accepts audio files. Only songs in your music folders can be shared, and the other app gets a read-only link to that one file.
 
 ### Download songs

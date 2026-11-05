@@ -1325,6 +1325,27 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // shareText: opens Android's share sheet with a web link as plain text: the song's SOURCE LINK, the page it was
+        // downloaded from (see Id3Tag.kt). Unlike songShare it sends no file, just the link. Only http(s) links go out.
+        // True when the sheet was asked for.
+        @JavascriptInterface
+        fun shareText(text: String): Boolean {
+            val link = text.trim()
+            if (link.length > 2000 || !(link.startsWith("https://") || link.startsWith("http://"))) return false
+            runOnUiThread {
+                try {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, link)
+                    }
+                    startActivity(Intent.createChooser(send, null))
+                } catch (e: Exception) {
+                    // no app can take text: nothing to open
+                }
+            }
+            return true
+        }
+
         // ---- Song options ("..." menu) ----------------------------------------------------------------
         // songEditSave / songEditReset change what the app SHOWS for a song (title, artist, album); the music
         // file is not touched (see SongEdits.kt). They return the song's new info as JSON, or null on failure.

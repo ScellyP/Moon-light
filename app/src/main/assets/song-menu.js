@@ -6,6 +6,7 @@
 
      Edit song info             -> title, artist, album
      Share song                 -> Android's share sheet with the song's file (mp3) for messaging apps, Bluetooth, Drive...
+     Share                      -> the song's link (the page it was downloaded from) in the share sheet, no file; only for songs that have one
      Like / Remove from Liked Songs
      Add to playlist            -> a playlist picker (and "New playlist")
      Move to another playlist   -> only when opened from inside a playlist
@@ -78,6 +79,20 @@
     toastNode.classList.add('show');
     if (toastTimer) root.clearTimeout(toastTimer);
     toastTimer = root.setTimeout(() => { toastNode.classList.remove('show'); }, 2200);
+  }
+
+  // Opens the phone's share sheet with the link. Outside the Android app: the browser's share, else copy to the clipboard.
+  function shareLink(link) {
+    const b = root.AndroidBridge;
+    try {
+      if (b && typeof b.shareText === 'function' && b.shareText(link)) return;
+    } catch (e) { /* fall through */ }
+    try {
+      const nav = root.navigator;
+      if (nav && nav.share) { nav.share({ text: link }); return; }
+      if (nav && nav.clipboard && nav.clipboard.writeText) { nav.clipboard.writeText(link); toast('Link copied'); return; }
+    } catch (e) { /* nothing more to try */ }
+    toast('Could not share this song');
   }
 
   /* ---- the sheet ----------------------------------------------------------------------------------- */
@@ -188,6 +203,10 @@
       if (!ok) toast('Could not share this song');
       close();
     }));
+
+    // Share: just the song's link (where it was downloaded from), no file. Only shown for songs that have one, and it
+    // simply says "Share".
+    if (track.source) list.appendChild(row('i-link', 'Share', () => { shareLink(track.source); close(); }));
 
     const liked = !!(a.isLiked && a.isLiked(track.id));
     list.appendChild(row('i-heart', liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', () => {
