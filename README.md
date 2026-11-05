@@ -110,7 +110,7 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 
 ## Installing
 
-1. In this repo, open Relases or click this to open relases [Relases](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`. (Or open **Actions**, pick the newest green run and download the `moonlight-release-apk` artifact.)(Not recommend as u will be experiencing features that are probably not finished and break randomly once I had a feature that made the app crash if u change volume it was hilarious.)
+1. In this repo, open Relases or click this to open [Relases](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`. (Or open **Actions**, pick the newest green run and download the `moonlight-release-apk` artifact.)(Not recommend as u will be experiencing features that are probably not finished and break randomly once I had a feature that made the app crash if u change volume it was hilarious.)
 2. Install it. Allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
 3. Put music in `Novel/Audio`, open the app, and tap **Scan the sky** on Home if it isn't picked up.
 
