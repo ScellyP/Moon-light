@@ -2,16 +2,19 @@
 
 A music player for Android with a Spotify-style interface and a moon-and-stars theme. Moonlight plays the music already stored on your phone, keeps playing in the background, and can even download songs from links and file them into playlists for you.
 
-It began as the music panel of the **Novel Reader** app and is now an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates.
+It began as the music panel of the **Novel Reader** app and is now an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates.This project is a learning project and uses ai for development and as a learning tool for more detail refer [AI Disclaimer](#ai-disclaimer).
 
 ---
 
 ## Table of contents
-
-- [Features](#features)
+- [Playback](#playback)
+- [Library and organisation](#library-and-organisation)
+- [Download songs](#download-songs)
+- [Look and feel](#look-and-feel)
+- [Search](#search)
+- [Settings menu](#settings-menu)
+- [Updates](#updates)
 - [Screens](#screens)
-- [Supported formats](#supported-formats)
-- [How your music is organised](#how-your-music-is-organised)
 - [Installing](#installing)
 - [Permissions](#permissions)
 - [Updating](#updating)
@@ -19,14 +22,9 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Building](#building)
-- [Setting up the repo](#setting-up-the-repo-once)
-- [Testing](#testing)
-- [Version numbering](#version-numbering)
 - [Known limitations](#known-limitations)
 
 ---
-
-## Features
 
 ### Playback
 - **Background playback**: music keeps playing with the screen off or the app closed (Media3 / ExoPlayer in a foreground service).
@@ -101,8 +99,6 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 
 ## Screens
 
-Swipe sideways or use the bottom bar to move between five tabs:
-
 | Tab | What it does |
 | --- | --- |
 | **Home** | Greeting, moon phase, quick tiles, Made for you, your Constellations, **Scan the sky**, and the **Settings** button (or swipe right) |
@@ -111,43 +107,11 @@ Swipe sideways or use the bottom bar to move between five tabs:
 | **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, volume, sleep timer |
 | **Download** | The paste-a-link song download wizard |
 
-The Back button closes dialogs and sheets first, then returns to Home, then leaves the app.
-
----
-
-## Supported formats
-
-`mp3`, `m4a` / `aac`, `flac`, `ogg`, `opus`, `wav`
-
----
-
-## How your music is organised
-
-Moonlight reads music from:
-
-```
-/storage/emulated/0/Novel/Audio
-```
-
-The folder is created on first launch. (The path is kept so a library you already built with Novel Reader keeps working.)
-
-**Playlists are just folders:**
-
-```text
-Novel/Audio/
-  Lo-fi Focus/2AM.mp3        -> playlist "Lo-fi Focus"
-  Lo-fi Focus/Rain.mp3       -> playlist "Lo-fi Focus"
-  Podcasts/Ep1/part1.mp3     -> playlist "Podcasts"
-  standalone-track.mp3       -> plays under "All songs", no playlist of its own
-```
-
-Only one level of grouping counts: a folder inside a playlist folder does not create a nested playlist.
-
 ---
 
 ## Installing
 
-1. In this repo, open Relases or click this to open relases [Relases](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`. (Or open **Actions**, pick the newest green run and download the `moonlight-release-apk` artifact.)(Not recommend as u will be experiencing features that are probably not finished and break randomly once I had a feature that made the app crash if u change volume it was hilarious.)
+1. In this repo, open Relases or click this to open [Relases](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`. (Or open **Actions**, pick the newest green run and download the `moonlight-release-apk` artifact.)(Not recommend as u will be experiencing features that are probably not finished and break randomly once I had a feature that made the app crash if u change volume it was hilarious.)
 2. Install it. Allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
 3. Put music in `Novel/Audio`, open the app, and tap **Scan the sky** on Home if it isn't picked up.
 
@@ -193,8 +157,7 @@ recents.txt     your recently played songs (newest first, up to 100), same detai
 
 All are plain text, one song per line, **tab separated** with a `#` comment header, so they open in any text editor or spreadsheet. The app rewrites `favorites.txt` and `recents.txt` whenever your liked or played songs change, and if the app's own copy is ever empty (a fresh install, cleared data) it **restores your favourites and recents from these files** on the first scan. `downloads.txt` is what powers the "already downloaded" warning.
 
-`settings.txt` can be edited while the app is closed. To move over from Novel Reader, copy its `audio.*` lines from `Novel/settings.txt` into it.
-
+`settings.txt` can be edited while the app is closed. 
 ---
 
 ## Tech stack
@@ -248,75 +211,13 @@ moonlight/
 ├── Agent.md                       Developer / AI-assistant notes
 └── README.md
 ```
-
-For design decisions, the audio feature framework and the structure change log, see [Agent.md](Agent.md).
-
----
-
-## Building
-
-Builds run on **GitHub Actions** (`.github/workflows/build-apk.yml`). A push builds when:
-
-1. you run the workflow by hand from the **Actions** tab, **or**
-2. a commit message contains a version number like `v1.00.01`.
-
-Example: `v1.00.01: fix crossfade`. Other commits are skipped, so no APK is built. A successful signed build publishes a GitHub Release with `moonlight-vX.Y.Z.apk`, which is what the in-app updater reads.
-
-### Signing
-
-Android only lets an APK update an installed app if both are signed with the **same key**. Add four secrets in **Settings → Secrets and variables → Actions**:
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-
-Without them the build falls back to the debug key and **publishes no Release**. Never commit a keystore.
-
----
-
-## Setting up the repo (once)
-
-1. Create the repo. The updater expects `Chirag-S-Reddy/Moonlight`; if you name it differently, change `OWNER_REPO` in `AppUpdater.kt`.
-2. Copy the *contents* of the `moonlight/` folder into the repo root and push. **Use `git add -A`.**
-3. Add the four signing secrets (see above).
-4. Push with a version number in the commit message, or run the workflow manually.
-
----
-
-## Testing
-
-Run each test from the project root:
-
-```bash
-node tests/<name>.test.js
-```
-
-The tests cover the audio player, startup and playlist playback, the Spotify-style tabs, home screen and covers, the song-download wizard, the updater, the page's bridge contract (`player-app.test.js`) and Kotlin pure-logic checks on the JVM (`tests/jvm/`). They cannot test real audio or the Android side.
-
----
-
-## Version numbering
-
-Format: `vMAJOR.MID.MINOR`, kept in one place: `APP_VERSION` in `app/src/main/assets/version.js`.
-
-| Part | Changes when |
-| --- | --- |
-| MAJOR | You decide |
-| MID | A new feature, or after 99 minor fixes (MINOR resets to `00`) |
-| MINOR | Each small bug fix |
-
-Failed or redone builds never change the version. This is separate from Android's `versionCode`, which follows the GitHub Actions run number.
-
 ---
 
 ## Known limitations
 
 - The playback-speed control and per-track resume-at-position were removed. Playback is always 1× and each track starts from 0.
-- The native crossfade, loudness boost and Bluetooth auto-start code were written without being run on a device, so test them on your phone.
-- The music folder is fixed at `Novel/Audio` (no folder picker yet).
-- Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed.
-- Some leftover CSS from the Novel Reader app is still in `index.html` (harmless).
+- The music folder is fixed at `Moonlight\Songs` this will not be changed any time in near the future .
+- Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed;This is done automatically when you update the app.
 
 ---
 
@@ -335,5 +236,20 @@ Moonlight stands on other people's work. Each project below keeps its own licenc
   [original project](https://github.com/yausername/youtubedl-android) by yausername it grew from. It bundles Python and
   [FFmpeg](https://ffmpeg.org) (mp3 conversion and cover art).
 
-**Typefaces**
-- [Lora](https://fonts.google.com/specimen/Lora), [Newsreader](https://fonts.google.com/spe
+ ## AI Disclaimer
+ 
+This project uses AI-assisted development tools. 
+
+**Tools**
+
+- Claude Code (Anthropic) · `claude-sonnet` · Agentic
+
+ ### Process
+
+ AI agent operated autonomously across multi-step tasks. Human reviewed diffs, resolved conflicts, and approved merges.
+
+ ### Accountability
+
+ The human author is solely responsible for the content, accuracy, and fitness-for-purpose of this project.
+
+ ---
