@@ -7,7 +7,13 @@ It began as the music panel of the **Novel Reader** app and is now an app of its
 ---
 
 ## Table of contents
-
+- [Playback](#playback)
+- [Library and organisation](#library-and-organisation)
+- [Download songs](#download-songs)
+- [Look and feel](#look-and-feel)
+- [Search](#search)
+- [Settings menu](#settings-menu)
+- [Updates](#updates)
 - [Screens](#screens)
 - [Installing](#installing)
 - [Permissions](#permissions)
