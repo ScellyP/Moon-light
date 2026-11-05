@@ -28,9 +28,9 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 
 ## Table of contents
 
+- [Installation](#-installation)
 - [Features](#-features)
 - [Screens](#-screens)
-- [Installation](#-installation)
 - [Permissions](#-permissions)
 - [Updating](#-updating)
 - [Your data](#-your-settings-and-song-lists)
@@ -44,6 +44,17 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - [Legal note](#-legal-note)
 - [AI disclosure](#-ai-disclosure)
 - [Credits](#-credits)
+
+---
+
+## 📦 Installation
+
+1. Go to [**Releases**](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`.
+   > Builds from the **Actions** tab are work-in-progress and can break in funny ways. Use Releases unless you want to test.
+2. Install it and allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
+3. Put your music in `Novel/Audio` (or `Moonlight/Songs`), open the app, and tap **Scan the sky** on Home if nothing shows up.
+
+**Requirements:** Android 7.0 (API 24) or newer. Builds target `arm64-v8a` and `armeabi-v7a` (real phones). For x86 emulators, change the ABI filter in `app/build.gradle`.
 
 ---
 
@@ -121,15 +132,6 @@ Swipe right on Home (or tap the gear) for a drawer with playback options (normal
 | <img src="docs/download.jpg" width="200"><br><br>**Download Tab** | • The paste-a-link song download wizard<br>• YouTube sign-in |
 
 ---
-
-## 📦 Installation
-
-1. Go to [**Releases**](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`.
-   > Builds from the **Actions** tab are work-in-progress and can break in funny ways. Use Releases unless you want to test.
-2. Install it and allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
-3. Put your music in `Novel/Audio` (or `Moonlight/Songs`), open the app, and tap **Scan the sky** on Home if nothing shows up.
-
-**Requirements:** Android 7.0 (API 24) or newer. Builds target `arm64-v8a` and `armeabi-v7a` (real phones). For x86 emulators, change the ABI filter in `app/build.gradle`.
 
 ## 🔐 Permissions
 
