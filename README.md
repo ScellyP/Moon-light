@@ -2,7 +2,7 @@
 
 A music player for Android with a Spotify-style interface and a moon-and-stars theme. Moonlight plays the music already stored on your phone, keeps playing in the background, and can even download songs from links and file them into playlists for you.
 
-It began as the music panel of the **Novel Reader** app and is now an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates.
+It began as the music panel of the **Novel Reader** app and is now an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates.This project is a learning project and uses ai for development and as a learning tool for more detail refer [AI Disclaimer](#ai-disclaimer).
 
 ---
 
@@ -249,6 +249,6 @@ This project uses AI-assisted development tools.
 
  ### Accountability
 
- The human author(s) are solely responsible for the content, accuracy, and fitness-for-purpose of this project.
+ The human author is solely responsible for the content, accuracy, and fitness-for-purpose of this project.
 
  ---
