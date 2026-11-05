@@ -1,255 +1,318 @@
+<div align="center">
+
 # 🌙 Moonlight
 
-A music player for Android with a Spotify-style interface and a moon-and-stars theme. Moonlight plays the music already stored on your phone, keeps playing in the background, and can even download songs from links and file them into playlists for you.
+**A Spotify-style offline music player for Android, with a moon-and-stars theme.**
 
-It began as the music panel of the **Novel Reader** app and is now an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates.This project is a learning project and uses ai for development and as a learning tool for more detail refer [AI Disclaimer](#ai-disclaimer).
+Plays the music already on your phone, keeps going in the background, and can download songs from links and file them into playlists for you.
+
+![Platform](https://img.shields.io/badge/platform-Android%207.0%2B-3DDC84?logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF?logo=kotlin&logoColor=white)
+![Media3](https://img.shields.io/badge/playback-Media3%20ExoPlayer-4285F4)
+![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
+![Status](https://img.shields.io/badge/status-learning%20project-orange)
+![Version](https://img.shields.io/badge/version-v1.13.00-blueviolet)
+
+[Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
+
+<img src="docs/home.jpg" width="23%" alt="Home"> <img src="docs/now-playing.jpg" width="23%" alt="Now playing"> <img src="docs/songs.jpg" width="23%" alt="Playlist"> <img src="docs/search.jpg" width="23%" alt="Search">
+
+</div>
 
 ---
+
+## About
+
+Moonlight began as the music panel of my **Novel Reader** app and grew into an app of its own, with its own package (`com.scell.moonlight`), signed APKs and in-app updates from GitHub Releases.
+
+It is a **learning project**. I built it to learn **JavaScript** (the whole UI is plain JS in a WebView) and to see how an app, a native host, background audio and CI/CD fit together. AI helped a lot along the way; exactly how, and which parts I wrote myself, is described in the [AI disclosure](#-ai-disclosure).
 
 ## Table of contents
-- [Playback](#playback)
-- [Library and organisation](#library-and-organisation)
-- [Download songs](#download-songs)
-- [Look and feel](#look-and-feel)
-- [Search](#search)
-- [Settings menu](#settings-menu)
-- [Updates](#updates)
-- [Screens](#screens)
-- [Installing](#installing)
-- [Permissions](#permissions)
-- [Updating](#updating)
-- [Your settings and song lists](#your-settings-and-song-lists)
-- [Tech stack](#tech-stack)
-- [Project structure](#project-structure)
-- [Building](#building)
-- [Known limitations](#known-limitations)
+
+- [Features](#-features)
+- [Screens](#-screens)
+- [Installation](#-installation)
+- [Permissions](#-permissions)
+- [Updating](#-updating)
+- [Your data](#-your-settings-and-song-lists)
+- [Tech stack](#-tech-stack)
+- [Architecture](#-architecture)
+- [Project structure](#-project-structure)
+- [Building from source](#-building-from-source)
+- [Testing](#-testing)
+- [Release process](#-release-process)
+- [Known limitations](#-known-limitations)
+- [Legal note](#-legal-note)
+- [AI disclosure](#-ai-disclosure)
+- [Credits](#-credits)
 
 ---
+
+## ✨ Features
 
 ### Playback
-- **Background playback**: music keeps playing with the screen off or the app closed (Media3 / ExoPlayer in a foreground service).
-- **Notification and lock-screen controls** with artwork, title/artist, play/pause, and next/previous.
-- **Bluetooth and headset buttons** work, and playback pauses when headphones or Bluetooth disconnect.
+- **Background playback** with the screen off or the app closed (Media3 / ExoPlayer in a foreground service).
+- **Notification and lock-screen controls** with artwork, title/artist, play/pause, next/previous.
+- **Bluetooth and headset buttons**; playback pauses when headphones or Bluetooth disconnect.
 - **Audio focus handling**: ducks or pauses for calls and other apps.
 - **Near-gapless playback**: the next track is pre-buffered while the current one plays.
-- **Crossfade**: overlap tracks by 1 to 12 seconds on an equal-power curve (loudness stays steady). Each track keeps its own volume level during the fade.
-- **Volume normalisation (ReplayGain)**: Off / Track / Album. Reads the ReplayGain tags already in your files (ID3v2, APEv2, FLAC/Vorbis/Opus comments, iTunes-style M4A atoms). Loud tracks are turned down; quiet ones are boosted by the background player, never past the point of clipping.
-- **A-B repeat**: loop a section of a song with the A / B buttons under the seek bar.
-- **Sleep timer**: stop after a set number of minutes or at the end of the current track, with a fade-out.
+- **Crossfade**: overlap tracks by 1–12 seconds on an equal-power curve, so loudness stays steady.
+- **Volume normalisation (ReplayGain)**: Off / Track / Album. Reads tags already in your files (ID3v2, APEv2, FLAC/Vorbis/Opus comments, iTunes-style M4A atoms) and never boosts past the point of clipping.
+- **A-B repeat** to loop a section of a song.
+- **Sleep timer**: stop after N minutes or at the end of the current track, with a fade-out.
 - **Unplayable files are skipped** instead of stalling the player.
-- **Muting the phone pauses the music** and it carries on when you turn the volume back up. While it waits like that, the app no longer closes itself after 10 minutes (it holds on for up to 3 hours).
-- **Remembers the last song**: on the next launch it is ready in the player (not started) from the beginning.
-- **Optional auto-start over Bluetooth**: when Bluetooth audio connects, Moonlight can start playing the current song by itself.
+- **Muting the phone pauses the music**, and it resumes when the volume comes back up.
+- **Remembers the last song** and has it ready (not started) on the next launch.
+- **Optional auto-start over Bluetooth.**
 
 ### Library and organisation
-- **Library scan** reads your folders and tags (title, artist, album, cover art). Tap **Scan the sky** on Home to rescan.
-- **Folder playlists**: every sub-folder inside your music folder becomes a playlist.
-- **Your own playlists**: create hand-picked playlists that aren't tied to a folder, and add songs to them from anywhere.
-- **Liked songs**: heart a song to add it to **Liked**.
-- **Recently played**: newest first, up to 100 songs.
-- **Visible queue** ("up next") with a playlist tag on each row when browsing All songs.
-- **Shuffle in rounds**: every song in the playlist plays once, in random order, before any song repeats. The app remembers which songs it already played (even after you close it), so reopening never starts on the same song again. With repeat **all**, a new random round starts when the old one ends, and it never opens with the song that just played. **Repeat** has three modes: off / all / one.
-- Shuffle, repeat and next/previous all stay inside the playlist you are playing.
-- **Share a song's link**: the **...** menu has a plain **Share** for songs downloaded in the app. It opens Android's share sheet with the link the song was downloaded from (no file is sent), so a friend can find it themselves.
-- **Share a song**: the **...** menu next to any song has **Share song**. It opens Android's share sheet with the song file itself (the mp3), so you can send it through WhatsApp, Telegram, Bluetooth, Drive, mail or any other app that accepts audio files. Only songs in your music folders can be shared, and the other app gets a read-only link to that one file.
+- **Library scan** reads folders and tags (title, artist, album, cover art). Tap **Scan the sky** on Home to rescan.
+- **Folder playlists**: every sub-folder becomes a playlist. You can also create **your own playlists**.
+- **Liked songs** and **Recently played** (newest first, up to 100).
+- **Visible "up next" queue.**
+- **Shuffle in rounds**: every song plays once, in random order, before any repeats, and the app remembers this even after you close it. **Repeat** has three modes: off / all / one.
+- **Song options menu** (the `⋮` next to any song): edit info, share, like, add to playlist, move/remove, add to queue, loop, delete.
+- **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
+- **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
+- **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) are merged after a scan. Extra copies are *moved* to `Moonlight/Duplicates`, never deleted, and it can be switched off in Settings.
+- **Share** a song's file (the mp3) through Android's share sheet, or just the link it was downloaded from.
+- **Delete** a song's file for good (after a confirmation), which is different from *Remove from this playlist*.
 
 ### Download songs
-- **Paste links** from your clipboard. Every web link found is queued as a song (up to 50 at a time).
-- A **bundled yt-dlp (with Python and ffmpeg)** downloads the best audio and converts it to MP3 with tags and cover art. No other app is needed.
-- A step-by-step wizard for each song: **download → name it → pick a playlist → place it**. While you name one song, the next one is already downloading in the background.
-- Choose an existing playlist, make a **New playlist**, or pick **No playlist**.
-- Failed downloads offer **Retry** and **Skip**.
-- Names are cleaned up automatically (file name and title tag stay in sync).
-- If yt-dlp breaks because a site changed, the app updates yt-dlp by itself after the first failure.
-- Leaving the tab before a song is placed cancels running downloads and deletes the staged files.
-- **It remembers what you downloaded.** Every saved song's link and the name it was saved under go into `downloads.txt` on the phone. Paste a link you downloaded before (even written another way, like `youtu.be/…` or `youtube.com/watch?v=…`) and the app says **Already downloaded**, shows the name, playlist and date, and whether the file is still on your phone. By default it skips them; flip **Again** on any you want anyway. A song whose file was deleted since is offered again automatically.
-- **Duplicate names are caught while you name a song.** Songs already on your phone (or downloaded before) with the same or a similar name are listed under the name box, ignoring capitals, punctuation and tags like "(Official Video)". If one has the same name you get a warning, and **Don't keep this song** deletes just that download.
-
-### Look and feel
-- **Spotify-style design**: mini player, "..." action sheet, album/playlist headers, 2×2 cover mosaics on playlist rows.
-- **Cover-art tint**: the panel takes its colours from the current cover.
-- **Moon theme**: stars, glows and a **live moon-phase badge** on Home that shows today's real phase.
-- **Home screen** with a time-based greeting (Good morning / afternoon / evening / night), quick tiles, a "Made for you" shelf (Your whole sky, Recently played, Liked) and your **Constellations** (folders and your own playlists).
-- **Animated equalizer** on the playlist that holds the current song.
-- Bundled fonts (Lora, Newsreader, Manrope, Atkinson) so the app looks the same offline.
-- **Smooth with big libraries**: indexed song look-ups, off-screen rows are skipped by the renderer, and entrance animations are limited to the first rows.
-- A custom launcher icon, status/navigation bar insets handled for edge-to-edge display.
+- Paste links from the clipboard (up to 50 at a time); each becomes a queued song.
+- A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
+- Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
+- **Remembers what you downloaded** and warns *Already downloaded* even if the link is written differently.
+- **Duplicate-name detection** while you name a song, ignoring capitals, punctuation and tags like "(Official Video)".
+- **Crop the cover**: choose which square of the video's thumbnail becomes the song's cover art.
+- **YouTube sign-in** (optional): the Download tab shows *YouTube: signed in / Sign out*. Signing in lets yt-dlp get past YouTube's "confirm you're not a bot" check. You type your password into Google's own page, and the cookies stay in the app's private storage. Google can refuse sign-in inside an app's web view; if so, put a `cookies.txt` exported from your browser in the `Moonlight` folder instead.
+- yt-dlp **updates itself** after a failed download, since sites change often.
 
 ### Search
-- A **Search** tab (second in the bottom bar) works like Spotify's. Results appear as you type: a **Top result**, then **Songs**, **Playlists** and **Artists**, with the letters you typed highlighted.
-- Every word you type must match somewhere in a song's **title, artist, album or playlist**. Capitals, accents and punctuation don't matter, a small typo is forgiven, and `lofi` finds `Lo-fi`.
-- Chips narrow it to **Songs**, **Playlists** or **Artists**. Tap a song to play it, tap the heart to like it, tap a playlist to open it, tap an artist to see their songs.
-- With nothing typed it shows your **recent searches** (tap to repeat, × to remove, Clear all) and a **Browse all** grid of your playlists.
+- Spotify-style **Search** tab with results as you type: top result, songs, playlists, artists.
+- Typo-tolerant and accent/punctuation-insensitive (`lofi` finds `Lo-fi`), with the matched letters highlighted.
+- Filter chips, recent searches, and a Browse-all grid.
+
+### Look and feel
+- Spotify-style mini player, action sheet, album/playlist headers and 2×2 cover mosaics.
+- **Cover-art tint**: the UI takes its colours from the current cover.
+- **Moon theme** with twinkling stars and a **live moon-phase badge** showing today's real phase.
+- Time-based greeting on Home, a "Made for you" shelf, and your **Constellations** (playlists).
+- Bundled fonts (Lora, Newsreader, Manrope, Atkinson) so it looks identical offline.
+- Optimised for large libraries (indexed lookups, off-screen rows skipped by the renderer).
 
 ### Settings menu
-- **Swipe right on Home** (or tap the gear button at the top right) and a **Settings** menu slides in from the left. It follows your finger, and a quick flick opens or closes it from any distance. Swipe left, tap the dark area, tap the X or press Back to close it.
-- **Playback:** volume normalisation (Off / Track / Album), crossfade length, and **Play when Bluetooth connects**.
-- **Appearance:** **Twinkling stars** (turn off for still stars, calmer and easier on the battery) and **Colours from the cover** (tint the screens from the song that's playing).
-- **Updates sit at the bottom:** the update bar (download / install progress), the **Update automatically** switch, the version number and a **Check for updates** button. A small dot on the gear button shows when there is an update to act on.
+Swipe right on Home (or tap the gear) for a drawer with playback options (normalisation, crossfade, Bluetooth auto-start), appearance options (twinkling stars, cover colours) and the update controls.
 
 ### Updates
-- The app checks this repo's **GitHub Releases** on start (at most every 6 hours) and downloads new versions on Wi-Fi only.
-- **It also updates while closed**: Android's JobScheduler wakes a background check about every 6 hours (Wi-Fi only, not when the battery is low, and again after a reboot). A newer version is downloaded and installed by itself. On Android 12+ this can happen with no screen at all; otherwise a **notification** appears and one tap installs it. No Firebase or server is needed.
-- The install waits while **music is playing** or a **song download** is running (it retries 30 minutes later), because an install restarts the app.
-- - When the app is open, the update bar appears at the bottom of the **Settings menu**; use **Check for updates** to check right now.
-- An **Update automatically** switch controls both the in-app and the background checking.
-- APK size and SHA-256 (when GitHub provides it) are verified before install, and Android always has the final say.
+- Checks this repo's **GitHub Releases** on start and in the background about every 6 hours (Wi-Fi only), with no Firebase or server needed.
+- Never installs while music is playing or a download is running.
+- APK size and SHA-256 are verified before install, and Android always has the final say.
 
 ---
 
-## Screens
+## 📱 Screens
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Greeting, moon phase, quick tiles, Made for you, your Constellations, **Scan the sky**, and the **Settings** button (or swipe right) |
-| **Search** | Search your songs, playlists and artists as you type; recent searches; Browse all |
+| **Home** | Greeting, moon phase, quick tiles, Made for you, Constellations, **Scan the sky**, Settings |
+| **Search** | Search songs, playlists and artists as you type; recent searches; Browse all |
 | **Songs** | The full library, playlists and the visible queue |
 | **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, volume, sleep timer |
-| **Download** | The paste-a-link song download wizard |
+| **Download** | The paste-a-link song download wizard, plus YouTube sign-in |
+
+<div align="center">
+<img src="docs/browse.jpg" width="23%" alt="Search: browse all"> <img src="docs/download.jpg" width="23%" alt="Download tab">
+</div>
 
 ---
 
-## Installing
+## 📦 Installation
 
-1. In this repo, open Relases or click this to open [Relases](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`. (Or open **Actions**, pick the newest green run and download the `moonlight-release-apk` artifact.)(Not recommend as u will be experiencing features that are probably not finished and break randomly once I had a feature that made the app crash if u change volume it was hilarious.)
-2. Install it. Allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
-3. Put music in `Novel/Audio`, open the app, and tap **Scan the sky** on Home if it isn't picked up.
+1. Go to [**Releases**](https://github.com/ScellyP/Moon-light/releases) and download `moonlight-vX.Y.Z.apk`.
+   > Builds from the **Actions** tab are work-in-progress and can break in funny ways. Use Releases unless you want to test.
+2. Install it and allow **All files access** (Android 11+) and **notifications** (Android 13+) when asked.
+3. Put your music in `Novel/Audio` (or `Moonlight/Songs`), open the app, and tap **Scan the sky** on Home if nothing shows up.
 
-**Requirements:** Android 7.0 (API 24) or newer. Builds target `arm64-v8a` and `armeabi-v7a` (real phones); x86 emulators need the ABI filter changed in `app/build.gradle`.
+**Requirements:** Android 7.0 (API 24) or newer. Builds target `arm64-v8a` and `armeabi-v7a` (real phones). For x86 emulators, change the ABI filter in `app/build.gradle`.
 
----
-
-## Permissions
+## 🔐 Permissions
 
 | Permission | Why |
 | --- | --- |
-| `READ_EXTERNAL_STORAGE` (Android 12 and older) / `MANAGE_EXTERNAL_STORAGE` | Read your music and create the folders |
+| `READ_EXTERNAL_STORAGE` (Android 12 and older) / `MANAGE_EXTERNAL_STORAGE` | Read your music and create the app folders |
 | `WRITE_EXTERNAL_STORAGE` (Android 10 and older) | Create the music folder where "all files access" doesn't exist |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Background playback |
-| `POST_NOTIFICATIONS` | Show the media notification (Android 13+) |
+| `POST_NOTIFICATIONS` | Media notification (Android 13+) |
 | `INTERNET` | Song downloads and update checks (nothing else uses the network) |
 | `ACCESS_NETWORK_STATE` | Skip automatic update downloads on mobile data |
 | `REQUEST_INSTALL_PACKAGES` | Install the updated APK |
 | `RECEIVE_BOOT_COMPLETED` | Keep the background update check scheduled after a reboot |
 
----
+## 🔄 Updating
 
-## Updating
+The app checks GitHub Releases when it starts and, in the background, about every 6 hours. If a newer version exists it downloads on Wi-Fi and offers **Install** at the bottom of the Settings menu. Android asks you to confirm, and the first time to allow *Install unknown apps* for Moonlight. Later updates can be silent on Android 12+. Turn off **Update automatically** to stop all background checking.
 
-From v1.00.00 the app checks GitHub Releases when it starts. If a newer version exists it downloads on Wi-Fi, and a bar at the bottom of the **Settings menu** offers **Install**. Android asks you to confirm, and the first time to allow *Install unknown apps* for Moonlight.
+Prefer Termux? `tools/update-moonlight.sh` downloads the newest release, verifies its checksum and installs it (root, Shizuku, or the normal Android installer). Options such as `--check` (only report the newest version) and `--force` are documented at the top of the script.
 
-From v1.01.00 the app also checks **in the background** about every 6 hours, even when it is closed, and installs the update by itself when Android allows it (otherwise it posts a notification; tap it to install). Android only lets an app skip the confirm screen for updates of an app it installed itself, so **the first update installed through Moonlight may ask once; later ones can be silent** (Android 12 and newer). Turn the **Update automatically** switch off to stop all background checking.
+## 🗂 Your settings and song lists
 
-The app never installs by itself while music is playing or a download is running.
-
----
-
-## Your settings and song lists
-
-Everything lives in one folder, `/storage/emulated/0/Moonlight/`. Copy it to a new phone and the app picks up where it left off.
+Everything lives in `/storage/emulated/0/Moonlight/`. Copy it to a new phone and the app picks up where it left off.
 
 ```
-settings.txt    your settings (audio.* lines)
-downloads.txt   every song downloaded from a link: date, saved name, playlist, link, file path
-favorites.txt   your liked songs: date liked, title, artist, album, playlist, length, file path
-recents.txt     your recently played songs (newest first, up to 100), same details
+Songs/              every song downloaded from now on (one shared folder)
+playlists/          one readable JSON file per playlist (plus a .bak of the last good copy)
+playlist-covers/    the cover pictures you chose for playlists
+Duplicates/         extra copies moved out of the way by the duplicate clean-up
+settings.txt        your settings (audio.* lines); editable while the app is closed
+downloads.txt       every song downloaded from a link: date, saved name, playlist, link, file path
+favorites.txt       liked songs: date, title, artist, album, playlist, length, file path
+recents.txt         recently played songs (newest first, up to 100)
+song-edits.json     your edits to song titles, artists and albums
+cookies.txt         (optional) your own browser cookies for yt-dlp
 ```
 
-All are plain text, one song per line, **tab separated** with a `#` comment header, so they open in any text editor or spreadsheet. The app rewrites `favorites.txt` and `recents.txt` whenever your liked or played songs change, and if the app's own copy is ever empty (a fresh install, cleared data) it **restores your favourites and recents from these files** on the first scan. `downloads.txt` is what powers the "already downloaded" warning.
+The `.txt` files are plain, tab-separated text with a `#` comment header, so they open in any editor or spreadsheet. If the app's own data is ever empty (fresh install, cleared data) it restores favourites and recents from them on the first scan. The old music folder (`Novel/Audio`) is still read and never modified.
 
-`settings.txt` can be edited while the app is closed. 
 ---
 
-## Tech stack
+## 🧰 Tech stack
 
 | Part | Technology |
 | --- | --- |
-| UI | HTML / CSS / JavaScript inside an Android **WebView** (served from `https://appassets.androidplatform.net/` via `WebViewAssetLoader`) |
-| Native host | **Kotlin**, Android SDK 34, minSdk 24 |
-| Playback | **Media3 ExoPlayer 1.4.1** + **media3-session** (MediaSession, notification, lock screen) |
-| Playback engines | WebView `<audio>` and native ExoPlayer, switching mid-song, inaudibly |
+| UI | HTML / CSS / JavaScript in an Android **WebView**, served from `https://appassets.androidplatform.net/` via `WebViewAssetLoader` |
+| Native host | **Kotlin**, compileSdk/targetSdk 34, minSdk 24 |
+| Playback | **Media3 ExoPlayer 1.4.1** + **media3-session** |
+| Playback engines | WebView `<audio>` and native ExoPlayer, switching mid-song inaudibly |
 | Downloads | **youtubedl-android 0.18.1** (yt-dlp + Python + ffmpeg) |
-| Build | Gradle, Java 17, **GitHub Actions** |
-| Minification | R8 shrinking (no obfuscation, so crash logs stay readable) |
+| Build / CI | Gradle (AGP 8.5), Java 17, **GitHub Actions** |
+| Shrinking | R8 (no obfuscation, so crash logs stay readable) |
+| Tests | Node (`tests/*.test.js`) and a small JVM test for ID3 handling |
 
----
-
-## Project structure
+## 🏗 Architecture
 
 ```
-moonlight/
+┌──────────────────────────── Android app ─────────────────────────────┐
+│                                                                      │
+│  WebView (UI)                         Kotlin (native)                │
+│  ├─ spotify-ui.js   tabs, mini player ├─ MainActivity   bridge, scan │
+│  ├─ audio-player.js queue, library    ├─ PlaybackService Media3 svc  │
+│  ├─ song-search.js  search            ├─ NativeCrossfade 2 players   │
+│  ├─ song-download.js wizard   ◄─────► ├─ SongDownloader  yt-dlp      │
+│  ├─ song-memory.js  txt files   JS    ├─ ReplayGainReader tags       │
+│  ├─ song-menu.js    ⋮ options   bridge ├─ SongLibrary / SongEdits     │
+│  └─ settings-menu.js drawer           └─ AppUpdater / BackgroundUpd. │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+The page talks to Kotlin through a single `AndroidBridge`. `tests/player-app.test.js` checks that the page and `MainActivity` agree on every bridge and callback name.
+
+## 📁 Project structure
+
+```
+Moon-light/
 ├── app/src/main/
-│   ├── java/com/scell/moonlight/
-│   │   ├── MainActivity.kt        WebView host, permissions, native bridge, library scan
-│   │   ├── PlaybackService.kt     ExoPlayer + MediaSession foreground service
-│   │   ├── NativeCrossfade.kt     Two-player crossfade
-│   │   ├── NativeAudioEffects.kt  Loudness boost for quiet tracks
-│   │   ├── ReplayGainReader.kt    Reads ReplayGain tags from files
-│   │   ├── SongDownloader.kt      yt-dlp / ffmpeg download jobs
-│   │   ├── SongNames.kt           Song and playlist name cleaning
-│   │   ├── Id3Title.kt            Writes ID3 title tags
-│   │   ├── AppUpdater.kt          In-app GitHub Releases updater
-│   │   └── BackgroundUpdater.kt   Background update check (JobScheduler) and install notification
-│   ├── assets/
-│   │   ├── index.html             The page and its styles
-│   │   ├── player-app.js          App glue: insets, tab swipe, back handling, dialogs
-│   │   ├── audio-player.js        Queue, engines, library, feature framework
-│   │   ├── spotify-ui.js          Home / Songs / Now playing / Download tabs
-│   │   ├── song-download.js       Download wizard
-│   │   ├── settings-menu.js       Settings drawer: swipe gesture and switches
-│   │   ├── song-search.js         Search tab: matching, ranking, results
-│   │   ├── song-memory.js         downloads.txt / favorites.txt / recents.txt, duplicate links and names
-│   │   ├── app-update.js          Update bar and switch
-│   │   ├── settings-file.js       Mirrors settings to settings.txt
-│   │   ├── moon-phase.js, moon-theme.js   Moon-phase badge and theme
-│   │   ├── version.js             APP_VERSION
-│   │   └── fonts/
-│   ├── res/                       Icons, colours, themes
+│   ├── java/com/scell/moonlight/   Kotlin: MainActivity, PlaybackService, SongDownloader, SongLibrary,
+│   │                               SongEdits, PlaylistCovers, YouTubeSignIn, updaters, tag readers
+│   ├── assets/                     The web UI: index.html, *.js (audio-player, spotify-ui, song-search,
+│   │                               song-download, song-menu, settings-menu, ...), fonts/
+│   ├── res/                        Icons, colours, themes
 │   └── AndroidManifest.xml
-├── tests/                         Node and JVM tests
-├── .github/workflows/build-apk.yml
-├── Agent.md                       Developer / AI-assistant notes
+├── docs/                           README screenshots
+├── tests/                          Node + JVM tests
+├── tools/update-moonlight.sh       Termux updater
+├── .github/workflows/build-apk.yml CI: build, sign, publish Release
+├── Agent.md                        Developer / AI-assistant notes and change log
 └── README.md
 ```
----
-
-## Known limitations
-
-- The playback-speed control and per-track resume-at-position were removed. Playback is always 1× and each track starts from 0.
-- The music folder is fixed at `Moonlight\Songs` this will not be changed any time in near the future .
-- Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed;This is done automatically when you update the app.
 
 ---
 
-## Credits
+## 🔨 Building from source
 
-Moonlight stands on other people's work. Each project below keeps its own licence.
+**Prerequisites:** JDK 17 and the Android SDK (platform 34, build-tools 34.0.0).
+
+```bash
+git clone https://github.com/ScellyP/Moon-light.git
+cd Moon-light
+./gradlew assembleDebug        # APK at app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease      # minified build
+```
+
+**Signing:** the key is **not** in the repo. CI reads four secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`). Without them the build falls back to Android's debug key. That APK installs fine, but it **cannot update** an app that was installed from a build signed with the real key.
+
+## ✅ Testing
+
+```bash
+for t in tests/*.test.js; do node "$t" || echo "FAILED: $t"; done
+```
+
+The tests cover playback and shuffle logic, search ranking, download memory and duplicate detection, song sharing, the settings drawer gesture, the update flow, and the page/native bridge contract.
+
+> Note: the Node tests exercise the web UI and the bridge contract; the Kotlin side is verified by CI builds and manual testing on a phone, and some recent native changes (such as sharing) have had limited device testing. Bug reports are welcome.
+
+## 🚀 Release process
+
+- A push to `main` **only builds if a commit message contains a version like `v1.04.05`**. Docs-only commits skip the build. A manual run from the Actions tab always builds.
+- The version lives in one place, `app/src/main/assets/version.js` (`vMAJOR.MID.MINOR`), and is bumped by hand.
+- CI signs the APK and publishes `moonlight-vX.Y.Z.apk` as a GitHub Release, which is what the in-app updater reads.
+
+See [`Agent.md`](Agent.md) for the full developer notes and structure change log.
+
+---
+
+## ⚠️ Known limitations
+
+- Playback speed control and per-track resume-at-position were removed. Playback is always 1×, and each track starts from 0.
+- The music folder is fixed (`Novel/Audio` and `Moonlight/Songs`); there is no folder picker yet.
+- YouTube sign-in uses the app's own web view, which Google sometimes refuses. A browser-exported `cookies.txt` is the fallback. Cookies don't renew by themselves, so sign in again when they expire.
+- Song edits are stored by file name + size, so renaming or replacing a file starts its edits fresh.
+- Downloads depend on yt-dlp working with the site. Sites change; the app updates yt-dlp automatically after a failure.
+
+## ⚖️ Legal note
+
+The download feature is a general-purpose front end for [yt-dlp](https://github.com/yt-dlp/yt-dlp). Downloading content may violate a website's terms of service or copyright law depending on where you live and what you download. **Only download content you have the right to.** This project does not host or distribute any media and is not affiliated with any streaming service.
+
+---
+
+## 🤖 AI disclosure
+
+This project was built **with heavy AI assistance**, and I'd rather say that plainly. It is also a project where I'm actively learning, so here is how the work really splits.
+
+| | |
+| --- | --- |
+| **Tools** | Claude (Anthropic), in chat for the JavaScript and as an agentic coding assistant (Claude Code) for larger tasks |
+| **JavaScript (the UI)** | This is the part I'm learning, and the part I work on myself. Most of it started from code I worked out with Claude. I read what Claude writes, **type it out by hand** instead of pasting, run it, and then add my own code in the same style. Typing it myself is how I get the language and the structure to stick |
+| **Kotlin (the native side)** | I don't write this. Playback service, downloader, updater, tag readers and the bridge were written by the AI. I can read them and test them on my phone, but I'm not claiming I wrote them |
+| **Documentation** | This README, `Agent.md` and the code comments are mainly written by the AI. I review them, but I did not write most of the text |
+| **What I did** | Chose what to build and how it should behave, reviewed diffs, typed out and extended the JS, tested on a real phone, approved merges, and decided what shipped |
+| **Why I'm sharing this** | It's a learning project. I use the AI as a tutor and pair-programmer to learn JavaScript, and to pick up Android, Media3, WebView bridging and GitHub Actions along the way |
+| **Accountability** | I am responsible for this project's content, accuracy and fitness for purpose |
+
+`Agent.md` contains the instructions the AI follows in this repo and a dated log of every structural change with the reason, so the development process is open to read.
+
+---
+
+## 🙏 Credits
+
+Moonlight stands on other people's work. Each project keeps its own licence.
 
 **Playback and Android**
-- [Media3 / ExoPlayer and Media3 Session](https://developer.android.com/media/media3): audio playback, the media notification and lock-screen controls.
-- [AndroidX](https://developer.android.com/jetpack/androidx): Activity, Core, DocumentFile and WebKit.
+- [Media3 / ExoPlayer and Media3 Session](https://developer.android.com/media/media3) for playback, the media notification and lock-screen controls
+- [AndroidX](https://developer.android.com/jetpack/androidx) (Activity, Core, DocumentFile, WebKit)
 
 **Song downloads**
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp): the downloader itself. The app keeps its copy on the
-  [nightly builds](https://github.com/yt-dlp/yt-dlp-nightly-builds) because YouTube changes faster than the stable releases.
-- [youtubedl-android](https://github.com/JunkFood02/youtubedl-android) by JunkFood02, which runs yt-dlp inside an Android app, and the
-  [original project](https://github.com/yausername/youtubedl-android) by yausername it grew from. It bundles Python and
-  [FFmpeg](https://ffmpeg.org) (mp3 conversion and cover art).
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp), kept on the [nightly builds](https://github.com/yt-dlp/yt-dlp-nightly-builds) because sites change faster than stable releases
+- [youtubedl-android](https://github.com/JunkFood02/youtubedl-android) by JunkFood02, and the [original project](https://github.com/yausername/youtubedl-android) by yausername, which bundle Python and [FFmpeg](https://ffmpeg.org)
 
- ## AI Disclaimer
- 
-This project uses AI-assisted development tools. 
+**Fonts:** Lora, Newsreader, Manrope, Atkinson
 
-**Tools**
+---
 
-- Claude Code (Anthropic) · `claude-sonnet` · Agentic
+<div align="center">
 
- ### Process
+Made by Chirag · If you like it, a ⭐ helps
 
- AI agent operated autonomously across multi-step tasks. Human reviewed diffs, resolved conflicts, and approved merges.
-
- ### Accountability
-
- The human author is solely responsible for the content, accuracy, and fitness-for-purpose of this project.
-
- ---
+</div>
