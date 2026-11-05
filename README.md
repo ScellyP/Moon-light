@@ -16,8 +16,6 @@ Plays the music already on your phone, keeps going in the background, and can do
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
-<img src="docs/home.jpg" width="23%" alt="Home"> <img src="docs/now-playing.jpg" width="23%" alt="Now playing"> <img src="docs/songs.jpg" width="23%" alt="Playlist"> <img src="docs/search.jpg" width="23%" alt="Search">
-
 </div>
 
 ---
@@ -116,15 +114,11 @@ Swipe right on Home (or tap the gear) for a drawer with playback options (normal
 
 | Tab | What it does |
 | --- | --- |
-| **Home** | Greeting, moon phase, quick tiles, Made for you, Constellations, **Scan the sky**, Settings |
-| **Search** | Search songs, playlists and artists as you type; recent searches; Browse all |
-| **Songs** | The full library, playlists and the visible queue |
-| **Now playing** | Artwork, seek bar, like, shuffle/repeat, A-B repeat, volume, sleep timer |
-| **Download** | The paste-a-link song download wizard, plus YouTube sign-in |
-
-<div align="center">
-<img src="docs/browse.jpg" width="23%" alt="Search: browse all"> <img src="docs/download.jpg" width="23%" alt="Download tab">
-</div>
+| <img src="docs/home.jpg" width="200"><br><br>**Home Tab** | • Greeting<br>• Current moon phase<br>• Quick tiles<br>• Made for you<br>• Playlists<br>• Scan for songs<br>• Settings |
+| <img src="docs/browse.jpg" width="200"><br><br>**Search Tab** | • Search songs, playlists and artists as you type<br>• Recent searches<br>• Browse all |
+| <img src="docs/songs.jpg" width="200"><br><br>**Songs Tab** | • The full library<br>• Playlists<br>• The visible queue |
+| <img src="docs/now-playing.jpg" width="200"><br><br>**Now playing Tab** | • Artwork<br>• Seek bar<br>• Like<br>• Shuffle/repeat<br>• A-B repeat<br>• Volume<br>• Sleep timer |
+| <img src="docs/download.jpg" width="200"><br><br>**Download Tab** | • The paste-a-link song download wizard<br>• YouTube sign-in |
 
 ---
 
@@ -265,9 +259,8 @@ See [`Agent.md`](Agent.md) for the full developer notes and structure change log
 
 ## ⚠️ Known limitations
 
-- Playback speed control and per-track resume-at-position were removed. Playback is always 1×, and each track starts from 0.
+- Playback speed control and per-track resume-at-position were removed. Playback is always 1×, and each track starts from 0. This is how it will be in all future versions and will not be updated.
 - The music folder is fixed (`Novel/Audio` and `Moonlight/Songs`); there is no folder picker yet.
-- YouTube sign-in uses the app's own web view, which Google sometimes refuses. A browser-exported `cookies.txt` is the fallback. Cookies don't renew by themselves, so sign in again when they expire.
 - Song edits are stored by file name + size, so renaming or replacing a file starts its edits fresh.
 - Downloads depend on yt-dlp working with the site. Sites change; the app updates yt-dlp automatically after a failure.
 
@@ -279,7 +272,7 @@ The download feature is a general-purpose front end for [yt-dlp](https://github.
 
 ## 🤖 AI disclosure
 
-This project was built **with heavy AI assistance**, and I'd rather say that plainly. It is also a project where I'm actively learning, so here is how the work really splits.
+This project was built **with AI assistance**. It is also a project where I'm actively learning, so here is how the work really splits.
 
 | | |
 | --- | --- |
