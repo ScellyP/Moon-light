@@ -156,8 +156,7 @@ recents.txt     your recently played songs (newest first, up to 100), same detai
 
 All are plain text, one song per line, **tab separated** with a `#` comment header, so they open in any text editor or spreadsheet. The app rewrites `favorites.txt` and `recents.txt` whenever your liked or played songs change, and if the app's own copy is ever empty (a fresh install, cleared data) it **restores your favourites and recents from these files** on the first scan. `downloads.txt` is what powers the "already downloaded" warning.
 
-`settings.txt` can be edited while the app is closed. To move over from Novel Reader, copy its `audio.*` lines from `Novel/settings.txt` into it.
-
+`settings.txt` can be edited while the app is closed. 
 ---
 
 ## Tech stack
@@ -216,8 +215,8 @@ moonlight/
 ## Known limitations
 
 - The playback-speed control and per-track resume-at-position were removed. Playback is always 1× and each track starts from 0.
-- The music folder is fixed at `Moonlight\Songs` (no folder picker yet).
-- Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed.
+- The music folder is fixed at `Moonlight\Songs` this will not be changed any time in near the future .
+- Downloads depend on yt-dlp working with the site; sites change, and updates to yt-dlp may be needed;This is done automatically when you update the app.
 
 ---
 
@@ -236,5 +235,20 @@ Moonlight stands on other people's work. Each project below keeps its own licenc
   [original project](https://github.com/yausername/youtubedl-android) by yausername it grew from. It bundles Python and
   [FFmpeg](https://ffmpeg.org) (mp3 conversion and cover art).
 
-**Typefaces**
-- [Lora](https://fonts.google.com/specimen/Lora), [Newsreader](https://fonts.google.com/spe
+ ## AI Disclaimer
+ 
+This project uses AI-assisted development tools. 
+
+**Tools**
+
+- Claude Code (Anthropic) · `claude-sonnet` · Agentic
+
+ ### Process
+
+ AI agent operated autonomously across multi-step tasks. Human reviewed diffs, resolved conflicts, and approved merges.
+
+ ### Accountability
+
+ The human author(s) are solely responsible for the content, accuracy, and fitness-for-purpose of this project.
+
+ ---
