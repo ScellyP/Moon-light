@@ -3367,16 +3367,16 @@ mark.srch-hit { background: none; color: inherit; font-weight: 800; }
 .srch-recent-ico { width: 36px; display: inline-flex; justify-content: center; color: var(--faint); }
 .srch-recent .srch-title { flex: 1; }
 .srch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.srch-tile, .srch-cat {
+.srch-tile {
   --tile: color-mix(in srgb, var(--accent) 45%, var(--bg));
   position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 6px; min-height: 92px; padding: 12px; overflow: hidden; border: 0; border-radius: 8px; text-align: left; cursor: pointer; font: inherit; color: var(--text);
   background: var(--tile); content-visibility: auto; contain-intrinsic-size: auto 92px;
 }
-.srch-tile[data-tone="1"], .srch-cat[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
-.srch-tile[data-tone="2"], .srch-cat[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
-.srch-tile[data-tone="3"], .srch-cat[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
-.srch-tile[data-tone="4"], .srch-cat[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
-.srch-tile[data-tone="5"], .srch-cat[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
+.srch-tile[data-tone="1"] { --tile: color-mix(in srgb, var(--accent) 30%, #3a2a5a); }
+.srch-tile[data-tone="2"] { --tile: color-mix(in srgb, var(--accent) 28%, #1f4a52); }
+.srch-tile[data-tone="3"] { --tile: color-mix(in srgb, var(--accent) 34%, #5a2f46); }
+.srch-tile[data-tone="4"] { --tile: color-mix(in srgb, var(--accent) 26%, #2e3f66); }
+.srch-tile[data-tone="5"] { --tile: color-mix(in srgb, var(--accent) 30%, #4d4a2c); }
 .srch-tile[data-sp-cover]::after { content: ""; position: absolute; right: -14px; bottom: -10px; width: 62px; height: 62px; border-radius: 4px; transform: rotate(25deg); background: var(--sp-cover) center / cover; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
 .srch-tile-name { font-size: 15px; font-weight: 700; line-height: 1.2; max-width: 80%; overflow-wrap: anywhere; z-index: 1; }
 .srch-tile-sub { font-size: 12px; color: color-mix(in srgb, var(--text) 78%, transparent); z-index: 1; }

@@ -3,9 +3,8 @@
 
    Type in the box and the results appear as you type: a "Top result", then Songs, Playlists and
    Artists, with the letters you typed highlighted. Filter chips (All / Songs / Playlists / Artists)
-   narrow it down. With nothing typed it shows your recent searches, category tiles made from your own
-   library (Artists, Albums, Genres, Liked songs, All songs), a "From your library" rail and a "Browse all"
-   grid of your playlists.
+   narrow it down. With nothing typed it shows your recent searches, a "Browse all" grid of your
+   playlists and, under it, a "From your library" rail of your biggest albums and genres.
 
    The matching works on every word you type: a song must match ALL of them, in its title, any credited
    artist (also the ones only in the "artist; artist" tag and the album artist), album, genre or playlist name (accents and capitals do not matter; a small typo is forgiven). Matches at
@@ -710,24 +709,6 @@
     if (list.length > BROWSE_SONGS_MAX) body.appendChild(el('p', 'srch-empty', 'Showing the first ' + BROWSE_SONGS_MAX + '. Type in the search box to find the rest.'));
   }
 
-  // Tiles made from your own library: only the categories that have something in them.
-  function categoryTiles() {
-    const a = audio();
-    const idx = currentIndex();
-    const col = collections(idx);
-    const likedIds = new Set(a && a.getLikedIds ? a.getLikedIds() : []);
-    const liked = tracks().filter((t) => likedIds.has(t.id)).length;
-    const artists = allArtists(idx).length;
-    const total = tracks().length;
-    return [
-      { kind: 'artists', title: 'Artists', sub: artists + (artists === 1 ? ' artist' : ' artists'), n: artists },
-      { kind: 'albums', title: 'Albums', sub: col.albums.length + (col.albums.length === 1 ? ' album' : ' albums'), n: col.albums.length },
-      { kind: 'genres', title: 'Genres', sub: col.genres.length + (col.genres.length === 1 ? ' genre' : ' genres'), n: col.genres.length },
-      { kind: 'liked', title: 'Liked Songs', sub: songsText(liked), n: liked },
-      { kind: 'songs', title: 'All songs', sub: songsText(total), n: total },
-    ].filter((t) => t.n > 0);
-  }
-
   // "From your library": your biggest albums and genres as cards (nothing here comes from outside the phone).
   function discoverRail() {
     const idx = currentIndex();
@@ -796,25 +777,6 @@
       body.appendChild(s);
     }
 
-    const cats = categoryTiles();
-    if (cats.length) {
-      const s = section('Browse your library');
-      const grid = el('div', 'srch-grid');
-      cats.forEach((c, i) => {
-        const tile = el('button', 'srch-cat');                // like a playlist tile, but a category of the library
-        tile.type = 'button';
-        tile.setAttribute('data-tone', String((i + 1) % 6));
-        tile.appendChild(el('span', 'srch-tile-name', c.title));
-        tile.appendChild(el('span', 'srch-tile-sub', c.sub));
-        tile.addEventListener('click', () => { browse = { kind: c.kind }; run(); });
-        grid.appendChild(tile);
-      });
-      s.appendChild(grid);
-      body.appendChild(s);
-      const rail = discoverRail();
-      if (rail) body.appendChild(rail);
-    }
-
     const rows = playlistRows();
     if (rows.length) {
       const s = section('Browse all');
@@ -833,7 +795,13 @@
       });
       s.appendChild(grid);
       body.appendChild(s);
-    } else if (!recent.length) {
+    }
+
+    // "From your library" comes after the playlists: your biggest albums and genres as cards.
+    const rail = discoverRail();
+    if (rail) body.appendChild(rail);
+
+    if (!recent.length && !rows.length && !rail) {
       body.appendChild(el('p', 'srch-empty', 'Search your songs, artists and playlists. Add some music first, then tap Scan the sky on Home.'));
     }
   }
