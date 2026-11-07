@@ -69,7 +69,7 @@ function makePage(extra) {
     return e;
   }
   const ids = ['settings-layer', 'settings-drawer', 'settings-scrim', 'settings-btn', 'settings-close', 'audio-panel',
-    'sp-view-library', 'set-bt', 'set-sky', 'set-tint'];
+    'sp-view-library', 'set-bt', 'set-sky', 'set-tint', 'yt-account-row', 'yt-account-status', 'yt-account-btn'];
   const els = {}; ids.forEach(i => { els[i] = el(i); });
   els['audio-panel'].attrs['data-view'] = 'library';
   els['settings-drawer'].attrs.inert = '';
@@ -365,6 +365,46 @@ check('the settings group is small enough for settings.txt (features blob limit 
   const t = launch({ saved: null, bluetooth: false });
   t.app.setSetting('coverTint', false);   // forces a save
   assert.ok(JSON.stringify(t.savedPrefs().features.appSettings).length < 200);
+});
+
+/* ------------------------------------------------------------------ the YouTube account row (moved here from the Download tab) */
+check('the YouTube sign-in lives in the Settings drawer, no longer in the Download tab', () => {
+  const drawer = HTML.slice(HTML.indexOf('id="settings-drawer"'));
+  assert.ok(drawer.indexOf('id="yt-account-row"') !== -1 && drawer.indexOf('id="yt-account-btn"') !== -1, 'the row is in the drawer');
+  assert.ok(!/buildYouTubeLine|ytNote/.test(fs.readFileSync(path.join(ASSETS, 'song-download.js'), 'utf8')), 'the Download tab no longer builds the line');
+  assert.ok(/Open Settings/.test(fs.readFileSync(path.join(ASSETS, 'song-download.js'), 'utf8')), 'a bot-check failure points to Settings');
+});
+
+check('the YouTube row is hidden outside the Android app', () => {
+  const p = makePage();
+  assert.ok(p.els['yt-account-row'].hidden !== false && p.els['yt-account-row'].hidden !== undefined, 'no bridge, no row');
+});
+
+check('the YouTube row shows the state and signs in / out through the app', () => {
+  const state = { status: 'signed-out', calls: [] };
+  const bridge = {
+    youtubeSignInStatus: () => state.status,
+    youtubeSignIn: () => state.calls.push('in'),
+    youtubeSignOut: () => { state.calls.push('out'); state.status = 'signed-out'; return true; },
+  };
+  const p = makePage({ AndroidBridge: bridge });
+  const row = p.els['yt-account-row'], text = p.els['yt-account-status'], btn = p.els['yt-account-btn'];
+  assert.strictEqual(row.hidden, false);
+  assert.strictEqual(text.textContent, 'Not signed in');
+  assert.strictEqual(btn.textContent, 'Sign in');
+  btn.listeners.click.forEach(f => f());
+  assert.deepStrictEqual(state.calls, ['in'], 'Sign in opens the sign-in page');
+  state.status = 'signed-in';
+  p.sandbox.onYouTubeSignIn('signed-in', 'Signed in to YouTube.');            // the app reports back
+  assert.strictEqual(text.textContent, 'Signed in');
+  assert.strictEqual(btn.textContent, 'Sign out');
+  btn.listeners.click.forEach(f => f());
+  assert.deepStrictEqual(state.calls, ['in', 'out']);
+  assert.strictEqual(text.textContent, 'Not signed in');
+  // opening the drawer refreshes it (the state may have changed meanwhile)
+  state.status = 'signed-in';
+  p.sandbox.SettingsMenu.open();
+  assert.strictEqual(text.textContent, 'Signed in');
 });
 
 console.log(n + ' checks passed');

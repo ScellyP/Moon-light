@@ -154,7 +154,7 @@
     }, ms + 40);
   }
 
-  function open() { if (progress < 1 || !settled) settleTo(1, 0); }
+  function open() { refreshYouTube(); if (progress < 1 || !settled) settleTo(1, 0); }
   function close() { if (progress > 0 || layer.classList.contains('is-open')) { settled = false; settleTo(0, 0); } }
   function isOpen() { return layer.classList.contains('is-open') && progress > 0; }
 
@@ -264,6 +264,49 @@
   bindSwitch('set-tint', 'coverTint', function () {
     if (root.SpotifyUI && root.SpotifyUI.refreshTint) root.SpotifyUI.refreshTint();
   });
+
+  /* ---- YouTube sign-in (it used to sit in the Download tab) ----
+       The native side (YouTubeSignIn.kt) opens Google's own sign-in page and keeps the login cookies private on the
+       phone; downloads use them when YouTube asks "Sign in to confirm you're not a bot".
+         AndroidBridge.youtubeSignInStatus()  "signed-in" | "signed-out"
+         AndroidBridge.youtubeSignIn() / youtubeSignOut()
+         native -> window.onYouTubeSignIn(status, message)
+       The row stays hidden outside the Android app (no bridge). */
+  var ytRow = document.getElementById('yt-account-row');
+  var ytText = document.getElementById('yt-account-status');
+  var ytBtn = document.getElementById('yt-account-btn');
+  function ytBridge() { return root.AndroidBridge || null; }
+  function ytStatus() {
+    try {
+      var b = ytBridge();
+      return b && typeof b.youtubeSignInStatus === 'function' ? String(b.youtubeSignInStatus()) : '';
+    } catch (e) { return ''; }
+  }
+  function refreshYouTube() {
+    if (!ytRow || !ytText || !ytBtn) return;
+    var status = ytStatus();
+    ytRow.hidden = !status;
+    if (!status) return;
+    var signedIn = status === 'signed-in';
+    ytText.textContent = signedIn ? 'Signed in' : 'Not signed in';
+    ytBtn.textContent = signedIn ? 'Sign out' : 'Sign in';
+    ytBtn.setAttribute('data-signed-in', signedIn ? '1' : '0');
+  }
+  if (ytBtn) {
+    ytBtn.addEventListener('click', function () {
+      var b = ytBridge();
+      if (!b) return;
+      try {
+        if (ytBtn.getAttribute('data-signed-in') === '1') { b.youtubeSignOut(); refreshYouTube(); }
+        else b.youtubeSignIn();                          // the answer comes back through onYouTubeSignIn
+      } catch (e) { /* no bridge: nothing to do */ }
+    });
+  }
+  root.onYouTubeSignIn = function (status, message) {
+    refreshYouTube();
+    if (message && root.SongMenu && root.SongMenu.toast) root.SongMenu.toast(message);
+  };
+  refreshYouTube();
 
   setProgress(0);
   root.SettingsMenu = { open: open, close: close, isOpen: isOpen };

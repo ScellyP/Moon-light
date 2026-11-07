@@ -2673,10 +2673,6 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   .dl-secondary:hover { transform: scale(1.04); border-color: var(--text); }
 }
 .dl-big { width: min(100%, 320px); height: 56px; font-size: 16px; }
-/* YouTube sign-in line (Download tab) */
-.dl-yt-wrap { display: flex; flex-direction: column; align-items: center; }
-.dl-yt { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 22px; font: 400 13px/1.4 var(--font-ui); color: var(--sp-sub); }
-.dl-yt-btn { height: 34px; padding: 0 16px; font-size: 13px; }
 .dl-row { display: flex; gap: 12px; justify-content: center; margin-top: 22px; }
 .dl-row-end { justify-content: flex-end; align-self: stretch; }
 
@@ -3289,6 +3285,10 @@ html, body { overflow: hidden; }
 .sd-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 52px; padding: 6px 0; cursor: pointer; font-size: 14.5px; color: var(--text); -webkit-user-select: none; user-select: none; }
 .sd-switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sd-switch small { font-size: 12px; line-height: 1.35; color: var(--faint); }
+.sd-account { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 52px; padding: 6px 0; font-size: 14.5px; color: var(--text); }
+.sd-account[hidden] { display: none; }
+.sd-account small { font-size: 12px; line-height: 1.35; color: var(--faint); }
+.sd-account .sd-btn { flex: none; }
 .sd-switch input[type="checkbox"] {
   -webkit-appearance: none; appearance: none; flex-shrink: 0; margin: 0;
   width: 46px; height: 28px; border-radius: var(--r-pill); position: relative; cursor: pointer;
@@ -3786,6 +3786,14 @@ body.settings-open #srch-input { pointer-events: none; }
           <span class="sd-switch-text">Play when Bluetooth connects<small>Starts the music when you open the app with headphones, a speaker or a car connected.</small></span>
           <input type="checkbox" id="set-bt" checked>
         </label>
+      </section>
+
+      <section class="sd-group" aria-labelledby="sd-downloads">
+        <h3 class="sd-title" id="sd-downloads">Downloads</h3>
+        <div class="sd-account" id="yt-account-row" hidden>
+          <span class="sd-switch-text">YouTube<small id="yt-account-status">Not signed in</small><small>Sign in once if YouTube says “Sign in to confirm you’re not a bot”. The login stays on this phone.</small></span>
+          <button type="button" id="yt-account-btn" class="sd-btn">Sign in</button>
+        </div>
       </section>
 
       <section class="sd-group" aria-labelledby="sd-look">

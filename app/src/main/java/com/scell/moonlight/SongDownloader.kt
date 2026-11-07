@@ -348,10 +348,10 @@ class SongDownloader(
         val usedCookies = YouTubeSignIn.cookieFile(activity.filesDir).isFile || File(COOKIES_FILE).isFile
         return if (usedCookies) {
             "YouTube still says \u201cSign in to confirm you\u2019re not a bot\u201d even with your sign-in. " +
-                "It may have expired: sign out and sign in to YouTube again, or try another network (VPN off), then retry."
+                "It may have expired: open Settings, sign out of YouTube and sign in again, or try another network (VPN off), then retry."
         } else {
             "YouTube says \u201cSign in to confirm you\u2019re not a bot\u201d and refused this download. " +
-                "Tap \u201cSign in\u201d below to sign in to YouTube once, or try another network (switch Wi\u2011Fi / mobile data, VPN off), then retry."
+                "Open Settings and sign in to YouTube once, or try another network (switch Wi\u2011Fi / mobile data, VPN off), then retry."
         }
     }
 
