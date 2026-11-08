@@ -305,11 +305,23 @@ window.NovelAudio = (function () {
     getPlaylists() {
       const names = new Set();
       state.tracks.forEach(t => { this._namesOf(t).forEach(n => names.add(n)); });
+      // A playlist made in the app has a file from the start, so it is listed while it is still empty.
+      this.playlistFiles().forEach(m => { if (m && m.source === 'user' && m.name) names.add(m.name); });
       return Array.from(names).sort((a, b) => a.localeCompare(b));
     },
 
+    // The songs of a playlist in the order SAVED in its file (ordered song references). Songs that belong to it
+    // only by folder (not listed in the file) follow after those, in library order. No file: library order.
     tracksInPlaylist(name) {
-      return state.tracks.filter(t => this._namesOf(t).indexOf(name) !== -1);
+      const mine = state.tracks.filter(t => this._namesOf(t).indexOf(name) !== -1);
+      const rec = this.playlistRecord(name);
+      if (!rec || !Array.isArray(rec.songs) || !rec.songs.length) return mine;
+      const pos = new Map();
+      rec.songs.forEach((s, i) => { if (s && s.ref && !pos.has(s.ref)) pos.set(s.ref, i); });
+      const listed = [], rest = [];
+      mine.forEach(t => { (t.ref && pos.has(t.ref) ? listed : rest).push(t); });
+      listed.sort((a, b) => pos.get(a.ref) - pos.get(b.ref));
+      return listed.concat(rest);
     },
 
     /* ---- Search over the local song records ---------------------------------
@@ -543,10 +555,29 @@ window.NovelAudio = (function () {
     playlistFiles() {
       const b = window.AndroidBridge;
       if (!b || !b.listPlaylists) return [];
+      // Read once per library state: the page asks for it for every playlist count and row. A scan (new
+      // tracks array) or any playlist change (infoRev) makes it read again.
+      const c = this._pf;
+      if (c && c.tracks === state.tracks && c.rev === this.infoRev && !c.dirty) return c.list;
+      let list = [];
       try {
-        const list = JSON.parse(b.listPlaylists() || '[]');
-        return Array.isArray(list) ? list : [];
-      } catch (e) { return []; }
+        list = JSON.parse(b.listPlaylists() || '[]');
+        if (!Array.isArray(list)) list = [];
+      } catch (e) { list = []; }
+      this._pf = { tracks: state.tracks, rev: this.infoRev, list: list, dirty: false };
+      return list;
+    },
+    _pf: null,
+    playlistFilesChanged() { if (this._pf) this._pf.dirty = true; },
+
+    // The playlist FILE called `name` (never a hand-picked copy), or null: folder playlists have one too.
+    playlistRecord(name) {
+      const list = this.playlistFiles();
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        if (m && m.source !== 'curated' && m.name === name) return m;
+      }
+      return null;
     },
 
     /* ---- Songs moved into Moonlight/Songs ---------------------------------------------------------
@@ -2078,6 +2109,24 @@ window.NovelAudio = (function () {
     id: 'customPlaylists', label: 'Curated playlists', status: 'working',
     defaults: { lists: [], nextId: 1 },
     list() { return state.features.customPlaylists.lists.map(p => ({ id: p.id, name: p.name, count: p.ids.length })); },
+    info(id) { const p = this._find(id); return p ? { id: p.id, name: p.name, description: p.description || '', ids: p.ids.slice() } : null; },
+    // Rename / description (kept short: the whole features block has an 8192-character limit).
+    update(id, patch) {
+      const p = this._find(id);
+      if (!p) return false;
+      if (typeof patch.name === 'string') p.name = patch.name;
+      if (typeof patch.description === 'string') { if (patch.description) p.description = patch.description; else delete p.description; }
+      Prefs.save(); return true;
+    },
+    // Moves one song a place up (-1) or down (+1) in this list's own order.
+    move(id, trackId, delta) {
+      const p = this._find(id);
+      if (!p) return false;
+      const i = p.ids.indexOf(trackId), j = i + (delta < 0 ? -1 : 1);
+      if (i < 0 || j < 0 || j >= p.ids.length) return false;
+      const t = p.ids[i]; p.ids[i] = p.ids[j]; p.ids[j] = t;
+      Prefs.save(); return true;
+    },
     getIds(id) { const p = this._find(id); return p ? p.ids.slice() : null; },
     _find(id) { return state.features.customPlaylists.lists.find(p => String(p.id) === String(id)) || null; },
     create(name, ids) {
@@ -2739,12 +2788,21 @@ window.NovelAudio = (function () {
       const name = els.newInput.value.trim();
       if (!name) { els.newInput.focus(); return; }
       const addCurrent = AudioUI._newListAddsCurrent && state.currentTrackId;
-      const id = AudioFeatures.customPlaylists.create(name, addCurrent ? [state.currentTrackId] : []);
+      const api = window.NovelAudio;
+      const made = api && api.createPlaylist ? api.createPlaylist(name, '') : { ok: false, error: 'save' };
+      if (!made.ok) {
+        AudioUI.setNote(made.error === 'taken' ? 'A playlist called \u201c' + name.slice(0, 60) + '\u201d already exists.' : 'Could not create the playlist.');
+        els.newInput.focus();
+        return;
+      }
       els.newRow.classList.add('hidden');
       els.newInput.blur();
-      if (id === null) return;
-      if (addCurrent) AudioUI.setNote('Added to \u201c' + name.slice(0, 60) + '\u201d.');
-      else AudioUI.selectPlaylist('@list:' + id);
+      if (addCurrent) {
+        api.addSongToPlaylist(made.key, state.currentTrackId);
+        AudioUI.setNote('Added to \u201c' + name.slice(0, 60) + '\u201d.');
+      } else {
+        AudioUI.selectPlaylist(made.key.indexOf('list:') === 0 ? '@list:' + made.key.slice(5) : made.name);
+      }
       AudioUI._updatePlaylistSelectionUI();
     },
 
@@ -3049,12 +3107,189 @@ window.NovelAudio = (function () {
       return keys;
     },
 
+    /* ---- Playlist records: info, create, edit, reorder, delete -------------------------------------------
+       A playlist is addressed by its key: 'name:<name>' (a playlist FILE: made in the app, or following an old
+       folder) or 'list:<id>' (an older hand-picked list kept in the prefs). Nothing here moves or deletes a
+       music file: only the record (name, description, ordered song references) changes. */
+    _keyName(key) {
+      if (typeof key !== 'string') return '';
+      return key.indexOf('list:') === 0 ? '@list:' + key.slice(5) : key.indexOf('name:') === 0 ? key.slice(5) : '';
+    },
+
+    _nameTaken(name, exceptKey) {
+      const k = MediaLibrary.normalize(name);
+      const taken = [];
+      AudioFeatures.customPlaylists.list().forEach(p => taken.push({ key: 'list:' + p.id, name: p.name }));
+      MediaLibrary.getPlaylists().forEach(n => taken.push({ key: 'name:' + n, name: n }));
+      return taken.some(x => x.key !== exceptKey && MediaLibrary.normalize(x.name) === k);
+    },
+
+    // What the edit sheet needs, or null. canRename/canDelete are false for a playlist that follows a folder.
+    getPlaylistInfo(key) {
+      if (typeof key !== 'string') return null;
+      if (key.indexOf('list:') === 0) {
+        const p = AudioFeatures.customPlaylists.info(key.slice(5));
+        return p ? { key: key, name: p.name, description: p.description || '', kind: 'list', canEdit: true, canRename: true,
+          canDelete: true, maxDescription: 120, count: p.ids.length } : null;
+      }
+      if (key.indexOf('name:') !== 0) return null;
+      const name = key.slice(5);
+      const rec = MediaLibrary.playlistRecord(name);
+      if (!rec) {
+        const count = MediaLibrary.tracksInPlaylist(name).length;
+        return count ? { key: key, name: name, description: '', kind: 'folder', canEdit: false, canRename: false,
+          canDelete: false, maxDescription: 500, count: count } : null;      // no record and no songs: there is no such playlist
+      }
+      const user = rec.source === 'user';
+      return { key: key, name: name, description: rec.description || '', kind: user ? 'file' : 'folder', canEdit: true,
+        canRename: user, canDelete: user, maxDescription: 500, count: MediaLibrary.tracksInPlaylist(name).length };
+    },
+
+    // Cheap look for the Songs-tab header (runs on every redraw): can it be edited, and what is its description.
+    getPlaylistSummary(key) {
+      if (typeof key !== 'string') return { canEdit: false, description: '' };
+      if (key.indexOf('list:') === 0) {
+        const p = AudioFeatures.customPlaylists.info(key.slice(5));
+        return { canEdit: !!p, description: p ? p.description : '' };
+      }
+      const rec = key.indexOf('name:') === 0 ? MediaLibrary.playlistRecord(key.slice(5)) : null;
+      return { canEdit: !!rec, description: rec ? String(rec.description || '') : '' };
+    },
+
+    // The songs of that playlist in its saved order: [{ id, title, artist }].
+    getPlaylistOrder(key) {
+      return this.getPlaylistTracks(this._keyName(key)).map(t => ({ id: t.id, title: t.title, artist: t.artist }));
+    },
+
+    // A new, empty playlist. Never overwrites: a taken name answers { ok:false, error:'taken' }.
+    createPlaylist(name, description) {
+      const clean = String(name || '').trim().slice(0, 60);
+      if (!clean) return { ok: false, error: 'name' };
+      if (this._nameTaken(clean, '')) return { ok: false, error: 'taken' };
+      const b = window.AndroidBridge;
+      let key = null;
+      if (b && b.playlistCreate) {
+        let ok = false;
+        try { ok = !!b.playlistCreate(clean, String(description || '').trim().slice(0, 500)); } catch (e) { ok = false; }
+        if (!ok) return { ok: false, error: 'save' };
+        MediaLibrary.playlistFilesChanged();
+        key = 'name:' + clean;
+      } else {
+        const id = AudioFeatures.customPlaylists.create(clean, []);
+        if (id === null) return { ok: false, error: 'save' };
+        AudioFeatures.customPlaylists.update(id, { description: String(description || '').trim().slice(0, 120) });
+        key = 'list:' + id;
+      }
+      this._playlistsChanged();
+      return { ok: true, key: key, name: clean };
+    },
+
+    // Rename and/or change the description. A taken name never overwrites another playlist.
+    editPlaylist(key, patch) {
+      const info = this.getPlaylistInfo(key);
+      if (!info || !info.canEdit) return { ok: false, error: 'locked' };
+      const name = patch && patch.name !== undefined ? String(patch.name).trim().slice(0, 60) : info.name;
+      const desc = patch && patch.description !== undefined ? String(patch.description).trim().slice(0, info.maxDescription) : info.description;
+      if (!name) return { ok: false, error: 'name' };
+      const renamed = name !== info.name;
+      if (renamed && !info.canRename) return { ok: false, error: 'locked' };
+      if (renamed && this._nameTaken(name, key)) return { ok: false, error: 'taken' };
+      let newKey = key;
+      if (key.indexOf('list:') === 0) {
+        if (!AudioFeatures.customPlaylists.update(key.slice(5), { name: name, description: desc })) return { ok: false, error: 'save' };
+      } else {
+        const rec = MediaLibrary.playlistRecord(info.name);
+        if (!this._saveRecord(Object.assign({}, rec, { name: name, description: desc }))) return { ok: false, error: 'save' };
+        if (renamed) {
+          this._carryCover(info.name, name);
+          state.tracks.forEach(t => {
+            if (Array.isArray(t.playlists)) t.playlists = t.playlists.map(n => (n === info.name ? name : n));
+            if (t.playlist === info.name) t.playlist = name;
+          });
+          if (state.activePlaylist === info.name) state.activePlaylist = name;
+          newKey = 'name:' + name;
+        }
+      }
+      this._playlistsChanged();
+      return { ok: true, key: newKey, name: name };
+    },
+
+    // Moves one song a place up (delta < 0) or down in the playlist's SAVED order. The music file stays where it is.
+    movePlaylistSong(key, id, delta) {
+      const step = delta < 0 ? -1 : 1;
+      if (typeof key === 'string' && key.indexOf('list:') === 0) {
+        if (!AudioFeatures.customPlaylists.move(key.slice(5), id, step)) return false;
+        this._playlistsChanged();
+        return true;
+      }
+      const name = this._keyName(key);
+      const rec = name ? MediaLibrary.playlistRecord(name) : null;
+      if (!rec) return false;
+      const visible = MediaLibrary.tracksInPlaylist(name);
+      const i = visible.findIndex(t => t.id === id), j = i + step;
+      if (i < 0 || j < 0 || j >= visible.length || !visible[i].ref || !visible[j].ref) return false;
+      // The saved list, plus the songs that so far belong by folder only (they follow, in the order shown).
+      const full = (rec.songs || []).map(sg => ({ ref: sg.ref, title: sg.title, size: sg.size }));
+      const has = new Set(full.map(sg => sg.ref));
+      visible.forEach(t => { if (t.ref && !has.has(t.ref)) { full.push({ ref: t.ref, title: t.title, size: t.size }); has.add(t.ref); } });
+      const a = full.findIndex(sg => sg.ref === visible[i].ref), c = full.findIndex(sg => sg.ref === visible[j].ref);
+      if (a < 0 || c < 0) return false;
+      const keep = full[a]; full[a] = full[c]; full[c] = keep;
+      if (!this._saveRecord(Object.assign({}, rec, { songs: full }))) return false;
+      this._playlistsChanged();
+      return true;
+    },
+
+    // Deletes the playlist RECORD (a file playlist's file goes to playlists/.deleted). The songs stay on the phone.
+    deletePlaylist(key) {
+      const info = this.getPlaylistInfo(key);
+      if (!info || !info.canDelete) return { ok: false, error: 'locked' };
+      if (key.indexOf('list:') === 0) {
+        if (!AudioFeatures.customPlaylists.remove(key.slice(5))) return { ok: false, error: 'save' };
+      } else {
+        const b = window.AndroidBridge;
+        let ok = false;
+        try { ok = !!(b && b.playlistDelete && b.playlistDelete(info.name)); } catch (e) { ok = false; }
+        if (!ok) return { ok: false, error: 'save' };
+        MediaLibrary.playlistFilesChanged();
+        state.tracks.forEach(t => {
+          if (Array.isArray(t.playlists)) t.playlists = t.playlists.filter(n => n !== info.name);
+          if (t.playlist === info.name) t.playlist = t.playlists && t.playlists[0] ? t.playlists[0] : null;
+        });
+        if (state.activePlaylist === info.name) state.activePlaylist = 'all';
+      }
+      try { const b = window.AndroidBridge; if (b && b.playlistCoverClear) b.playlistCoverClear(this._keyName(key)); } catch (e) { /* no cover to drop */ }
+      this._playlistsChanged();
+      return { ok: true };
+    },
+
+    // Writes a playlist file back (the native side checks and cleans it) and drops the page's cached copy.
+    _saveRecord(rec) {
+      const b = window.AndroidBridge;
+      let ok = false;
+      try { ok = !!(b && b.savePlaylist && b.savePlaylist(JSON.stringify(rec), true)); } catch (e) { ok = false; }
+      if (ok) MediaLibrary.playlistFilesChanged();
+      return ok;
+    },
+
+    // A renamed playlist keeps the cover chosen for it (covers are stored under the playlist's name).
+    _carryCover(from, to) {
+      const b = window.AndroidBridge;
+      if (!b || !b.playlistCoverGet) return;
+      try {
+        const uri = b.playlistCoverGet(from) || '';
+        if (uri && b.playlistCoverSave && b.playlistCoverSave(to, uri) && b.playlistCoverClear) b.playlistCoverClear(from);
+      } catch (e) { /* the cover simply goes back to automatic */ }
+      const ui = window.SpotifyUI;
+      if (ui && ui.coverChanged) { ui.coverChanged(from); ui.coverChanged(to); }
+    },
+
     // Makes a new hand-picked playlist holding this song; returns its key, or null.
     createPlaylistWith(name, id) {
-      const pid = AudioFeatures.customPlaylists.create(name, id ? [id] : []);
-      if (pid === null) return null;
-      this._playlistsChanged();
-      return 'list:' + pid;
+      const made = this.createPlaylist(name, '');      // a playlist file (never overwrites a name that is taken)
+      if (!made.ok) return null;
+      if (id) this.addSongToPlaylist(made.key, id);
+      return made.key;
     },
 
     addSongToPlaylist(key, id) {

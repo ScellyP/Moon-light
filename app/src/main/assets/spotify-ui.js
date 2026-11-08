@@ -85,6 +85,8 @@
     albumCover: $('sp-album-cover'),
     albumTitle: $('sp-album-title'),
     albumMeta: $('sp-album-meta'),
+    albumDesc: $('sp-album-desc'),
+    albumEdit: $('sp-album-edit'),
     albumPlay: $('sp-album-play'),
     albumShuffle: $('sp-album-shuffle'),
 
@@ -286,6 +288,14 @@
     if (target.closest('#sp-album-cover')) {
       const key = el.albumCover.getAttribute('data-pl-key') || 'all';
       if (window.SongMenu && window.SongMenu.openCover) window.SongMenu.openCover(key, getPlaylistTitle());
+      return;
+    }
+
+    // The pencil on a playlist: name, description, order, delete.
+    if (target.closest('#sp-album-edit')) {
+      const audio = window.NovelAudio;
+      const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
+      if (key && window.SongMenu && window.SongMenu.openEdit) window.SongMenu.openEdit(key, getPlaylistTitle());
       return;
     }
 
@@ -1149,8 +1159,9 @@
       return;
     }
 
-    // "New playlist": the name box lives in the Now playing view, so go there to type it.
+    // "New playlist": a sheet with a name and an optional description (the old name box in Now playing is the fallback).
     if (target.closest('[data-sp-new]')) {
+      if (window.SongMenu && window.SongMenu.openCreate && window.SongMenu.openCreate()) return;
       const newRow = el.playlistList && el.playlistList.querySelector('li.pl-new');
       if (newRow) { newRow.click(); setView('track'); }
       return;
@@ -1258,6 +1269,15 @@
         : 'No songs';
     }
     if (el.trackContext) el.trackContext.textContent = playlist;
+    // The pencil and the description show for a playlist that has an editable record (not All songs / Liked / Recent).
+    const audio = window.NovelAudio;
+    const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
+    const sum = key && audio.getPlaylistSummary ? audio.getPlaylistSummary(key) : { canEdit: false, description: '' };
+    if (el.albumEdit) el.albumEdit.classList.toggle('hidden', !sum.canEdit);
+    if (el.albumDesc) {
+      el.albumDesc.textContent = sum.description || '';
+      el.albumDesc.classList.toggle('hidden', !sum.description);
+    }
 
     if (el.albumPlay) {
       el.albumPlay.disabled = !!(el.play && el.play.disabled);

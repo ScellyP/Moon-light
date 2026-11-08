@@ -39,6 +39,7 @@
   let body = null;
   let toastNode = null;
   let toastTimer = 0;
+  let dirtyCheck = null;  // while a playlist form is open: () => true when it holds unsaved changes
   let current = null;     // { id, ctx }: the song the sheet is about, and the playlist key it was opened from ('' = none)
 
   const audio = () => root.NovelAudio || null;
@@ -116,7 +117,15 @@
 
   function isOpen() { return !!(layer && !layer.classList.contains('hidden')); }
 
+  // Closes the sheet. While a playlist form holds changes that were not saved, a stray tap on the dark area
+  // or Back does not throw them away: it says so, and Cancel (closeNow) is what discards them.
   function close() {
+    if (dirtyCheck && dirtyCheck()) { toast('Save your changes, or tap Cancel to discard them'); return; }
+    closeNow();
+  }
+
+  function closeNow() {
+    dirtyCheck = null;
     if (layer) layer.classList.add('hidden');
     current = null;
   }
@@ -543,11 +552,233 @@
 
   function openCover(name, title) {
     build();
+    dirtyCheck = null;
     current = { id: '', ctx: '' };
     coverCtx = { name: String(name || 'all'), title: title || '' };
     body.style.transform = '';
     layer.classList.remove('hidden');
     showCover();
+    return true;
+  }
+
+  /* ---- views: create a playlist, edit it (name, description, order), delete it ------------------------------- */
+  // The record lives in a playlist file (see SongLibrary.kt); only the record changes here, never a music file.
+  let editCtx = null;        // { key: 'name:Lo-fi' | 'list:3', title }
+  const ORDER_ROWS = 300;    // rows drawn in the order list (a very long playlist shows its first part)
+
+  function uiName(key) { return key.indexOf('list:') === 0 ? '@list:' + key.slice(5) : key.replace(/^name:/, ''); }
+
+  function plainHead(title, sub) {
+    const zone = el('div', 'sm-drag');
+    zone.appendChild(el('div', 'sm-grip'));
+    const head = el('div', 'sm-head');
+    const text = el('div', 'sm-head-text');
+    text.appendChild(el('div', 'sm-title', title));
+    if (sub) text.appendChild(el('div', 'sm-artist', sub));
+    head.appendChild(text);
+    zone.appendChild(head);
+    enableSwipeDown(zone);
+    return zone;
+  }
+
+  function field(label, input) {
+    const wrap = el('label', 'sm-field');
+    wrap.appendChild(el('span', 'sm-field-label', label));
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function nameBox(value, max) {
+    const input = el('input', 'sm-input');
+    input.type = 'text';
+    input.maxLength = max;
+    input.value = value || '';
+    input.setAttribute('enterkeyhint', 'next');
+    input.setAttribute('data-sm-field', 'name');
+    return input;
+  }
+
+  function descBox(value, max) {
+    const input = el('textarea', 'sm-input');
+    input.rows = 3;
+    input.maxLength = max;
+    input.value = value || '';
+    input.setAttribute('data-sm-field', 'description');
+    return input;
+  }
+
+  function errorText(code) {
+    if (code === 'taken') return 'You already have a playlist with that name';
+    if (code === 'name') return 'Give the playlist a name';
+    if (code === 'locked') return 'This playlist can\u2019t be changed that way';
+    return 'Could not save the playlist';
+  }
+
+  function showCreate() {
+    const a = audio();
+    if (!a || !a.createPlaylist) { closeNow(); return; }
+    body.replaceChildren();
+    body.appendChild(plainHead('New playlist', 'Name it now, add songs afterwards'));
+    const form = el('form', 'sm-form');
+    const name = nameBox('', 60);
+    const desc = descBox('', bridge() && bridge().playlistCreate ? 500 : 120);
+    name.placeholder = 'Playlist name';
+    desc.placeholder = 'Description (optional)';
+    form.appendChild(field('Name', name));
+    form.appendChild(field('Description', desc));
+    const actions = el('div', 'sm-actions');
+    const make = button('sm-btn primary', 'Create');
+    make.type = 'submit';
+    make.textContent = 'Create';
+    const cancel = button('sm-btn', 'Cancel');
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', closeNow);
+    actions.appendChild(make);
+    actions.appendChild(cancel);
+    form.appendChild(actions);
+    dirtyCheck = () => !!(name.value.trim() || desc.value.trim());
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const r = a.createPlaylist(name.value, desc.value);
+      if (!r.ok) { toast(errorText(r.error)); if (r.error !== 'save') name.focus(); return; }
+      closeNow();
+      toast('Playlist \u201c' + r.name + '\u201d created. Add songs from any song\u2019s \u22ee menu.');
+      if (root.SpotifyUI && root.SpotifyUI.openPlaylist) root.SpotifyUI.openPlaylist(uiName(r.key));
+    });
+    body.appendChild(form);
+    root.setTimeout(() => { try { name.focus(); } catch (err) { /* no keyboard */ } }, 0);
+  }
+
+  function showPlaylistEdit() {
+    const a = audio();
+    const info = a && editCtx && a.getPlaylistInfo ? a.getPlaylistInfo(editCtx.key) : null;
+    if (!info || !info.canEdit) { closeNow(); return; }
+    body.replaceChildren();
+    body.appendChild(plainHead('Edit playlist', info.name));
+    const form = el('form', 'sm-form');
+    const name = nameBox(info.name, 60);
+    const desc = descBox(info.description, info.maxDescription);
+    name.disabled = !info.canRename;
+    form.appendChild(field('Name', name));
+    if (!info.canRename) form.appendChild(el('p', 'sm-hint', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
+    desc.placeholder = 'Description (optional)';
+    form.appendChild(field('Description', desc));
+    const actions = el('div', 'sm-actions');
+    const save = button('sm-btn primary', 'Save');
+    save.type = 'submit';
+    save.textContent = 'Save';
+    const cancel = button('sm-btn', 'Cancel');
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', closeNow);
+    actions.appendChild(save);
+    actions.appendChild(cancel);
+    form.appendChild(actions);
+    dirtyCheck = () => name.value.trim() !== info.name || desc.value.trim() !== info.description;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const r = a.editPlaylist(editCtx.key, { name: name.value, description: desc.value });
+      if (!r.ok) { toast(errorText(r.error)); if (r.error === 'taken' || r.error === 'name') name.focus(); return; }
+      closeNow();
+      toast('Playlist saved');
+    });
+    body.appendChild(form);
+
+    // The order: one button moves a song a place up or down. Every move is saved at once (the record only).
+    body.appendChild(el('div', 'sm-section', 'Order'));
+    const orderBox = el('div', 'sm-ord');
+    body.appendChild(orderBox);
+    drawOrder(orderBox, null);
+    body.appendChild(el('p', 'sm-hint', 'Moves save right away. The songs themselves stay where they are.'));
+
+    if (info.canDelete) {
+      const list = el('div', 'sm-list');
+      list.appendChild(row('i-trash', 'Delete playlist', showPlaylistDelete, { danger: true }));
+      body.appendChild(list);
+    }
+  }
+
+  function drawOrder(box, focus) {
+    const a = audio();
+    if (!a || !editCtx) return;
+    const songs = a.getPlaylistOrder(editCtx.key);
+    box.replaceChildren();
+    if (!songs.length) { box.appendChild(el('div', 'sm-empty', 'No songs yet.')); return; }
+    const shown = songs.slice(0, ORDER_ROWS);
+    shown.forEach((s, i) => {
+      const line = el('div', 'sm-ord-row');
+      const text = el('div', 'sm-ord-text');
+      text.appendChild(el('div', 'sm-ord-title', s.title || 'Unknown song'));
+      if (s.artist) text.appendChild(el('div', 'sm-ord-artist', s.artist));
+      line.appendChild(text);
+      [['up', -1, 'Move up'], ['down', 1, 'Move down']].forEach(([cls, delta, word]) => {
+        const b = button('sm-ord-btn ' + cls, word + ': ' + (s.title || 'song'));
+        b.appendChild(icon('i-chev-down'));
+        b.disabled = (delta < 0 && i === 0) || (delta > 0 && i === shown.length - 1);
+        b.setAttribute('data-ord', cls);
+        b.addEventListener('click', () => {
+          if (!a.movePlaylistSong(editCtx.key, s.id, delta)) { toast('Could not move the song'); return; }
+          drawOrder(box, { id: s.id, cls: cls });
+        });
+        line.appendChild(b);
+      });
+      box.appendChild(line);
+      if (focus && focus.id === s.id) {
+        const keep = line.querySelector('[data-ord="' + focus.cls + '"]');
+        if (keep && !keep.disabled && keep.focus) keep.focus();
+      }
+    });
+    if (songs.length > ORDER_ROWS) box.appendChild(el('p', 'sm-hint', 'Showing the first ' + ORDER_ROWS + ' of ' + songs.length + ' songs.'));
+  }
+
+  function showPlaylistDelete() {
+    const a = audio();
+    const info = a && editCtx && a.getPlaylistInfo ? a.getPlaylistInfo(editCtx.key) : null;
+    if (!info || !info.canDelete) { closeNow(); return; }
+    dirtyCheck = null;
+    body.replaceChildren();
+    body.appendChild(plainHead('Delete playlist', ''));
+    const box = el('div', 'sm-form');
+    box.appendChild(el('p', 'sm-warn-title', '\u201c' + info.name + '\u201d'));
+    box.appendChild(el('p', 'sm-hint', 'This removes the playlist only. Its songs stay on your phone, in Liked Songs and in your other playlists.'));
+    const actions = el('div', 'sm-actions');
+    const del = button('sm-btn danger', 'Delete playlist');
+    del.textContent = 'Delete playlist';
+    del.addEventListener('click', () => {
+      const r = a.deletePlaylist(editCtx.key);
+      if (!r.ok) { toast('Could not delete the playlist'); return; }
+      closeNow();
+      toast('Deleted \u201c' + info.name + '\u201d. Your songs are still on the phone.');
+      if (root.SpotifyUI && root.SpotifyUI.setView) root.SpotifyUI.setView('library');
+    });
+    const keep = button('sm-btn', 'Cancel');
+    keep.textContent = 'Cancel';
+    keep.addEventListener('click', showPlaylistEdit);
+    actions.appendChild(del);
+    actions.appendChild(keep);
+    box.appendChild(actions);
+    body.appendChild(box);
+  }
+
+  function openEdit(key, title) {
+    const a = audio();
+    if (!a || !a.getPlaylistInfo || !a.getPlaylistInfo(String(key || ''))) return false;
+    build();
+    current = { id: '', ctx: '' };
+    editCtx = { key: String(key), title: title || '' };
+    body.style.transform = '';
+    layer.classList.remove('hidden');
+    showPlaylistEdit();
+    return true;
+  }
+
+  function openCreate() {
+    const a = audio();
+    if (!a || !a.createPlaylist) return false;
+    build();
+    current = { id: '', ctx: '' };
+    body.style.transform = '';
+    layer.classList.remove('hidden');
+    showCreate();
     return true;
   }
 
@@ -557,6 +788,7 @@
     const a = audio();
     if (!a || !id || !a.getTrackRecord(id)) return false;
     build();
+    dirtyCheck = null;
     current = { id: String(id), ctx: ctx || '' };
     body.style.transform = '';
     layer.classList.remove('hidden');
@@ -564,7 +796,7 @@
     return true;
   }
 
-  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, toast: toast };
+  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, openEdit: openEdit, openCreate: openCreate, toast: toast };
 
   // Any "..." button on the page: <button data-song-more="<id>" [data-song-ctx="1"]>.
   const EDGE = 50;                        // px at the right end of a Songs-list row that count as its "..." button

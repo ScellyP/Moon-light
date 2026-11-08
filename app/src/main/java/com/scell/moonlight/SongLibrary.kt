@@ -295,6 +295,47 @@ class SongLibrary(
     }
 
     /**
+     * Makes a new, empty playlist file called [name] (with an optional description). A name that is already
+     * taken (any case) never overwrites the existing playlist: returns false and nothing is written.
+     */
+    @Synchronized
+    fun create(name: String, description: String): Boolean {
+        val clean = name.trim().take(60)
+        if (clean.isEmpty() || findByName(clean) != null) return false
+        val m = JSONObject()
+            .put("id", freeId("pl-", clean)).put("name", clean).put("source", "user")
+            .put("description", description.trim().take(500))
+            .put("songs", JSONArray())
+        return save(m, overwrite = false)
+    }
+
+    /**
+     * Deletes the playlist called [name]: its file is MOVED to playlists/.deleted/ (so it can be put back by
+     * hand), never removed, and no song file is touched. Only playlists made in the app (source "user") can go;
+     * a playlist that follows a folder would just be made again from the folder.
+     */
+    @Synchronized
+    fun deleteByName(name: String): Boolean {
+        val m = findByName(name) ?: return false
+        if (m.optString("source") != "user") return false
+        val id = m.optString("id")
+        if (!validId(id)) return false
+        return try {
+            val trash = File(playlistsDir, ".deleted")
+            trash.mkdirs()
+            val stamp = System.currentTimeMillis()
+            var ok = true
+            for (suffix in listOf(".json", ".json.bak")) {
+                val f = File(playlistsDir, id + suffix)
+                if (f.exists() && !f.renameTo(File(trash, "$id-$stamp$suffix"))) ok = false
+            }
+            ok && !fileOf(id).exists()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Adds a reference to [ref] at the END of the playlist called [name], creating the playlist when it
      * does not exist. No song file is created, moved or copied. Returns true when the reference is saved
      * (also when it was already there).

@@ -1426,6 +1426,21 @@ class MainActivity : ComponentActivity() {
             return try { songLibrary.save(JSONObject(json), overwrite) } catch (e: Exception) { false }
         }
 
+        // playlistCreate: a new empty playlist file (name + optional description). False when the name is taken.
+        // playlistDelete: moves the playlist's file to Moonlight/playlists/.deleted (songs are never touched);
+        // false for a playlist that follows a folder.
+        @JavascriptInterface
+        fun playlistCreate(name: String, description: String): Boolean {
+            if (!hasStoragePermission() || name.isBlank()) return false
+            return try { songLibrary.create(name, description) } catch (e: Exception) { false }
+        }
+
+        @JavascriptInterface
+        fun playlistDelete(name: String): Boolean {
+            if (!hasStoragePermission() || name.isBlank()) return false
+            return try { songLibrary.deleteByName(name.trim()) } catch (e: Exception) { false }
+        }
+
         // Rescan button / explicit scan: always walk the folder again and
         // report the result to audio-player.js's MediaLibrary (see runAudioScan()).
         @JavascriptInterface

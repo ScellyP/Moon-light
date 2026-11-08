@@ -2509,6 +2509,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-album-cover img, #sp-mini-art img, #sp-sheet-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 #sp-album-title { font: 700 24px/1.2 var(--font-ui); margin: 26px 20px 0; overflow-wrap: anywhere; }
 #sp-album-meta { font-size: 13px; color: var(--sp-sub); margin: 6px 20px 0; }
+#sp-album-desc { font-size: 13px; line-height: 1.4; color: var(--sp-sub); margin: 8px 20px 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#sp-album-desc.hidden, #sp-album-edit.hidden { display: none; }
 #sp-album-actions { display: flex; align-items: center; gap: 12px; padding: 10px 20px 14px; }
 .sp-fab {
   margin-left: auto; width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
@@ -3154,6 +3156,18 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-warn-title { margin: 0; font: 700 17px/1.3 var(--font-ui); overflow-wrap: anywhere; }
 .sm-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sm-form { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 8px; }
+.sm-section { padding: 18px 22px 6px; font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
+.sm-ord { display: flex; flex-direction: column; padding: 0 12px; }
+.sm-ord-row { display: flex; align-items: center; gap: 4px; min-height: 52px; padding: 4px 4px 4px 10px; border-radius: 10px; }
+.sm-ord-text { flex: 1; min-width: 0; }
+.sm-ord-title, .sm-ord-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-ord-title { font: 400 15px/1.25 var(--font-ui); color: var(--text); }
+.sm-ord-artist { font: 400 12px/1.25 var(--font-ui); color: var(--sp-sub, var(--faint)); }
+.sm-ord-btn { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--text); cursor: pointer; transition: background .15s, opacity .15s; }
+.sm-ord-btn .ico { width: 22px; height: 22px; }
+.sm-ord-btn.up .ico { transform: rotate(180deg); }
+.sm-ord-btn:active { background: color-mix(in srgb, var(--text) 12%, transparent); }
+.sm-ord-btn:disabled { opacity: .25; cursor: default; }
 .sm-field { display: flex; flex-direction: column; gap: 6px; }
 .sm-field-label { font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
 .sm-hint { margin: 0; font: 400 12.5px/1.45 var(--font-ui); color: var(--sp-sub, var(--faint)); }
@@ -3596,8 +3610,10 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-album-cover"><svg class="ico"><use href="#i-moon-music"/></svg></div>
           <div id="sp-album-title">All songs</div>
           <div id="sp-album-meta"></div>
+          <div id="sp-album-desc" class="hidden"></div>
           <div id="sp-album-actions">
             <button type="button" class="sp-icon-btn" id="sp-album-shuffle" title="Shuffle" aria-label="Shuffle"><svg class="ico"><use href="#i-shuffle"/></svg></button>
+            <button type="button" class="sp-icon-btn hidden" id="sp-album-edit" title="Edit playlist" aria-label="Edit playlist"><svg class="ico"><use href="#i-pencil"/></svg></button>
             <button type="button" class="sp-icon-btn" data-sp-more title="More" aria-label="More options"><svg class="ico"><use href="#sp-more"/></svg></button>
             <button type="button" id="sp-album-play" class="sp-fab" title="Play or pause" aria-label="Play or pause">
               <svg class="ico fill sp-i-play"><use href="#sp-play-solid"/></svg>

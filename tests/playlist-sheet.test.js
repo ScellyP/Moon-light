@@ -1,0 +1,132 @@
+// Run with: node tests/playlist-sheet.test.js
+// The playlist sheets in song-menu.js: create, edit (name, description, order) and delete with a confirmation.
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { createNode, findAll, hasClass } = require('./fake-dom');
+const { check, finish } = require('./audio-harness');
+
+const SRC = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/song-menu.js'), 'utf8');
+
+function sheet(overrides) {
+  const calls = [];
+  const body = createNode('body');
+  const doc = { body, createElement: createNode, createElementNS: (ns, t) => createNode(t), addEventListener() {} };
+  let songs = [{ id: 'a', title: 'Alpha', artist: 'X' }, { id: 'b', title: 'Beta', artist: 'Y' }, { id: 'c', title: 'Gamma', artist: 'Z' }];
+  let info = { key: 'name:Mix', name: 'Mix', description: 'Old', kind: 'file', canEdit: true, canRename: true, canDelete: true, maxDescription: 500 };
+  const audio = Object.assign({
+    getPlaylistInfo: () => info, getPlaylistOrder: () => songs,
+    editPlaylist: (k, p) => { calls.push(['edit', k, p]); return { ok: true, key: k, name: p.name }; },
+    movePlaylistSong: (k, id, d) => { calls.push(['move', k, id, d]); const i = songs.findIndex(s => s.id === id), j = i + d; const t = songs[i]; songs[i] = songs[j]; songs[j] = t; return true; },
+    deletePlaylist: (k) => { calls.push(['delete', k]); return { ok: true }; },
+    createPlaylist: (n, d) => { calls.push(['create', n, d]); return { ok: true, key: 'name:' + n.trim(), name: n.trim() }; },
+  }, overrides || {});
+  const win = {
+    document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio,
+    SpotifyUI: { openPlaylist: (n) => calls.push(['open', n]), setView: (v) => calls.push(['view', v]) },
+  };
+  new Function('window', 'document', SRC.replace("})(typeof window !== 'undefined' ? window : this);", '})(window);'))(win, doc);
+  const layer = () => body.children.find((c) => c.classList.contains('sm-layer'));
+  const submit = (form) => (form.listeners.submit || []).forEach((f) => f({ preventDefault() {} }));
+  const tapNode = (n) => (n.listeners.click || []).forEach((f) => f({ stopPropagation() {}, target: n }));
+  const byLabel = (txt) => findAll(layer(), (n) => n.tag === 'button' && n.textContent === txt)[0];
+  const field = (name) => findAll(layer(), (n) => n.attrs['data-sm-field'] === name)[0];
+  const tapScrim = () => layer().listeners.click.forEach((f) => f({ target: layer().children[0] }));
+  const toast = () => (body.children.find((c) => c.classList.contains('sm-toast')) || { textContent: '' }).textContent;
+  return { win, calls, layer, submit, tapNode, byLabel, field, tapScrim, toast, setInfo: (i) => { info = i; }, songs: () => songs };
+}
+
+check('Edit playlist shows the name, the description and the songs in saved order', () => {
+  const s = sheet();
+  assert.strictEqual(s.win.SongMenu.openEdit('name:Mix', 'Mix'), true);
+  assert.strictEqual(s.field('name').value, 'Mix');
+  assert.strictEqual(s.field('description').value, 'Old');
+  const titles = findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent);
+  assert.deepStrictEqual(titles, ['Alpha', 'Beta', 'Gamma']);
+});
+
+check('Save sends the typed name and description; a refused name keeps the sheet open with a message', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.field('name').value = '  Road trip ';
+  s.field('description').value = 'For the car';
+  s.submit(findAll(s.layer(), (n) => n.tag === 'form')[0]);
+  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: '  Road trip ', description: 'For the car' }]);
+  assert.ok(s.layer().classList.contains('hidden'));
+  const t = sheet({ editPlaylist: () => ({ ok: false, error: 'taken' }) });
+  t.win.SongMenu.openEdit('name:Mix', 'Mix');
+  t.field('name').value = 'Rock';
+  t.submit(findAll(t.layer(), (n) => n.tag === 'form')[0]);
+  assert.ok(!t.layer().classList.contains('hidden'));
+  assert.ok(/already have a playlist/.test(t.toast()));
+});
+
+check('unsaved changes are not lost by a stray tap; Cancel discards them', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.tapScrim();                                                   // nothing typed: closes
+  assert.ok(s.layer().classList.contains('hidden'));
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.field('name').value = 'Changed';
+  s.tapScrim(); s.win.SongMenu.close();                           // tap outside / Back: stays open, says why
+  assert.ok(!s.layer().classList.contains('hidden'));
+  assert.ok(/Cancel/.test(s.toast()));
+  s.tapNode(s.byLabel('Cancel'));
+  assert.ok(s.layer().classList.contains('hidden'));
+  assert.strictEqual(s.calls.length, 0);                          // nothing was saved
+});
+
+check('move buttons: first row cannot go up, last cannot go down; a move reaches the player and redraws', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  const ups = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn up') !== -1);
+  const downs = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn down') !== -1);
+  assert.deepStrictEqual([ups[0].disabled, ups[1].disabled, downs[2].disabled, downs[0].disabled], [true, false, true, false]);
+  s.tapNode(downs[0]);
+  assert.deepStrictEqual(s.calls[0], ['move', 'name:Mix', 'a', 1]);
+  assert.deepStrictEqual(findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent), ['Beta', 'Alpha', 'Gamma']);
+  assert.ok(findAll(s.layer(), (n) => n.getAttribute && /Move up: /.test(n.getAttribute('aria-label') || '')).length === 3);   // accessible names
+});
+
+check('Delete playlist asks first, says the songs stay, and Cancel goes back', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  const row = findAll(s.layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.className.indexOf('danger') !== -1)[0];
+  s.tapNode(row);
+  assert.ok(/songs stay on your phone/.test(s.layer().textContent));
+  assert.strictEqual(s.calls.length, 0);                          // not deleted yet
+  s.tapNode(s.byLabel('Cancel'));
+  assert.ok(s.field('name'));                                     // back on the edit form
+  s.tapNode(findAll(s.layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.className.indexOf('danger') !== -1)[0]);
+  s.tapNode(s.byLabel('Delete playlist'));
+  assert.deepStrictEqual(s.calls[0], ['delete', 'name:Mix']);
+  assert.deepStrictEqual(s.calls[1], ['view', 'library']);
+  assert.ok(s.layer().classList.contains('hidden'));
+});
+
+check('a folder playlist: the name is locked and there is no delete row', () => {
+  const s = sheet();
+  s.setInfo({ key: 'name:Rock', name: 'Rock', description: '', kind: 'folder', canEdit: true, canRename: false, canDelete: false, maxDescription: 500 });
+  s.win.SongMenu.openEdit('name:Rock', 'Rock');
+  assert.strictEqual(s.field('name').disabled, true);
+  assert.strictEqual(findAll(s.layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.className.indexOf('danger') !== -1).length, 0);
+});
+
+check('New playlist: name + optional description, then its page opens', () => {
+  const s = sheet();
+  assert.strictEqual(s.win.SongMenu.openCreate(), true);
+  s.field('name').value = ' Gym ';
+  s.field('description').value = 'Fast songs';
+  s.submit(findAll(s.layer(), (n) => n.tag === 'form')[0]);
+  assert.deepStrictEqual(s.calls[0], ['create', ' Gym ', 'Fast songs']);
+  assert.deepStrictEqual(s.calls[1], ['open', 'Gym']);
+  assert.ok(s.layer().classList.contains('hidden'));
+  const t = sheet({ createPlaylist: () => ({ ok: false, error: 'taken' }) });
+  t.win.SongMenu.openCreate();
+  t.field('name').value = 'Mix';
+  t.submit(findAll(t.layer(), (n) => n.tag === 'form')[0]);
+  assert.ok(!t.layer().classList.contains('hidden'));
+  assert.ok(/already have a playlist/.test(t.toast()));
+});
+
+finish();
