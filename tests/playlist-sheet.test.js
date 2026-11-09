@@ -145,4 +145,10 @@ check('New playlist: name + optional description, then its page opens', () => {
   assert.ok(/already have a playlist/.test(t.toast()));
 });
 
+check('index.html: a hidden entry in the ... sheet really is hidden (the sheet buttons set display)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/index.html'), 'utf8');
+  assert.ok(/#sp-sheet-list button\.hidden\s*\{\s*display:\s*none/.test(html));
+  assert.ok(/data-sp-act="editpl"/.test(html));
+});
+
 finish();

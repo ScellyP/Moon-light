@@ -338,8 +338,11 @@
       e.preventDefault();
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
-      const key = a.createPlaylistWith(name, track.id);
+      const made = a.createPlaylist ? a.createPlaylist(name, '') : null;
+      if (made && !made.ok) { toast(errorText(made.error)); input.focus(); return; }
+      const key = made ? made.key : a.createPlaylistWith(name, track.id);
       if (!key) { toast('Could not create the playlist'); return; }
+      if (made) a.addSongToPlaylist(key, track.id);
       finish(key, name);
     });
     list.appendChild(make);

@@ -2118,12 +2118,12 @@ window.NovelAudio = (function () {
       if (typeof patch.description === 'string') { if (patch.description) p.description = patch.description; else delete p.description; }
       Prefs.save(); return true;
     },
-    // Moves one song a place up (-1) or down (+1) in this list's own order.
-    move(id, trackId, delta) {
+    // Swaps two songs of this list (the caller picks the shown neighbours).
+    swap(id, a, b) {
       const p = this._find(id);
       if (!p) return false;
-      const i = p.ids.indexOf(trackId), j = i + (delta < 0 ? -1 : 1);
-      if (i < 0 || j < 0 || j >= p.ids.length) return false;
+      const i = p.ids.indexOf(a), j = p.ids.indexOf(b);
+      if (i < 0 || j < 0 || i === j) return false;
       const t = p.ids[i]; p.ids[i] = p.ids[j]; p.ids[j] = t;
       Prefs.save(); return true;
     },
@@ -3121,6 +3121,7 @@ window.NovelAudio = (function () {
       const taken = [];
       AudioFeatures.customPlaylists.list().forEach(p => taken.push({ key: 'list:' + p.id, name: p.name }));
       MediaLibrary.getPlaylists().forEach(n => taken.push({ key: 'name:' + n, name: n }));
+      MediaLibrary.playlistFiles().forEach(m => { if (m && m.source !== 'curated' && m.name) taken.push({ key: 'name:' + m.name, name: m.name }); });
       return taken.some(x => x.key !== exceptKey && MediaLibrary.normalize(x.name) === k);
     },
 
@@ -3222,7 +3223,10 @@ window.NovelAudio = (function () {
     movePlaylistSong(key, id, delta) {
       const step = delta < 0 ? -1 : 1;
       if (typeof key === 'string' && key.indexOf('list:') === 0) {
-        if (!AudioFeatures.customPlaylists.move(key.slice(5), id, step)) return false;
+        const shown = this.getPlaylistOrder(key);
+        const at = shown.findIndex(x => x.id === id), to = at + step;
+        if (at < 0 || to < 0 || to >= shown.length) return false;
+        if (!AudioFeatures.customPlaylists.swap(key.slice(5), id, shown[to].id)) return false;
         this._playlistsChanged();
         return true;
       }

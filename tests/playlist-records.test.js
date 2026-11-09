@@ -172,4 +172,22 @@ check('the header asks cheaply: editable or not, and the description', () => {
   assert.deepStrictEqual(t.app.getPlaylistSummary('name:Nope'), { canEdit: false, description: '' });
 });
 
+check('a name used by a playlist file with no songs yet is taken too', () => {
+  const t = start([{ id: 'quiet', name: 'Quiet', source: 'folder', description: '', legacy: { folder: 'Quiet' }, songs: [] }]);
+  assert.deepStrictEqual([t.app.createPlaylist('quiet', '').ok, t.app.createPlaylist('quiet', '').error], [false, 'taken']);
+  assert.strictEqual(t.app.editPlaylist('name:Mix', { name: 'QUIET' }).error, 'taken');
+  assert.strictEqual(t.files.filter(f => f.name.toLowerCase() === 'quiet').length, 1);
+});
+
+check('hand-picked list: a move swaps with the neighbour that is shown, not with a song that is gone', () => {
+  const t = start();
+  delete global.AndroidBridge.playlistCreate;
+  const key = t.app.createPlaylist('Pick', '').key;
+  t.app.addSongToPlaylist(key, A.id); t.app.addSongToPlaylist(key, B.id);
+  t.state.features.customPlaylists.lists[0].ids.splice(1, 0, 'gone-song');     // a song deleted from the phone sits between
+  assert.strictEqual(t.app.movePlaylistSong(key, A.id, 1), true);
+  assert.deepStrictEqual(t.app.getPlaylistOrder(key).map(x => x.title), ['b', 'a']);
+  assert.strictEqual(t.app.movePlaylistSong(key, A.id, 1), false);               // last one cannot go down
+});
+
 finish();
