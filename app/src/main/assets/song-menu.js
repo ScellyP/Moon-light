@@ -825,6 +825,21 @@
     return true;
   }
 
+  // Straight to "Delete playlist?" (from the Songs tab's ... menu); Cancel there goes back to the edit sheet.
+  function openDelete(key, title) {
+    const a = audio();
+    const info = a && a.getPlaylistInfo ? a.getPlaylistInfo(String(key || '')) : null;
+    if (!info || !info.canDelete) return false;
+    build();
+    dirtyCheck = null;
+    current = { id: '', ctx: '' };
+    editCtx = { key: String(key), title: title || '' };
+    body.style.transform = '';
+    layer.classList.remove('hidden');
+    showPlaylistDelete();
+    return true;
+  }
+
   function openCreate() {
     const a = audio();
     if (!a || !a.createPlaylist) return false;
@@ -850,7 +865,7 @@
     return true;
   }
 
-  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, openEdit: openEdit, openCreate: openCreate, toast: toast };
+  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, openEdit: openEdit, openDelete: openDelete, openCreate: openCreate, toast: toast };
 
   // Any "..." button on the page: <button data-song-more="<id>" [data-song-ctx="1"]>.
   const EDGE = 50;                        // px at the right end of a Songs-list row that count as its "..." button

@@ -211,12 +211,19 @@
 
   function openSheet() {
     if (!el.sheet) return;
-    // "Edit playlist" is offered on the Songs tab for a playlist that has a record.
+    // On the Songs tab the ... menu is about the PLAYLIST (add songs, edit, cover, delete); anywhere else it is
+    // about the song that is playing. Playlist actions that need a record show only for a playlist that has one.
     const a = window.NovelAudio;
+    const playlistMode = panel.getAttribute('data-view') === 'album';
     const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
-    const can = !!(key && panel.getAttribute('data-view') === 'album' && a.getPlaylistSummary && a.getPlaylistSummary(key).canEdit);
-    const entry = el.sheet.querySelector('[data-sp-act="editpl"]');
-    if (entry) entry.classList.toggle('hidden', !can);
+    const info = playlistMode && key && a.getPlaylistInfo ? a.getPlaylistInfo(key) : null;
+    el.sheet.setAttribute('data-sheet-mode', playlistMode ? 'playlist' : 'song');
+    el.sheet.setAttribute('aria-label', playlistMode ? 'Playlist options' : 'Track options');
+    if (el.sheetArt) el.sheetArt.removeAttribute('data-sheet-sig');      // the picture is redrawn for the mode just chosen
+    const show = (act, on) => { const b = el.sheet.querySelector('[data-sp-act="' + act + '"]'); if (b) b.classList.toggle('hidden', !on); };
+    show('addsongs', !!(info && info.canEdit));
+    show('editpl', !!(info && info.canEdit));
+    show('deletepl', !!(info && info.canDelete));
     el.sheet.classList.remove('hidden');
     sync();
   }
@@ -245,6 +252,29 @@
           el.addTo.click();
         }
         break;
+
+      case 'addsongs': {
+        const a = window.NovelAudio;
+        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+        closeSheet();
+        if (key && window.PlaylistPicker && window.PlaylistPicker.open) window.PlaylistPicker.open(key, getPlaylistTitle());
+        break;
+      }
+
+      case 'cover': {
+        const name = (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || 'all';
+        closeSheet();
+        if (window.SongMenu && window.SongMenu.openCover) window.SongMenu.openCover(name, getPlaylistTitle());
+        break;
+      }
+
+      case 'deletepl': {
+        const a = window.NovelAudio;
+        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+        closeSheet();
+        if (key && window.SongMenu && window.SongMenu.openDelete) window.SongMenu.openDelete(key, getPlaylistTitle());
+        break;
+      }
 
       case 'editpl': {
         const a = window.NovelAudio;
@@ -1232,6 +1262,17 @@
     }
   }
 
+  /** In the Songs tab's ... menu the picture is the playlist's cover, like the big cover behind it, never the song playing. */
+  function syncSheetCover() {
+    const target = el.sheetArt;
+    if (!target) return;
+    const url = coverFor((el.albumCover && el.albumCover.getAttribute('data-pl-key')) || 'all');
+    const signature = 'pl|' + url.length + url.slice(-16);
+    if (target.getAttribute('data-sheet-sig') === signature) return;
+    target.setAttribute('data-sheet-sig', signature);
+    target.innerHTML = url ? '<img alt="" src="' + url + '">' : '<svg class="ico"><use href="#i-moon-music"/></svg>';
+  }
+
   /** The Songs tab's big cover is the PLAYLIST's cover (the one you chose, else its mosaic, else a placeholder),
    *  never the song that is playing: the icon stays as it is while songs change. Tapping it changes the cover. */
   function syncAlbumCover() {
@@ -1335,8 +1376,9 @@
   function syncSheet(state) {
     if (!isSheetOpen()) return;
 
-    if (el.sheetTitle) el.sheetTitle.textContent = state.hasTrack ? state.title : state.playlist;
-    if (el.sheetArtist) el.sheetArtist.textContent = state.hasTrack ? state.artist : '';
+    const forPlaylist = el.sheet.getAttribute('data-sheet-mode') === 'playlist';
+    if (el.sheetTitle) el.sheetTitle.textContent = forPlaylist ? getPlaylistTitle() : (state.hasTrack ? state.title : state.playlist);
+    if (el.sheetArtist) el.sheetArtist.textContent = forPlaylist ? textOf(el.albumMeta) : (state.hasTrack ? state.artist : '');
 
     const isLiked = !!(el.like && el.like.classList.contains('liked'));
     if (el.likeLabel) el.likeLabel.textContent = isLiked ? 'Remove from Liked' : 'Like';
@@ -1367,7 +1409,8 @@
 
     mirrorArtwork(el.miniArt);
     syncAlbumCover();
-    mirrorArtwork(el.sheetArt);
+    if (isSheetOpen() && el.sheet.getAttribute('data-sheet-mode') === 'playlist') syncSheetCover();
+    else mirrorArtwork(el.sheetArt);
 
     updateTint();
     scheduleMosaics();

@@ -2746,6 +2746,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 }
 #sp-sheet-list button:disabled { opacity: .35; }
 #sp-sheet-list button.hidden { display: none; }
+/* The ... menu belongs to what is on screen: the Songs tab shows the PLAYLIST's actions, Now playing the song's. */
+#sp-sheet[data-sheet-mode="playlist"] .sp-song-only, #sp-sheet:not([data-sheet-mode="playlist"]) .sp-pl-only { display: none; }
 #sp-sheet-list button:active:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); }
 #sp-sheet-list .ico { width: 24px; height: 24px; color: var(--text); }
 #sp-sheet-list em { margin-left: auto; font-style: normal; font-size: 13px; color: var(--sp-sub); }
@@ -3799,10 +3801,13 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-sheet-title"></div>
           <div id="sp-sheet-artist"></div>
           <div id="sp-sheet-list">
-            <button type="button" class="hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit playlist</span></button>
-            <button type="button" data-sp-act="like"><svg class="ico"><use href="#i-heart"/></svg><span id="sp-act-like-label">Like</span></button>
-            <button type="button" data-sp-act="addto"><svg class="ico"><use href="#i-playlist-add"/></svg><span>Add to playlist</span></button>
-            <button type="button" data-sp-act="songmenu"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit, loop and playlists…</span></button>
+            <button type="button" class="sp-pl-only hidden" data-sp-act="addsongs"><svg class="ico"><use href="#i-plus"/></svg><span>Add songs</span></button>
+            <button type="button" class="sp-pl-only hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit playlist</span></button>
+            <button type="button" class="sp-pl-only" data-sp-act="cover"><svg class="ico"><use href="#i-image"/></svg><span>Change cover</span></button>
+            <button type="button" class="sp-pl-only hidden" data-sp-act="deletepl"><svg class="ico"><use href="#i-trash"/></svg><span>Delete playlist</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="like"><svg class="ico"><use href="#i-heart"/></svg><span id="sp-act-like-label">Like</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="addto"><svg class="ico"><use href="#i-playlist-add"/></svg><span>Add to playlist</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="songmenu"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit, loop and playlists…</span></button>
             <button type="button" data-sp-act="sleep"><svg class="ico"><use href="#sp-moon"/></svg><span>Sleep timer</span><em id="sp-act-sleep-value"></em></button>
             <div id="sp-sleep-opts" class="hidden">
               <button type="button" data-sp-sleep="0">Off</button>

@@ -151,4 +151,29 @@ check('index.html: a hidden entry in the ... sheet really is hidden (the sheet b
   assert.ok(/data-sp-act="editpl"/.test(html));
 });
 
+check('the Songs-tab ... menu is about the playlist; Now playing keeps the song actions', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/index.html'), 'utf8');
+  const sheet = html.slice(html.indexOf('id="sp-sheet-list"'), html.indexOf('id="sp-sheet-close"'));
+  const mark = (act) => (sheet.match(new RegExp('<button[^>]*data-sp-act="' + act + '"[^>]*>')) || [''])[0];
+  ['like', 'addto', 'songmenu'].forEach((a) => assert.ok(/sp-song-only/.test(mark(a)), a + ' is a song action'));
+  ['addsongs', 'editpl', 'cover', 'deletepl'].forEach((a) => assert.ok(/sp-pl-only/.test(mark(a)), a + ' is a playlist action'));
+  assert.ok(!/sp-(song|pl)-only/.test(mark('sleep')) && !/sp-(song|pl)-only/.test(mark('rescan')));   // app-wide items stay in both
+  assert.ok(/#sp-sheet\[data-sheet-mode="playlist"\] \.sp-song-only[^{]*\.sp-pl-only[^{]*\{\s*display:\s*none/.test(html));
+  const js = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/spotify-ui.js'), 'utf8');
+  assert.ok(/data-sheet-mode', playlistMode \? 'playlist' : 'song'/.test(js));
+  ['addsongs', 'cover', 'deletepl', 'editpl'].forEach((a) => assert.ok(js.indexOf("case '" + a + "'") !== -1, a + ' has a handler'));
+});
+
+check('Delete playlist from the ... menu goes straight to the confirmation; folder playlists are refused', () => {
+  const s = sheet();
+  assert.strictEqual(s.win.SongMenu.openDelete('name:Mix', 'Mix'), true);
+  assert.ok(/songs stay on your phone/.test(s.layer().textContent));
+  assert.strictEqual(s.calls.length, 0);
+  s.tapNode(s.byLabel('Delete playlist'));
+  assert.deepStrictEqual(s.calls[0], ['delete', 'name:Mix']);
+  const f = sheet();
+  f.setInfo({ key: 'name:Rock', name: 'Rock', description: '', kind: 'folder', canEdit: true, canRename: false, canDelete: false, maxDescription: 500 });
+  assert.strictEqual(f.win.SongMenu.openDelete('name:Rock', 'Rock'), false);
+});
+
 finish();
