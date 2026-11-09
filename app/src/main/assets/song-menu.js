@@ -654,7 +654,7 @@
     const a = audio();
     const info = a && editCtx && a.getPlaylistInfo ? a.getPlaylistInfo(editCtx.key) : null;
     if (!info || !info.canEdit) { closeNow(); return; }
-    const draft = editCtx.draft || { name: info.name, description: info.description, privacy: info.privacy };
+    const draft = editCtx.draft || { name: info.name, description: info.description };
     editCtx.draft = null;
     body.replaceChildren();
     const zone = el('div', 'sm-drag');
@@ -698,17 +698,9 @@
     if (!info.canRename) form.appendChild(el('p', 'sm-hint sm-pad', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
     body.appendChild(form);
 
-    let privacy = draft.privacy;
     const list = el('div', 'sm-list');
-    const privSlot = el('div');
-    const drawPriv = () => {
-      privSlot.replaceChildren(row('i-lock-open', privacy === 'private' ? 'Make public' : 'Make private',
-        () => { privacy = privacy === 'private' ? 'public' : 'private'; drawPriv(); },
-        { note: privacy === 'private' ? 'Private now' : 'Public now' }));
-    };
-    if (info.canPrivacy) { drawPriv(); list.appendChild(privSlot); }
     list.appendChild(row('i-move', 'Reorder songs', () => {
-      editCtx.draft = { name: name.value, description: desc.value, privacy: privacy };
+      editCtx.draft = { name: name.value, description: desc.value };
       showPlaylistOrder();
     }));
     if (info.canDelete) list.appendChild(row('i-trash', 'Delete playlist', () => { editCtx.draft = null; showPlaylistDelete(); }, { danger: true }));
@@ -719,10 +711,9 @@
       openCover(uiName(editCtx.key), info.name);
     });
 
-    dirtyCheck = () => name.value.trim() !== info.name || desc.value.trim() !== info.description || (info.canPrivacy && privacy !== info.privacy);
+    dirtyCheck = () => name.value.trim() !== info.name || desc.value.trim() !== info.description;
     const doSave = () => {
       const patch = { name: name.value, description: desc.value };
-      if (info.canPrivacy) patch.privacy = privacy;
       const r = a.editPlaylist(editCtx.key, patch);
       if (!r.ok) { toast(errorText(r.error)); if (r.error === 'taken' || r.error === 'name') name.focus(); return; }
       closeNow();

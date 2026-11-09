@@ -13,7 +13,7 @@ function sheet(overrides) {
   const body = createNode('body');
   const doc = { body, createElement: createNode, createElementNS: (ns, t) => createNode(t), addEventListener() {} };
   let songs = [{ id: 'a', title: 'Alpha', artist: 'X' }, { id: 'b', title: 'Beta', artist: 'Y' }, { id: 'c', title: 'Gamma', artist: 'Z' }];
-  let info = { key: 'name:Mix', name: 'Mix', description: 'Old', kind: 'file', canEdit: true, canRename: true, canDelete: true, maxDescription: 500, canPrivacy: true, privacy: 'private' };
+  let info = { key: 'name:Mix', name: 'Mix', description: 'Old', kind: 'file', canEdit: true, canRename: true, canDelete: true, maxDescription: 500 };
   const audio = Object.assign({
     getPlaylistInfo: () => info, getPlaylistOrder: () => songs,
     editPlaylist: (k, p) => { calls.push(['edit', k, p]); return { ok: true, key: k, name: p.name }; },
@@ -37,14 +37,14 @@ function sheet(overrides) {
   return { rowLabel, win, calls, layer, submit, tapNode, byLabel, field, tapScrim, toast, setInfo: (i) => { info = i; }, songs: () => songs };
 }
 
-check('Name & details: Cancel / title / Save, the name, the description, Make public, Reorder, Delete', () => {
+check('Name & details: Cancel / title / Save, the name, the description, Reorder, Delete', () => {
   const s = sheet();
   assert.strictEqual(s.win.SongMenu.openEdit('name:Mix', 'Mix'), true);
   assert.ok(/Name & details/.test(s.layer().textContent));
   assert.ok(s.byLabel('Cancel') && s.byLabel('Save'));
   assert.strictEqual(s.field('name').value, 'Mix');
   assert.strictEqual(s.field('description').value, 'Old');
-  assert.ok(s.rowLabel('Make public') && s.rowLabel('Reorder songs') && s.rowLabel('Delete playlist'));
+  assert.ok(s.rowLabel('Reorder songs') && s.rowLabel('Delete playlist'));
   s.tapNode(s.rowLabel('Reorder songs'));
   const titles = findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent);
   assert.deepStrictEqual(titles, ['Alpha', 'Beta', 'Gamma']);
@@ -56,7 +56,7 @@ check('Save sends the typed name and description; a refused name keeps the sheet
   s.field('name').value = '  Road trip ';
   s.field('description').value = 'For the car';
   s.tapNode(s.byLabel('Save'));
-  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: '  Road trip ', description: 'For the car', privacy: 'private' }]);
+  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: '  Road trip ', description: 'For the car' }]);
   assert.ok(s.layer().classList.contains('hidden'));
   const t = sheet({ editPlaylist: () => ({ ok: false, error: 'taken' }) });
   t.win.SongMenu.openEdit('name:Mix', 'Mix');
@@ -66,18 +66,15 @@ check('Save sends the typed name and description; a refused name keeps the sheet
   assert.ok(/already have a playlist/.test(t.toast()));
 });
 
-check('Make public is saved with the rest, and a trip to Reorder keeps what was typed', () => {
+check('a trip to Reorder keeps what was typed', () => {
   const s = sheet();
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
   s.field('description').value = 'Typed';
-  s.tapNode(s.rowLabel('Make public'));
-  assert.ok(s.rowLabel('Make private'));                            // the row now offers the opposite
   s.tapNode(s.rowLabel('Reorder songs'));
   s.tapNode(s.byLabel('Back'));
   assert.strictEqual(s.field('description').value, 'Typed');
-  assert.ok(s.rowLabel('Make private'));
   s.tapNode(s.byLabel('Save'));
-  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: 'Mix', description: 'Typed', privacy: 'public' }]);
+  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: 'Mix', description: 'Typed' }]);
 });
 
 check('unsaved changes are not lost by a stray tap; Cancel discards them', () => {
