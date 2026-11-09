@@ -603,7 +603,7 @@
 
   function descBox(value, max) {
     const input = el('textarea', 'sm-input');
-    input.rows = 3;
+    input.rows = 4;
     input.maxLength = max;
     input.value = value || '';
     input.setAttribute('data-sm-field', 'description');
@@ -686,7 +686,6 @@
     const badge = el('span', 'badge');
     badge.appendChild(icon('i-pencil'));
     cover.appendChild(badge);
-    const fields = el('div', 'sm-edit-fields');
     const name = nameBox(draft.name, 60);
     name.disabled = !info.canRename;
     name.placeholder = 'Playlist name';
@@ -694,12 +693,11 @@
     const desc = descBox(draft.description, info.maxDescription);
     desc.placeholder = 'Add description';
     desc.setAttribute('aria-label', 'Description');
-    fields.appendChild(name);
-    fields.appendChild(desc);
     head.appendChild(cover);
-    head.appendChild(fields);
-    form.appendChild(head);
-    if (!info.canRename) form.appendChild(el('p', 'sm-hint sm-pad', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
+    body.appendChild(head);
+    form.appendChild(field('Name', name));
+    if (!info.canRename) form.appendChild(el('p', 'sm-hint', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
+    form.appendChild(field('Description', desc));
     body.appendChild(form);
 
     const list = el('div', 'sm-list');

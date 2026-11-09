@@ -176,4 +176,15 @@ check('Delete playlist from the ... menu goes straight to the confirmation; fold
   assert.strictEqual(f.win.SongMenu.openDelete('name:Rock', 'Rock'), false);
 });
 
+check('the name and description boxes are roomy, full width, and the edit sheet shows them with labels', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/index.html'), 'utf8');
+  assert.ok(/\.sm-form \.sm-input[^{]*\{[^}]*width:\s*100%[^}]*height:\s*60px[^}]*font:\s*500 18px/.test(html));
+  assert.ok(/\.sm-form textarea\.sm-input[^{]*\{[^}]*min-height:\s*124px/.test(html));
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  const labels = findAll(s.layer(), hasClass('sm-field-label')).map((n) => n.textContent);
+  assert.deepStrictEqual(labels, ['Name', 'Description']);
+  assert.strictEqual(s.field('description').rows, 4);
+});
+
 finish();
