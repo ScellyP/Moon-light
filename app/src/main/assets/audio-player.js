@@ -3300,13 +3300,15 @@ window.NovelAudio = (function () {
       return made.key;
     },
 
-    addSongToPlaylist(key, id) {
+    // `quiet` = do not redraw the playlist now (the add-songs picker adds many; it calls refreshPlaylists() once when it closes).
+    addSongToPlaylist(key, id, quiet) {
       const track = MediaLibrary.getTrack(id);
       if (!track || typeof key !== 'string') return false;
       if (key.indexOf('list:') === 0) {
         if (!AudioFeatures.customPlaylists.addTracks(key.slice(5), [id])) return false;
       } else if (key.indexOf('name:') === 0) {
         const name = key.slice(5);
+        if (MediaLibrary._namesOf(track).indexOf(name) !== -1) return true;      // already in it (by file or by folder): never twice
         const b = window.AndroidBridge;
         let ok = false;
         try { ok = !!(b && b.playlistAddSong && b.playlistAddSong(name, track.path)); } catch (e) { ok = false; }
@@ -3316,9 +3318,13 @@ window.NovelAudio = (function () {
         track.playlists = names;
         if (!track.playlist) track.playlist = name;
       } else { return false; }
+      if (quiet) { MediaLibrary.infoRev++; MediaLibrary.playlistFilesChanged(); return true; }
       this._playlistsChanged();
       return true;
     },
+
+    // Redraws the lists after several quiet adds.
+    refreshPlaylists() { this._playlistsChanged(); },
 
     removeSongFromPlaylist(key, id) {
       const track = MediaLibrary.getTrack(id);

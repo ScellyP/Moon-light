@@ -2510,7 +2510,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-album-title { font: 700 24px/1.2 var(--font-ui); margin: 26px 20px 0; overflow-wrap: anywhere; }
 #sp-album-meta { font-size: 13px; color: var(--sp-sub); margin: 6px 20px 0; }
 #sp-album-desc { font-size: 13px; line-height: 1.4; color: var(--sp-sub); margin: 8px 20px 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-#sp-album-desc.hidden, #sp-album-edit.hidden { display: none; }
+#sp-album-desc.hidden, #sp-album-edit.hidden, #sp-album-add.hidden { display: none; }
 #sp-album-actions { display: flex; align-items: center; gap: 12px; padding: 10px 20px 14px; }
 .sp-fab {
   margin-left: auto; width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
@@ -3172,6 +3172,41 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-edit-fields .sm-input { height: 48px; border-radius: 6px; border: 0; background: color-mix(in srgb, var(--text) 12%, transparent); }
 .sm-edit-fields textarea.sm-input { height: 76px; min-height: 76px; }
 .sm-pad { padding: 4px 22px 8px; }
+#pp-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 92; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
+#pp-layer.hidden { display: none; }
+@keyframes pp-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.pp-bar { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; min-height: 60px; padding: 4px 8px; }
+.pp-back, .pp-done { border: 0; background: none; color: var(--text); cursor: pointer; min-width: 44px; min-height: 44px; font: 600 15px/1 var(--font-ui); transition: opacity .15s; }
+.pp-back { display: grid; place-items: center; border-radius: 50%; }
+.pp-back .ico { width: 26px; height: 26px; }
+.pp-done { color: var(--accent); padding: 0 12px; }
+.pp-back:active, .pp-done:active { opacity: .6; }
+.pp-head { text-align: center; min-width: 0; }
+.pp-title { font: 700 17px/1.2 var(--font-ui); }
+.pp-sub { font: 400 12.5px/1.3 var(--font-ui); color: var(--sp-sub, var(--faint)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 8px; }
+.pp-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-height: 72px; }
+.pp-art { flex: none; width: 56px; height: 56px; border-radius: 4px; display: grid; place-items: center; color: var(--sp-sub, var(--faint));
+  background: color-mix(in srgb, var(--text) 10%, transparent) center / cover no-repeat var(--pp-cover); }
+.pp-art[data-pp-cover] .ico { display: none; }
+.pp-art .ico { width: 26px; height: 26px; }
+.pp-text { flex: 1; min-width: 0; }
+.pp-name, .pp-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-name { font: 400 16px/1.3 var(--font-ui); }
+.pp-artist { font: 400 13.5px/1.35 var(--font-ui); color: var(--sp-sub, var(--faint)); }
+.pp-add { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--sp-sub, var(--text)); cursor: pointer; transition: transform .15s, color .15s, background .15s; }
+.pp-add .ico { width: 30px; height: 30px; }
+.pp-add:active { transform: scale(.88); }
+.pp-add.done { color: var(--accent); cursor: default; }
+.pp-empty { padding: 48px 28px; text-align: center; font: 400 15px/1.5 var(--font-ui); color: var(--sp-sub, var(--faint)); }
+.pp-search { display: flex; align-items: center; gap: 10px; margin: 6px 14px calc(12px + var(--nav-bar-height, 0px)); padding: 0 16px; border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); }
+html.kb-open .pp-search { margin-bottom: 10px; }
+.pp-search .ico { width: 22px; height: 22px; flex: none; }
+.pp-input { flex: 1; min-width: 0; height: 52px; border: 0; outline: 0; background: transparent; color: var(--text); font: 500 16px/1 var(--font-ui); -webkit-appearance: none; appearance: none; }
+.pp-input::placeholder { color: var(--sp-sub, var(--faint)); }
+.pp-input::-webkit-search-cancel-button, .pp-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
 .sm-section { padding: 18px 22px 6px; font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
 .sm-ord { display: flex; flex-direction: column; padding: 0 12px; }
 .sm-ord-row { display: flex; align-items: center; gap: 4px; min-height: 52px; padding: 4px 4px 4px 10px; border-radius: 10px; }
@@ -3629,6 +3664,7 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-album-desc" class="hidden"></div>
           <div id="sp-album-actions">
             <button type="button" class="sp-icon-btn" id="sp-album-shuffle" title="Shuffle" aria-label="Shuffle"><svg class="ico"><use href="#i-shuffle"/></svg></button>
+            <button type="button" class="sp-icon-btn hidden" id="sp-album-add" title="Add songs" aria-label="Add songs"><svg class="ico"><use href="#i-plus"/></svg></button>
             <button type="button" class="sp-icon-btn hidden" id="sp-album-edit" title="Edit playlist" aria-label="Edit playlist"><svg class="ico"><use href="#i-pencil"/></svg></button>
             <button type="button" class="sp-icon-btn" data-sp-more title="More" aria-label="More options"><svg class="ico"><use href="#sp-more"/></svg></button>
             <button type="button" id="sp-album-play" class="sp-fab" title="Play or pause" aria-label="Play or pause">
@@ -3879,6 +3915,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="song-memory.js"></script>
 <script src="spotify-ui.js"></script>
 <script src="song-menu.js"></script>
+<script src="playlist-picker.js"></script>
 <script src="song-search.js"></script>
 <script src="song-download.js"></script>
 <script src="moon-phase.js"></script>

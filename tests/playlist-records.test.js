@@ -17,7 +17,7 @@ function start(extraFiles) {
     { id: 'rock', name: 'Rock', source: 'folder', description: 'Loud', legacy: { folder: 'Rock' }, songs: [{ ref: 'Songs/e.mp3', title: 'e' }] },
   ].concat(extraFiles || []);
   const covers = {};
-  const log = { saves: 0, deleted: [] };
+  const log = { saves: 0, deleted: [], adds: 0 };
   const t = launch({ bluetooth: false });
   const bridge = {
     scanAudioStartup() {}, scanAudio() {}, isBluetoothAudioConnected: () => false, nativeAudioLoad() {}, nativeAudioPlay() {},
@@ -35,7 +35,7 @@ function start(extraFiles) {
       const i = files.findIndex(f => f.name === name && f.source === 'user');
       if (i < 0) return false; log.deleted.push(files[i].id); files.splice(i, 1); return true;
     },
-    playlistAddSong: (name, path) => { const f = files.find(x => x.name === name); if (!f) return false; f.songs.push({ ref: 'Songs/' + path.replace(/^.*\//, ''), title: '' }); return true; },
+    playlistAddSong: (name, path) => { log.adds++; const f = files.find(x => x.name === name); if (!f) return false; f.songs.push({ ref: 'Songs/' + path.replace(/^.*\//, ''), title: '' }); return true; },
     playlistCoverGet: (n) => covers[n] || '', playlistCoverSave: (n, u) => { covers[n] = u; return true; }, playlistCoverClear: (n) => { delete covers[n]; return true; },
   };
   global.AndroidBridge = bridge;
@@ -170,6 +170,24 @@ check('the header asks cheaply: editable or not, and the description', () => {
   assert.deepStrictEqual(t.app.getPlaylistSummary('name:Rock'), { canEdit: true, description: 'Loud' });
   assert.deepStrictEqual(t.app.getPlaylistSummary(''), { canEdit: false, description: '' });
   assert.deepStrictEqual(t.app.getPlaylistSummary('name:Nope'), { canEdit: false, description: '' });
+});
+
+check('adding songs for the picker: appended in the order tapped, never twice, redrawn only on refresh', () => {
+  const t = start();
+  t.app.createPlaylist('Fresh', '');
+  const calls0 = t.log.adds;
+  assert.strictEqual(t.app.addSongToPlaylist('name:Fresh', F.id, true), true);
+  assert.strictEqual(t.app.addSongToPlaylist('name:Fresh', E.id, true), true);
+  assert.strictEqual(t.app.addSongToPlaylist('name:Fresh', F.id, true), true);       // again: a no-op, not a second entry
+  assert.strictEqual(t.log.adds - calls0, 2);
+  assert.deepStrictEqual(t.files.find(f => f.name === 'Fresh').songs.map(x => x.ref), ['Songs/f.mp3', 'Songs/e.mp3']);
+  assert.strictEqual(orderOf(t, 'Fresh'), 'fe');                                       // visible at once, in the order added
+  assert.strictEqual(t.app.getPlaylistInfo('name:Fresh').count, 2);
+  assert.strictEqual(typeof t.app.refreshPlaylists, 'function');
+  t.app.refreshPlaylists();
+  assert.strictEqual(orderOf(t, 'Fresh'), 'fe');
+  assert.strictEqual(t.app.addSongToPlaylist('name:Mix', A.id, true), true);          // a folder/file member is already in
+  assert.strictEqual(t.log.adds - calls0, 2);
 });
 
 check('a name used by a playlist file with no songs yet is taken too', () => {

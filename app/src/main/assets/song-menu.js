@@ -645,8 +645,9 @@
       const r = a.createPlaylist(name.value, desc.value);
       if (!r.ok) { toast(errorText(r.error)); if (r.error !== 'save') name.focus(); return; }
       closeNow();
-      toast('Playlist \u201c' + r.name + '\u201d created. Add songs from any song\u2019s \u22ee menu.');
       if (root.SpotifyUI && root.SpotifyUI.openPlaylist) root.SpotifyUI.openPlaylist(uiName(r.key));
+      // Straight on to choosing its songs; closing the picker leaves the new playlist's page.
+      if (!(root.PlaylistPicker && root.PlaylistPicker.open(r.key, r.name))) toast('Playlist \u201c' + r.name + '\u201d created');
     });
     body.appendChild(form);
     root.setTimeout(() => { try { name.focus(); } catch (err) { /* no keyboard */ } }, 0);

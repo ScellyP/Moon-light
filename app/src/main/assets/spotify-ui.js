@@ -87,6 +87,7 @@
     albumMeta: $('sp-album-meta'),
     albumDesc: $('sp-album-desc'),
     albumEdit: $('sp-album-edit'),
+    albumAdd: $('sp-album-add'),
     albumPlay: $('sp-album-play'),
     albumShuffle: $('sp-album-shuffle'),
 
@@ -302,6 +303,14 @@
     if (target.closest('#sp-album-cover')) {
       const key = el.albumCover.getAttribute('data-pl-key') || 'all';
       if (window.SongMenu && window.SongMenu.openCover) window.SongMenu.openCover(key, getPlaylistTitle());
+      return;
+    }
+
+    // The + on a playlist: the add-songs picker (every song on the phone).
+    if (target.closest('#sp-album-add')) {
+      const audio = window.NovelAudio;
+      const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
+      if (key && window.PlaylistPicker && window.PlaylistPicker.open) window.PlaylistPicker.open(key, getPlaylistTitle());
       return;
     }
 
@@ -1288,6 +1297,7 @@
     const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
     const sum = key && audio.getPlaylistSummary ? audio.getPlaylistSummary(key) : { canEdit: false, description: '' };
     if (el.albumEdit) el.albumEdit.classList.toggle('hidden', !sum.canEdit);
+    if (el.albumAdd) el.albumAdd.classList.toggle('hidden', !sum.canEdit);
     if (el.albumDesc) {
       el.albumDesc.textContent = sum.description || '';
       el.albumDesc.classList.toggle('hidden', !sum.description);
