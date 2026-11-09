@@ -3156,6 +3156,21 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-warn-title { margin: 0; font: 700 17px/1.3 var(--font-ui); overflow-wrap: anywhere; }
 .sm-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .sm-form { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 8px; }
+.sm-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 6px 16px 14px; }
+.sm-top-title { font: 700 17px/1.2 var(--font-ui); color: var(--text); text-align: center; }
+.sm-top-btn { justify-self: start; border: 0; background: none; padding: 12px 6px; min-height: 44px; font: 600 15px/1 var(--font-ui); color: var(--text); cursor: pointer; transition: opacity .15s; }
+.sm-top-btn.save { justify-self: end; color: var(--accent); }
+.sm-top-btn:disabled { opacity: .4; cursor: default; }
+.sm-edit-head { display: flex; gap: 16px; padding: 8px 20px 4px; align-items: flex-start; }
+.sm-edit-cover { position: relative; flex: none; width: 112px; height: 112px; border: 0; padding: 0; border-radius: 4px; background: color-mix(in srgb, var(--text) 10%, transparent) center / cover no-repeat var(--sm-cover); color: var(--text); cursor: pointer; display: grid; place-items: center; }
+.sm-edit-cover[data-sm-cover] .ico.art { display: none; }
+.sm-edit-cover .ico.art { width: 40px; height: 40px; }
+.sm-edit-cover .badge { position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.55); display: grid; place-items: center; }
+.sm-edit-cover .badge .ico { width: 16px; height: 16px; }
+.sm-edit-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.sm-edit-fields .sm-input { height: 48px; border-radius: 6px; border: 0; background: color-mix(in srgb, var(--text) 12%, transparent); }
+.sm-edit-fields textarea.sm-input { height: 76px; min-height: 76px; }
+.sm-pad { padding: 4px 22px 8px; }
 .sm-section { padding: 18px 22px 6px; font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
 .sm-ord { display: flex; flex-direction: column; padding: 0 12px; }
 .sm-ord-row { display: flex; align-items: center; gap: 4px; min-height: 52px; padding: 4px 4px 4px 10px; border-radius: 10px; }
@@ -3747,6 +3762,7 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-sheet-title"></div>
           <div id="sp-sheet-artist"></div>
           <div id="sp-sheet-list">
+            <button type="button" class="hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit playlist</span></button>
             <button type="button" data-sp-act="like"><svg class="ico"><use href="#i-heart"/></svg><span id="sp-act-like-label">Like</span></button>
             <button type="button" data-sp-act="addto"><svg class="ico"><use href="#i-playlist-add"/></svg><span>Add to playlist</span></button>
             <button type="button" data-sp-act="songmenu"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit, loop and playlists…</span></button>

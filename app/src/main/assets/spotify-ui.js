@@ -210,6 +210,12 @@
 
   function openSheet() {
     if (!el.sheet) return;
+    // "Edit playlist" is offered on the Songs tab for a playlist that has a record.
+    const a = window.NovelAudio;
+    const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+    const can = !!(key && panel.getAttribute('data-view') === 'album' && a.getPlaylistSummary && a.getPlaylistSummary(key).canEdit);
+    const entry = el.sheet.querySelector('[data-sp-act="editpl"]');
+    if (entry) entry.classList.toggle('hidden', !can);
     el.sheet.classList.remove('hidden');
     sync();
   }
@@ -238,6 +244,14 @@
           el.addTo.click();
         }
         break;
+
+      case 'editpl': {
+        const a = window.NovelAudio;
+        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+        closeSheet();
+        if (key && window.SongMenu && window.SongMenu.openEdit) window.SongMenu.openEdit(key, getPlaylistTitle());
+        break;
+      }
 
       case 'songmenu': {
         const a = window.NovelAudio;

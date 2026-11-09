@@ -649,52 +649,111 @@
     root.setTimeout(() => { try { name.focus(); } catch (err) { /* no keyboard */ } }, 0);
   }
 
+  // "Name & details": Cancel | title | Save, then the cover, name and description, Make private, Reorder, Delete.
   function showPlaylistEdit() {
     const a = audio();
     const info = a && editCtx && a.getPlaylistInfo ? a.getPlaylistInfo(editCtx.key) : null;
     if (!info || !info.canEdit) { closeNow(); return; }
+    const draft = editCtx.draft || { name: info.name, description: info.description, privacy: info.privacy };
+    editCtx.draft = null;
     body.replaceChildren();
-    body.appendChild(plainHead('Edit playlist', info.name));
-    const form = el('form', 'sm-form');
-    const name = nameBox(info.name, 60);
-    const desc = descBox(info.description, info.maxDescription);
-    name.disabled = !info.canRename;
-    form.appendChild(field('Name', name));
-    if (!info.canRename) form.appendChild(el('p', 'sm-hint', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
-    desc.placeholder = 'Description (optional)';
-    form.appendChild(field('Description', desc));
-    const actions = el('div', 'sm-actions');
-    const save = button('sm-btn primary', 'Save');
-    save.type = 'submit';
-    save.textContent = 'Save';
-    const cancel = button('sm-btn', 'Cancel');
+    const zone = el('div', 'sm-drag');
+    zone.appendChild(el('div', 'sm-grip'));
+    enableSwipeDown(zone);
+    body.appendChild(zone);
+
+    const top = el('div', 'sm-top');
+    const cancel = button('sm-top-btn', 'Cancel');
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', closeNow);
-    actions.appendChild(save);
-    actions.appendChild(cancel);
-    form.appendChild(actions);
-    dirtyCheck = () => name.value.trim() !== info.name || desc.value.trim() !== info.description;
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const r = a.editPlaylist(editCtx.key, { name: name.value, description: desc.value });
+    const save = button('sm-top-btn save', 'Save');
+    save.textContent = 'Save';
+    top.appendChild(cancel);
+    top.appendChild(el('div', 'sm-top-title', 'Name & details'));
+    top.appendChild(save);
+    body.appendChild(top);
+
+    const form = el('form', 'sm-form-plain');
+    const head = el('div', 'sm-edit-head');
+    const cover = button('sm-edit-cover', 'Change cover');
+    cover.appendChild(icon('i-moon-music', 'art'));
+    const url = root.SpotifyUI && root.SpotifyUI.getCover ? root.SpotifyUI.getCover(uiName(editCtx.key)) : '';
+    if (url) { cover.style.setProperty('--sm-cover', 'url("' + url + '")'); cover.setAttribute('data-sm-cover', '1'); }
+    const badge = el('span', 'badge');
+    badge.appendChild(icon('i-pencil'));
+    cover.appendChild(badge);
+    const fields = el('div', 'sm-edit-fields');
+    const name = nameBox(draft.name, 60);
+    name.disabled = !info.canRename;
+    name.placeholder = 'Playlist name';
+    name.setAttribute('aria-label', 'Playlist name');
+    const desc = descBox(draft.description, info.maxDescription);
+    desc.placeholder = 'Add description';
+    desc.setAttribute('aria-label', 'Description');
+    fields.appendChild(name);
+    fields.appendChild(desc);
+    head.appendChild(cover);
+    head.appendChild(fields);
+    form.appendChild(head);
+    if (!info.canRename) form.appendChild(el('p', 'sm-hint sm-pad', 'This playlist follows a folder on your phone, so it keeps the folder\u2019s name.'));
+    body.appendChild(form);
+
+    let privacy = draft.privacy;
+    const list = el('div', 'sm-list');
+    const privSlot = el('div');
+    const drawPriv = () => {
+      privSlot.replaceChildren(row('i-lock-open', privacy === 'private' ? 'Make public' : 'Make private',
+        () => { privacy = privacy === 'private' ? 'public' : 'private'; drawPriv(); },
+        { note: privacy === 'private' ? 'Private now' : 'Public now' }));
+    };
+    if (info.canPrivacy) { drawPriv(); list.appendChild(privSlot); }
+    list.appendChild(row('i-move', 'Reorder songs', () => {
+      editCtx.draft = { name: name.value, description: desc.value, privacy: privacy };
+      showPlaylistOrder();
+    }));
+    if (info.canDelete) list.appendChild(row('i-trash', 'Delete playlist', () => { editCtx.draft = null; showPlaylistDelete(); }, { danger: true }));
+    body.appendChild(list);
+
+    cover.addEventListener('click', () => {
+      if (dirtyCheck && dirtyCheck()) { toast('Save your changes first, then change the cover'); return; }
+      openCover(uiName(editCtx.key), info.name);
+    });
+
+    dirtyCheck = () => name.value.trim() !== info.name || desc.value.trim() !== info.description || (info.canPrivacy && privacy !== info.privacy);
+    const doSave = () => {
+      const patch = { name: name.value, description: desc.value };
+      if (info.canPrivacy) patch.privacy = privacy;
+      const r = a.editPlaylist(editCtx.key, patch);
       if (!r.ok) { toast(errorText(r.error)); if (r.error === 'taken' || r.error === 'name') name.focus(); return; }
       closeNow();
       toast('Playlist saved');
-    });
-    body.appendChild(form);
+    };
+    save.addEventListener('click', doSave);
+    form.addEventListener('submit', (e) => { e.preventDefault(); doSave(); });
+  }
 
-    // The order: one button moves a song a place up or down. Every move is saved at once (the record only).
-    body.appendChild(el('div', 'sm-section', 'Order'));
+  // Reorder: one button moves a song a place up or down. Every move is saved at once (the record only).
+  function showPlaylistOrder() {
+    const a = audio();
+    if (!a || !editCtx) { closeNow(); return; }
+    dirtyCheck = null;
+    body.replaceChildren();
+    const zone = el('div', 'sm-drag');
+    zone.appendChild(el('div', 'sm-grip'));
+    enableSwipeDown(zone);
+    body.appendChild(zone);
+    const top = el('div', 'sm-top');
+    const back = button('sm-top-btn', 'Back');
+    back.textContent = 'Back';
+    back.addEventListener('click', showPlaylistEdit);
+    top.appendChild(back);
+    top.appendChild(el('div', 'sm-top-title', 'Reorder songs'));
+    top.appendChild(el('span'));
+    body.appendChild(top);
     const orderBox = el('div', 'sm-ord');
     body.appendChild(orderBox);
     drawOrder(orderBox, null);
-    body.appendChild(el('p', 'sm-hint', 'Moves save right away. The songs themselves stay where they are.'));
-
-    if (info.canDelete) {
-      const list = el('div', 'sm-list');
-      list.appendChild(row('i-trash', 'Delete playlist', showPlaylistDelete, { danger: true }));
-      body.appendChild(list);
-    }
+    body.appendChild(el('p', 'sm-hint sm-pad', 'Moves save right away. The songs themselves stay where they are.'));
   }
 
   function drawOrder(box, focus) {
@@ -727,7 +786,7 @@
         if (keep && !keep.disabled && keep.focus) keep.focus();
       }
     });
-    if (songs.length > ORDER_ROWS) box.appendChild(el('p', 'sm-hint', 'Showing the first ' + ORDER_ROWS + ' of ' + songs.length + ' songs.'));
+    if (songs.length > ORDER_ROWS) box.appendChild(el('p', 'sm-hint sm-pad', 'Showing the first ' + ORDER_ROWS + ' of ' + songs.length + ' songs.'));
   }
 
   function showPlaylistDelete() {

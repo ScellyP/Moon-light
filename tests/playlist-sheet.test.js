@@ -13,7 +13,7 @@ function sheet(overrides) {
   const body = createNode('body');
   const doc = { body, createElement: createNode, createElementNS: (ns, t) => createNode(t), addEventListener() {} };
   let songs = [{ id: 'a', title: 'Alpha', artist: 'X' }, { id: 'b', title: 'Beta', artist: 'Y' }, { id: 'c', title: 'Gamma', artist: 'Z' }];
-  let info = { key: 'name:Mix', name: 'Mix', description: 'Old', kind: 'file', canEdit: true, canRename: true, canDelete: true, maxDescription: 500 };
+  let info = { key: 'name:Mix', name: 'Mix', description: 'Old', kind: 'file', canEdit: true, canRename: true, canDelete: true, maxDescription: 500, canPrivacy: true, privacy: 'private' };
   const audio = Object.assign({
     getPlaylistInfo: () => info, getPlaylistOrder: () => songs,
     editPlaylist: (k, p) => { calls.push(['edit', k, p]); return { ok: true, key: k, name: p.name }; },
@@ -30,17 +30,22 @@ function sheet(overrides) {
   const submit = (form) => (form.listeners.submit || []).forEach((f) => f({ preventDefault() {} }));
   const tapNode = (n) => (n.listeners.click || []).forEach((f) => f({ stopPropagation() {}, target: n }));
   const byLabel = (txt) => findAll(layer(), (n) => n.tag === 'button' && n.textContent === txt)[0];
+  const rowLabel = (txt) => findAll(layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.textContent.indexOf(txt) !== -1)[0];
   const field = (name) => findAll(layer(), (n) => n.attrs['data-sm-field'] === name)[0];
   const tapScrim = () => layer().listeners.click.forEach((f) => f({ target: layer().children[0] }));
   const toast = () => (body.children.find((c) => c.classList.contains('sm-toast')) || { textContent: '' }).textContent;
-  return { win, calls, layer, submit, tapNode, byLabel, field, tapScrim, toast, setInfo: (i) => { info = i; }, songs: () => songs };
+  return { rowLabel, win, calls, layer, submit, tapNode, byLabel, field, tapScrim, toast, setInfo: (i) => { info = i; }, songs: () => songs };
 }
 
-check('Edit playlist shows the name, the description and the songs in saved order', () => {
+check('Name & details: Cancel / title / Save, the name, the description, Make public, Reorder, Delete', () => {
   const s = sheet();
   assert.strictEqual(s.win.SongMenu.openEdit('name:Mix', 'Mix'), true);
+  assert.ok(/Name & details/.test(s.layer().textContent));
+  assert.ok(s.byLabel('Cancel') && s.byLabel('Save'));
   assert.strictEqual(s.field('name').value, 'Mix');
   assert.strictEqual(s.field('description').value, 'Old');
+  assert.ok(s.rowLabel('Make public') && s.rowLabel('Reorder songs') && s.rowLabel('Delete playlist'));
+  s.tapNode(s.rowLabel('Reorder songs'));
   const titles = findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent);
   assert.deepStrictEqual(titles, ['Alpha', 'Beta', 'Gamma']);
 });
@@ -50,15 +55,29 @@ check('Save sends the typed name and description; a refused name keeps the sheet
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
   s.field('name').value = '  Road trip ';
   s.field('description').value = 'For the car';
-  s.submit(findAll(s.layer(), (n) => n.tag === 'form')[0]);
-  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: '  Road trip ', description: 'For the car' }]);
+  s.tapNode(s.byLabel('Save'));
+  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: '  Road trip ', description: 'For the car', privacy: 'private' }]);
   assert.ok(s.layer().classList.contains('hidden'));
   const t = sheet({ editPlaylist: () => ({ ok: false, error: 'taken' }) });
   t.win.SongMenu.openEdit('name:Mix', 'Mix');
   t.field('name').value = 'Rock';
-  t.submit(findAll(t.layer(), (n) => n.tag === 'form')[0]);
+  t.tapNode(t.byLabel('Save'));
   assert.ok(!t.layer().classList.contains('hidden'));
   assert.ok(/already have a playlist/.test(t.toast()));
+});
+
+check('Make public is saved with the rest, and a trip to Reorder keeps what was typed', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.field('description').value = 'Typed';
+  s.tapNode(s.rowLabel('Make public'));
+  assert.ok(s.rowLabel('Make private'));                            // the row now offers the opposite
+  s.tapNode(s.rowLabel('Reorder songs'));
+  s.tapNode(s.byLabel('Back'));
+  assert.strictEqual(s.field('description').value, 'Typed');
+  assert.ok(s.rowLabel('Make private'));
+  s.tapNode(s.byLabel('Save'));
+  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: 'Mix', description: 'Typed', privacy: 'public' }]);
 });
 
 check('unsaved changes are not lost by a stray tap; Cancel discards them', () => {
@@ -79,6 +98,7 @@ check('unsaved changes are not lost by a stray tap; Cancel discards them', () =>
 check('move buttons: first row cannot go up, last cannot go down; a move reaches the player and redraws', () => {
   const s = sheet();
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.tapNode(s.rowLabel('Reorder songs'));
   const ups = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn up') !== -1);
   const downs = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn down') !== -1);
   assert.deepStrictEqual([ups[0].disabled, ups[1].disabled, downs[2].disabled, downs[0].disabled], [true, false, true, false]);
@@ -91,13 +111,12 @@ check('move buttons: first row cannot go up, last cannot go down; a move reaches
 check('Delete playlist asks first, says the songs stay, and Cancel goes back', () => {
   const s = sheet();
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
-  const row = findAll(s.layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.className.indexOf('danger') !== -1)[0];
-  s.tapNode(row);
+  s.tapNode(s.rowLabel('Delete playlist'));
   assert.ok(/songs stay on your phone/.test(s.layer().textContent));
   assert.strictEqual(s.calls.length, 0);                          // not deleted yet
   s.tapNode(s.byLabel('Cancel'));
   assert.ok(s.field('name'));                                     // back on the edit form
-  s.tapNode(findAll(s.layer(), (n) => n.className.indexOf('sm-row') !== -1 && n.className.indexOf('danger') !== -1)[0]);
+  s.tapNode(s.rowLabel('Delete playlist'));
   s.tapNode(s.byLabel('Delete playlist'));
   assert.deepStrictEqual(s.calls[0], ['delete', 'name:Mix']);
   assert.deepStrictEqual(s.calls[1], ['view', 'library']);

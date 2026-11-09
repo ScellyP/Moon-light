@@ -3142,7 +3142,8 @@ window.NovelAudio = (function () {
       }
       const user = rec.source === 'user';
       return { key: key, name: name, description: rec.description || '', kind: user ? 'file' : 'folder', canEdit: true,
-        canRename: user, canDelete: user, maxDescription: 500, count: MediaLibrary.tracksInPlaylist(name).length };
+        canRename: user, canDelete: user, maxDescription: 500, count: MediaLibrary.tracksInPlaylist(name).length,
+        canPrivacy: true, privacy: rec.privacy === 'public' ? 'public' : 'private' };
     },
 
     // Cheap look for the Songs-tab header (runs on every redraw): can it be edited, and what is its description.
@@ -3195,11 +3196,14 @@ window.NovelAudio = (function () {
       if (renamed && !info.canRename) return { ok: false, error: 'locked' };
       if (renamed && this._nameTaken(name, key)) return { ok: false, error: 'taken' };
       let newKey = key;
+      const privacy = patch && (patch.privacy === 'public' || patch.privacy === 'private') && info.canPrivacy ? patch.privacy : null;
       if (key.indexOf('list:') === 0) {
         if (!AudioFeatures.customPlaylists.update(key.slice(5), { name: name, description: desc })) return { ok: false, error: 'save' };
       } else {
         const rec = MediaLibrary.playlistRecord(info.name);
-        if (!this._saveRecord(Object.assign({}, rec, { name: name, description: desc }))) return { ok: false, error: 'save' };
+        const next = Object.assign({}, rec, { name: name, description: desc });
+        if (privacy) next.privacy = privacy;
+        if (!this._saveRecord(next)) return { ok: false, error: 'save' };
         if (renamed) {
           this._carryCover(info.name, name);
           state.tracks.forEach(t => {

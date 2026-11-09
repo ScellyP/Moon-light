@@ -100,6 +100,16 @@ check('rename + description: saved in the file, tracks and cover follow, a taken
   assert.strictEqual(t.app.getPlaylistInfo('name:road trip').description, 'x');
 });
 
+check('privacy is saved in the file with the rest; a bad value changes nothing', () => {
+  const t = start();
+  assert.strictEqual(t.app.getPlaylistInfo('name:Mix').privacy, 'private');          // files default to private
+  assert.strictEqual(t.app.editPlaylist('name:Mix', { privacy: 'public' }).ok, true);
+  assert.strictEqual(t.files[0].privacy, 'public');
+  assert.strictEqual(t.app.getPlaylistInfo('name:Mix').privacy, 'public');
+  t.app.editPlaylist('name:Mix', { privacy: 'everyone', description: 'x' });
+  assert.strictEqual(t.files[0].privacy, 'public');
+});
+
 check('a playlist that follows a folder keeps its name but can get a description', () => {
   const t = start();
   const info = t.app.getPlaylistInfo('name:Rock');
