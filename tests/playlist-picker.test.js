@@ -23,7 +23,12 @@ function picker(opts) {
     addSongToPlaylist: (k, id, quiet) => { calls.push(['add', k, id, quiet]); return o.addFails ? false : true; },
     refreshPlaylists: () => calls.push(['refresh']),
   };
-  const win = { document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio, SongMenu: { toast: (m) => toasts.push(m) } };
+  const arts = [];
+  const win = { document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio, SongMenu: { toast: (m) => toasts.push(m) },
+    AndroidBridge: { getArtwork: (path) => { arts.push(path); return 'data:image/jpeg;base64,X'; } } };
+  if (o.observer) {
+    win.IntersectionObserver = function (cb) { o.observer.cb = cb; o.observer.seen = []; this.observe = (n) => o.observer.seen.push(n); this.unobserve = () => {}; this.disconnect = () => { o.observer.seen = []; }; };
+  }
   new Function('window', SRC.replace("})(typeof window !== 'undefined' ? window : this);", '})(window);'))(win);
   const layer = () => body.children.find((c) => c.id === 'pp-layer');
   const list = () => findAll(layer(), hasClass('pp-list'))[0];
@@ -33,7 +38,7 @@ function picker(opts) {
   const type = (text) => { const i = findAll(layer(), (n) => n.tag === 'input')[0]; i.value = text; (i.listeners.input || []).forEach((f) => f({})); };
   const scrollDown = () => { const l = list(); l.scrollTop = 1e9; l.clientHeight = 600; l.scrollHeight = 0; (l.listeners.scroll || []).forEach((f) => f({})); };
   const addBtn = (i) => findAll(rows()[i], hasClass('pp-add'))[0];
-  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, tracks };
+  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, tracks, arts };
 }
 
 check('opens with the playlist name and lists ALL songs, drawing more as you scroll', () => {
@@ -118,6 +123,18 @@ check('a failed add says so and keeps the + so it can be tried again', () => {
   assert.ok(p.addBtn(0).className.indexOf('done') === -1);
   p.win.PlaylistPicker.close();
   assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 0);
+});
+
+check('artwork is asked only for rows that come on screen, one at a time', () => {
+  const obs = {};
+  const p = picker({ observer: obs });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  assert.strictEqual(obs.seen.length, 60);                       // all rows are watched ...
+  assert.strictEqual(p.arts.length, 0);                          // ... but none has asked for its picture yet
+  obs.cb([{ isIntersecting: true, target: obs.seen[0] }, { isIntersecting: false, target: obs.seen[1] }, { isIntersecting: true, target: obs.seen[2] }]);
+  assert.deepStrictEqual(p.arts, ['/m/s0.mp3', '/m/s2.mp3']);    // only the two that are visible
+  const tile = findAll(p.rows()[0], hasClass('pp-art'))[0];
+  assert.ok(tile.getAttribute('data-pp-cover'));
 });
 
 finish();

@@ -8,7 +8,7 @@ const { check, finish } = require('./audio-harness');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/song-menu.js'), 'utf8');
 
-function sheet(overrides) {
+function sheet(overrides, bridgeOverrides) {
   const calls = [];
   const body = createNode('body');
   const doc = { body, createElement: createNode, createElementNS: (ns, t) => createNode(t), addEventListener() {} };
@@ -23,7 +23,14 @@ function sheet(overrides) {
   }, overrides || {});
   const win = {
     document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio,
-    SpotifyUI: { openPlaylist: (n) => calls.push(['open', n]), setView: (v) => calls.push(['view', v]) },
+    SpotifyUI: { openPlaylist: (n) => calls.push(['open', n]), setView: (v) => calls.push(['view', v]), coverChanged: (n) => calls.push(['coverChanged', n]) },
+    AndroidBridge: Object.assign({
+      playlistCoverPick: (k) => calls.push(['pick', k]),
+      playlistCoverGet: (k) => (k === '@draft:new' ? 'data:image/jpeg;base64,DRAFT' : ''),
+      playlistCoverSave: (k, u) => { calls.push(['coverSave', k, u]); return true; },
+      playlistCoverClear: (k) => calls.push(['coverClear', k]),
+      playlistCreate: () => true,
+    }, bridgeOverrides || {}),
   };
   new Function('window', 'document', SRC.replace("})(typeof window !== 'undefined' ? window : this);", '})(window);'))(win, doc);
   const layer = () => body.children.find((c) => c.classList.contains('sm-layer'));
@@ -131,11 +138,13 @@ check('a folder playlist: the name is locked and there is no delete row', () => 
 check('New playlist: name + optional description, then its page opens', () => {
   const s = sheet();
   assert.strictEqual(s.win.SongMenu.openCreate(), true);
+  assert.ok(/New playlist/.test(s.layer().textContent) && s.byLabel('Cancel') && s.byLabel('Create'));
   s.field('name').value = ' Gym ';
   s.field('description').value = 'Fast songs';
   s.submit(findAll(s.layer(), (n) => n.tag === 'form')[0]);
-  assert.deepStrictEqual(s.calls[0], ['create', ' Gym ', 'Fast songs']);
-  assert.deepStrictEqual(s.calls[1], ['open', 'Gym']);
+  const flow = s.calls.filter((c) => c[0] !== 'coverClear');        // (opening the sheet also drops any old temporary picture)
+  assert.deepStrictEqual(flow[0], ['create', ' Gym ', 'Fast songs']);
+  assert.deepStrictEqual(flow[1], ['open', 'Gym']);
   assert.ok(s.layer().classList.contains('hidden'));
   const t = sheet({ createPlaylist: () => ({ ok: false, error: 'taken' }) });
   t.win.SongMenu.openCreate();
@@ -176,15 +185,60 @@ check('Delete playlist from the ... menu goes straight to the confirmation; fold
   assert.strictEqual(f.win.SongMenu.openDelete('name:Rock', 'Rock'), false);
 });
 
+check('New playlist: Create waits for a name; the cover tile picks a gallery picture kept under a temporary key', () => {
+  const s = sheet();
+  s.win.SongMenu.openCreate();
+  assert.strictEqual(s.byLabel('Create').disabled, true);
+  s.field('name').value = 'Gym';
+  (s.field('name').listeners.input || []).forEach((f) => f({}));
+  assert.strictEqual(s.byLabel('Create').disabled, false);
+  const tile = findAll(s.layer(), (n) => n.className.indexOf('sm-edit-cover') !== -1)[0];
+  assert.ok(tile && !tile.getAttribute('data-sm-cover'));
+  s.tapNode(tile);
+  assert.deepStrictEqual(s.calls.filter((c) => c[0] === 'pick'), [['pick', '@draft:new']]);
+  s.win.SongMenu.draftCoverPicked(true);                                   // the app says the gallery picture is ready
+  assert.ok(tile.getAttribute('data-sm-cover'));
+  s.tapNode(s.byLabel('Create'));
+  assert.ok(s.calls.some((c) => c[0] === 'create' && c[1] === 'Gym'));
+  assert.deepStrictEqual(s.calls.find((c) => c[0] === 'coverSave'), ['coverSave', 'Gym', 'data:image/jpeg;base64,DRAFT']);
+  assert.ok(s.calls.some((c) => c[0] === 'coverChanged' && c[1] === 'Gym'));
+  assert.ok(s.calls.filter((c) => c[0] === 'coverClear').length >= 1);      // the temporary picture is dropped
+  assert.ok(s.layer().classList.contains('hidden'));
+});
+
+check('New playlist: a picked cover counts as unsaved work, and Cancel throws the temporary picture away', () => {
+  const s = sheet();
+  s.win.SongMenu.openCreate();
+  s.win.SongMenu.draftCoverPicked(true);
+  s.tapScrim();
+  assert.ok(!s.layer().classList.contains('hidden'));                      // a stray tap keeps it open
+  const before = s.calls.filter((c) => c[0] === 'coverClear').length;
+  s.tapNode(s.byLabel('Cancel'));
+  assert.ok(s.layer().classList.contains('hidden'));
+  assert.ok(s.calls.filter((c) => c[0] === 'coverClear').length > before);
+  assert.ok(!s.calls.some((c) => c[0] === 'create' || c[0] === 'coverSave'));
+});
+
+check('New playlist: a failed gallery answer or a missing picture changes nothing', () => {
+  const s = sheet({}, { playlistCoverGet: () => '' });
+  s.win.SongMenu.openCreate();
+  const tile = findAll(s.layer(), (n) => n.className.indexOf('sm-edit-cover') !== -1)[0];
+  s.win.SongMenu.draftCoverPicked(false);
+  s.win.SongMenu.draftCoverPicked(true);
+  assert.ok(!tile.getAttribute('data-sm-cover'));
+});
+
 check('the name and description boxes are roomy, full width, and the edit sheet shows them with labels', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/index.html'), 'utf8');
-  assert.ok(/\.sm-form \.sm-input[^{]*\{[^}]*width:\s*100%[^}]*height:\s*60px[^}]*font:\s*500 18px/.test(html));
-  assert.ok(/\.sm-form textarea\.sm-input[^{]*\{[^}]*min-height:\s*124px/.test(html));
+  // `flex: none` is what lets `height` count: the base .sm-input has flex: 1, which ignores height in a column form
+  assert.ok(/\.sm-form \.sm-input[^{]*\{[^}]*flex:\s*none[^}]*width:\s*100%[^}]*height:\s*62px[^}]*font:\s*500 19px/.test(html));
+  assert.ok(/\.sm-form textarea\.sm-input[^{]*\{[^}]*min-height:\s*92px/.test(html));
+  assert.ok(!/\.sm-form[^{]*:focus[^{]*\{[^}]*var\(--accent\)/.test(html));       // no bright accent ring: tints of the app's own colours
   const s = sheet();
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
   const labels = findAll(s.layer(), hasClass('sm-field-label')).map((n) => n.textContent);
   assert.deepStrictEqual(labels, ['Name', 'Description']);
-  assert.strictEqual(s.field('description').rows, 4);
+  assert.strictEqual(s.field('description').rows, 3);
 });
 
 finish();

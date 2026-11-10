@@ -555,10 +555,11 @@ window.NovelAudio = (function () {
     playlistFiles() {
       const b = window.AndroidBridge;
       if (!b || !b.listPlaylists) return [];
-      // Read once per library state: the page asks for it for every playlist count and row. A scan (new
-      // tracks array) or any playlist change (infoRev) makes it read again.
+      // Read once per library state: the page asks for it for every playlist count and row, and each read makes the
+      // phone open every playlist file. Only a scan (new tracks array) or a playlist change (_playlistsChanged,
+      // playlistFilesChanged) makes it read again; editing a song's title or a like does not.
       const c = this._pf;
-      if (c && c.tracks === state.tracks && c.rev === this.infoRev && !c.dirty) return c.list;
+      if (c && c.tracks === state.tracks && !c.dirty) return c.list;
       let list = [];
       try {
         list = JSON.parse(b.listPlaylists() || '[]');
@@ -3347,6 +3348,7 @@ window.NovelAudio = (function () {
     // After a playlist changed: refresh what the Songs list shows (the queue keeps the song that is playing).
     _playlistsChanged() {
       MediaLibrary.infoRev++;
+      MediaLibrary.playlistFilesChanged();
       AudioFeatures.emit('libraryChanged');
       AudioUI.selectPlaylist(state.activePlaylist);
     },

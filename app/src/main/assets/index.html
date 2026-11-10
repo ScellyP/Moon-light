@@ -3170,14 +3170,19 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-edit-cover .ico.art { width: 40px; height: 40px; }
 .sm-edit-cover .badge { position: absolute; right: 6px; bottom: 6px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.55); display: grid; place-items: center; }
 .sm-edit-cover .badge .ico { width: 16px; height: 16px; }
-/* Name and description boxes (create and edit): full width, roomy, easy to read while typing. */
+/* Name and description boxes (create and edit): full width, roomy, coloured from the app's own background.
+   `flex: none` matters: the base .sm-input has flex: 1, which inside these column forms ignores `height`. */
 .sm-form, .sm-form-plain { display: flex; flex-direction: column; gap: 18px; padding: 8px 20px 12px; }
-.sm-form .sm-input, .sm-form-plain .sm-input { width: 100%; box-sizing: border-box; height: 60px; padding: 0 18px; border-radius: 12px; border: 0;
-  background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); font: 500 18px/1.3 var(--font-ui); transition: box-shadow .15s, background .15s; }
-.sm-form textarea.sm-input, .sm-form-plain textarea.sm-input { height: auto; min-height: 124px; max-height: 220px; padding: 16px 18px; font-size: 17px; line-height: 1.45; }
-.sm-form .sm-input:focus, .sm-form-plain .sm-input:focus { outline: 0; box-shadow: 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--text) 16%, transparent); }
+.sm-form .sm-input, .sm-form-plain .sm-input { flex: none; width: 100%; box-sizing: border-box; height: 62px; padding: 0 18px; border-radius: 10px; border: 1.5px solid transparent;
+  background: color-mix(in srgb, var(--text) 11%, var(--panel, var(--bg))); color: var(--text); font: 500 19px/1.3 var(--font-ui); caret-color: var(--text);
+  transition: border-color .18s ease, background .18s ease; }
+.sm-form textarea.sm-input, .sm-form-plain textarea.sm-input { height: auto; min-height: 92px; max-height: 180px; padding: 15px 18px; font-size: 17px; line-height: 1.45; font-weight: 400; }
+.sm-form .sm-input:focus, .sm-form-plain .sm-input:focus { outline: 0; box-shadow: none; border-color: color-mix(in srgb, var(--text) 42%, transparent);
+  background: color-mix(in srgb, var(--text) 14%, var(--panel, var(--bg))); }
 .sm-form .sm-input::placeholder, .sm-form-plain .sm-input::placeholder { color: var(--sp-sub, var(--faint)); font-weight: 400; }
+.sm-form .sm-input:disabled, .sm-form-plain .sm-input:disabled { opacity: .6; }
 .sm-form .sm-field-label, .sm-form-plain .sm-field-label { font-size: 12.5px; }
+.sm-top-btn.save:disabled { color: var(--sp-sub, var(--faint)); }
 .sm-pad { padding: 4px 22px 8px; }
 #pp-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 92; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
   padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
@@ -3193,7 +3198,7 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .pp-title { font: 700 17px/1.2 var(--font-ui); }
 .pp-sub { font: 400 12.5px/1.3 var(--font-ui); color: var(--sp-sub, var(--faint)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 8px; }
-.pp-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-height: 72px; }
+.pp-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-height: 72px; content-visibility: auto; contain-intrinsic-size: auto 72px; }
 .pp-art { flex: none; width: 56px; height: 56px; border-radius: 4px; display: grid; place-items: center; color: var(--sp-sub, var(--faint));
   background: color-mix(in srgb, var(--text) 10%, transparent) center / cover no-repeat var(--pp-cover); }
 .pp-art[data-pp-cover] .ico { display: none; }

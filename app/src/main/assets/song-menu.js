@@ -126,6 +126,7 @@
 
   function closeNow() {
     dirtyCheck = null;
+    discardDraftCover();
     if (layer) layer.classList.add('hidden');
     current = null;
   }
@@ -617,39 +618,105 @@
     return 'Could not save the playlist';
   }
 
+  // New playlist: the same look as "Name & details": Cancel | title | Create, a cover to pick from the gallery, a
+  // name and a short description. The picture waits under a temporary key until the playlist exists.
+  const DRAFT_COVER = '@draft:new';
+  let draftCover = null;     // { uri, paint } while the New playlist sheet is open
+
+  function discardDraftCover() {
+    if (!draftCover) return;
+    draftCover = null;
+    const b = bridge();
+    try { if (b && b.playlistCoverClear) b.playlistCoverClear(DRAFT_COVER); } catch (e) { /* nothing to drop */ }
+  }
+
+  // The gallery answered (see window.onPlaylistCoverPicked): show the picture in the cover tile.
+  function draftCoverPicked(ok) {
+    if (!ok || !draftCover) return;
+    const b = bridge();
+    let uri = '';
+    try { uri = b && b.playlistCoverGet ? (b.playlistCoverGet(DRAFT_COVER) || '') : ''; } catch (e) { uri = ''; }
+    if (!uri) return;
+    draftCover.uri = uri;
+    draftCover.paint();
+  }
+
   function showCreate() {
     const a = audio();
     if (!a || !a.createPlaylist) { closeNow(); return; }
+    const b = bridge();
+    try { if (b && b.playlistCoverClear) b.playlistCoverClear(DRAFT_COVER); } catch (e) { /* none yet */ }
     body.replaceChildren();
-    body.appendChild(plainHead('New playlist', 'Name it now, add songs afterwards'));
-    const form = el('form', 'sm-form');
-    const name = nameBox('', 60);
-    const desc = descBox('', bridge() && bridge().playlistCreate ? 500 : 120);
-    name.placeholder = 'Playlist name';
-    desc.placeholder = 'Description (optional)';
-    form.appendChild(field('Name', name));
-    form.appendChild(field('Description', desc));
-    const actions = el('div', 'sm-actions');
-    const make = button('sm-btn primary', 'Create');
-    make.type = 'submit';
-    make.textContent = 'Create';
-    const cancel = button('sm-btn', 'Cancel');
+    const zone = el('div', 'sm-drag');
+    zone.appendChild(el('div', 'sm-grip'));
+    enableSwipeDown(zone);
+    body.appendChild(zone);
+
+    const top = el('div', 'sm-top');
+    const cancel = button('sm-top-btn', 'Cancel');
     cancel.textContent = 'Cancel';
     cancel.addEventListener('click', closeNow);
-    actions.appendChild(make);
-    actions.appendChild(cancel);
-    form.appendChild(actions);
-    dirtyCheck = () => !!(name.value.trim() || desc.value.trim());
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
+    const make = button('sm-top-btn save', 'Create');
+    make.type = 'button';
+    make.textContent = 'Create';
+    top.appendChild(cancel);
+    top.appendChild(el('div', 'sm-top-title', 'New playlist'));
+    top.appendChild(make);
+    body.appendChild(top);
+
+    const head = el('div', 'sm-edit-head');
+    const cover = button('sm-edit-cover', 'Choose a cover');
+    cover.appendChild(icon('i-moon-music', 'art'));
+    const badge = el('span', 'badge');
+    badge.appendChild(icon('i-pencil'));
+    cover.appendChild(badge);
+    head.appendChild(cover);
+    body.appendChild(head);
+
+    const form = el('form', 'sm-form-plain');
+    const name = nameBox('', 60);
+    name.placeholder = 'Playlist name';
+    name.setAttribute('aria-label', 'Playlist name');
+    const desc = descBox('', b && b.playlistCreate ? 500 : 120);
+    desc.rows = 3;
+    desc.placeholder = 'Add description (optional)';
+    desc.setAttribute('aria-label', 'Description');
+    form.appendChild(field('Name', name));
+    form.appendChild(field('Description', desc));
+    body.appendChild(form);
+
+    draftCover = { uri: '', paint() {
+      if (!this.uri) return;
+      cover.style.setProperty('--sm-cover', 'url("' + this.uri + '")');
+      cover.setAttribute('data-sm-cover', '1');
+    } };
+    cover.addEventListener('click', () => {
+      if (!b || !b.playlistCoverPick) { toast('Only available in the Moonlight app'); return; }
+      b.playlistCoverPick(DRAFT_COVER);                       // the answer comes back through window.onPlaylistCoverPicked
+    });
+
+    const sync = () => { make.disabled = !name.value.trim(); };
+    name.addEventListener('input', sync);
+    sync();
+    dirtyCheck = () => !!(name.value.trim() || desc.value.trim() || (draftCover && draftCover.uri));
+
+    const doCreate = () => {
       const r = a.createPlaylist(name.value, desc.value);
       if (!r.ok) { toast(errorText(r.error)); if (r.error !== 'save') name.focus(); return; }
+      const uri = draftCover ? draftCover.uri : '';
+      if (uri && b && b.playlistCoverSave) {
+        let saved = false;
+        try { saved = !!b.playlistCoverSave(uiName(r.key), uri); } catch (e) { saved = false; }
+        if (saved && root.SpotifyUI && root.SpotifyUI.coverChanged) root.SpotifyUI.coverChanged(uiName(r.key));
+        else if (!saved) toast('The playlist was made, but the cover could not be saved');
+      }
       closeNow();
       if (root.SpotifyUI && root.SpotifyUI.openPlaylist) root.SpotifyUI.openPlaylist(uiName(r.key));
       // Straight on to choosing its songs; closing the picker leaves the new playlist's page.
       if (!(root.PlaylistPicker && root.PlaylistPicker.open(r.key, r.name))) toast('Playlist \u201c' + r.name + '\u201d created');
-    });
-    body.appendChild(form);
+    };
+    make.addEventListener('click', doCreate);
+    form.addEventListener('submit', (e) => { e.preventDefault(); doCreate(); });
     root.setTimeout(() => { try { name.focus(); } catch (err) { /* no keyboard */ } }, 0);
   }
 
@@ -691,6 +758,7 @@
     name.placeholder = 'Playlist name';
     name.setAttribute('aria-label', 'Playlist name');
     const desc = descBox(draft.description, info.maxDescription);
+    desc.rows = 3;
     desc.placeholder = 'Add description';
     desc.setAttribute('aria-label', 'Description');
     head.appendChild(cover);
@@ -863,7 +931,7 @@
     return true;
   }
 
-  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, openEdit: openEdit, openDelete: openDelete, openCreate: openCreate, toast: toast };
+  root.SongMenu = { open: open, close: close, isOpen: isOpen, openCover: openCover, draftCoverPicked: draftCoverPicked, openEdit: openEdit, openDelete: openDelete, openCreate: openCreate, toast: toast };
 
   // Any "..." button on the page: <button data-song-more="<id>" [data-song-ctx="1"]>.
   const EDGE = 50;                        // px at the right end of a Songs-list row that count as its "..." button

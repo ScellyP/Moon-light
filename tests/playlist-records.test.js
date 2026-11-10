@@ -17,11 +17,11 @@ function start(extraFiles) {
     { id: 'rock', name: 'Rock', source: 'folder', description: 'Loud', legacy: { folder: 'Rock' }, songs: [{ ref: 'Songs/e.mp3', title: 'e' }] },
   ].concat(extraFiles || []);
   const covers = {};
-  const log = { saves: 0, deleted: [], adds: 0 };
+  const log = { saves: 0, deleted: [], adds: 0, lists: 0 };
   const t = launch({ bluetooth: false });
   const bridge = {
     scanAudioStartup() {}, scanAudio() {}, isBluetoothAudioConnected: () => false, nativeAudioLoad() {}, nativeAudioPlay() {},
-    listPlaylists: () => JSON.stringify(files.map(f => Object.assign({}, f, { songs: f.songs.map(s => Object.assign({ available: true }, s)) }))),
+    listPlaylists: () => { log.lists++; return JSON.stringify(files.map(f => Object.assign({}, f, { songs: f.songs.map(s => Object.assign({ available: true }, s)) }))); },
     savePlaylist: (json, overwrite) => {
       const m = JSON.parse(json); const i = files.findIndex(f => f.id === m.id);
       if (i < 0) files.push(m); else if (overwrite) files[i] = m; else return true;
@@ -188,6 +188,19 @@ check('adding songs for the picker: appended in the order tapped, never twice, r
   assert.strictEqual(orderOf(t, 'Fresh'), 'fe');
   assert.strictEqual(t.app.addSongToPlaylist('name:Mix', A.id, true), true);          // a folder/file member is already in
   assert.strictEqual(t.log.adds - calls0, 2);
+});
+
+check('the phone is asked for the playlist files only when a playlist changed, not for every redraw or song edit', () => {
+  const t = start();
+  t.app.getPlaylists(); t.app.getPlaylistTracks('Mix');
+  const base = t.log.lists;
+  for (let i = 0; i < 20; i++) { t.app.getPlaylists(); t.app.getPlaylistTracks('Mix'); t.app.getPlaylistSummary('name:Mix'); }
+  t.mods.MediaLibrary.infoRev++;                                   // e.g. a song's title was edited
+  t.app.getPlaylists(); t.app.getPlaylistTracks('Mix');
+  assert.strictEqual(t.log.lists, base);                           // no new read
+  t.app.editPlaylist('name:Mix', { description: 'x' });            // a playlist changed: one new read, then cached again
+  t.app.getPlaylists(); t.app.getPlaylistTracks('Mix'); t.app.getPlaylistSummary('name:Mix');
+  assert.strictEqual(t.log.lists, base + 1);
 });
 
 check('a name used by a playlist file with no songs yet is taken too', () => {

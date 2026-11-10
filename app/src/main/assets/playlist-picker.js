@@ -60,6 +60,9 @@
   const artCache = {};
   const artQueue = [];
   let artTimer = 0;
+  let seen = null;                // IntersectionObserver: artwork is only asked for rows that are (nearly) on screen
+  const rowJobs = new WeakMap();  // row element -> { tile, track }
+  const nextFrame = (f) => (typeof root.requestAnimationFrame === 'function' ? root.requestAnimationFrame(f) : root.setTimeout(f, 16));
 
   function artFor(track) {
     if (Object.prototype.hasOwnProperty.call(artCache, track.path)) return artCache[track.path];
@@ -70,20 +73,38 @@
     return uri;
   }
 
+  // One picture per animation frame, so scrolling and typing never wait for a batch of them.
   function drainArt() {
     artTimer = 0;
-    for (let n = 0; n < 4 && artQueue.length; n++) {
+    while (artQueue.length) {
       const job = artQueue.shift();
       if (job.tile.isConnected === false) continue;       // the list was redrawn meanwhile
       const uri = artFor(job.track);
       if (uri) { job.tile.style.setProperty('--pp-cover', 'url("' + uri + '")'); job.tile.setAttribute('data-pp-cover', '1'); }
+      break;
     }
-    if (artQueue.length) artTimer = root.setTimeout(drainArt, 0);
+    if (artQueue.length) scheduleArt();
+  }
+
+  function scheduleArt() {
+    if (artTimer) return;
+    artTimer = -1;                                  // (a timer that fires at once must not be overwritten below)
+    const id = nextFrame(drainArt);
+    if (artTimer === -1) artTimer = id;
   }
 
   function queueArt(tile, track) {
     artQueue.push({ tile: tile, track: track });
-    if (!artTimer) artTimer = root.setTimeout(drainArt, 0);
+    scheduleArt();
+  }
+
+  function onSeen(entries) {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      const job = rowJobs.get(e.target);
+      if (seen) seen.unobserve(e.target);
+      if (job) queueArt(job.tile, job.track);
+    });
   }
 
   /* ---- the screen ---- */
@@ -111,6 +132,9 @@
     layer.appendChild(bar);
 
     list = el('div', 'pp-list');
+    if (typeof root.IntersectionObserver === 'function') {
+      try { seen = new root.IntersectionObserver(onSeen, { root: list, rootMargin: '240px 0px' }); } catch (e) { seen = null; }
+    }
     list.addEventListener('scroll', () => {
       if (ctx && ctx.drawn < ctx.shown.length && list.scrollTop + list.clientHeight >= list.scrollHeight - 800) drawMore();
     });
@@ -126,7 +150,7 @@
     input.setAttribute('autocomplete', 'off');
     input.addEventListener('input', () => {
       if (searchTimer) root.clearTimeout(searchTimer);
-      searchTimer = root.setTimeout(() => { searchTimer = 0; runSearch(); }, 140);
+      searchTimer = root.setTimeout(() => { searchTimer = 0; runSearch(); }, 200);
     });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.blur) input.blur(); });
     search.appendChild(input);
@@ -150,6 +174,8 @@
 
   function renderList() {
     list.replaceChildren();
+    artQueue.length = 0;
+    if (seen) seen.disconnect();
     ctx.drawn = 0;
     if (!ctx.shown.length) {
       const total = (audio() && audio().getTracks ? audio().getTracks().length : 0);
@@ -195,7 +221,8 @@
       markAdded(add, track);
     });
     row.appendChild(add);
-    queueArt(tile, track);
+    if (seen) { rowJobs.set(row, { tile: tile, track: track }); seen.observe(row); }      // art when it scrolls into view
+    else queueArt(tile, track);
     return row;
   }
 
@@ -222,6 +249,7 @@
     const done = ctx;
     ctx = null;
     artQueue.length = 0;
+    if (seen) seen.disconnect();
     list.replaceChildren();
     if (done && done.added) {
       const a = audio();

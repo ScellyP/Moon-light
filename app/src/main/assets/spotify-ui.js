@@ -977,6 +977,8 @@
   }
 
   window.onPlaylistCoverPicked = function (name, ok) {
+    // The New playlist sheet picks its cover before the playlist exists, under a temporary key.
+    if (name === '@draft:new') { if (window.SongMenu && window.SongMenu.draftCoverPicked) window.SongMenu.draftCoverPicked(!!ok); return; }
     if (ok) coverChanged(name);
     if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(ok ? 'Playlist cover changed' : 'Could not use that picture');
   };
