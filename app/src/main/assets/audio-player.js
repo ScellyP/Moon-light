@@ -3184,6 +3184,7 @@ window.NovelAudio = (function () {
         key = 'list:' + id;
       }
       this._playlistsChanged();
+      MediaLibrary.scan();                    // a new playlist: "Scan the sky" runs by itself so the library is up to date
       return { ok: true, key: key, name: clean };
     },
 

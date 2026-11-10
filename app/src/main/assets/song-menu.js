@@ -72,7 +72,7 @@
 
   function toast(message) {
     if (!toastNode) {
-      toastNode = el('div', 'sm-toast');
+      toastNode = el('div', 'sm-toast dyn-colours');
       toastNode.setAttribute('role', 'status');
       doc.body.appendChild(toastNode);
     }
@@ -99,7 +99,7 @@
   /* ---- the sheet ----------------------------------------------------------------------------------- */
   function build() {
     if (layer) return;
-    layer = el('div', 'sm-layer hidden');
+    layer = el('div', 'sm-layer dyn-colours hidden');
     layer.setAttribute('role', 'dialog');
     layer.setAttribute('aria-modal', 'true');
     layer.setAttribute('aria-label', 'Song options');
@@ -109,6 +109,7 @@
     layer.appendChild(scrim);
     layer.appendChild(body);
     doc.body.appendChild(layer);
+    if (root.SpotifyUI && root.SpotifyUI.syncTint) root.SpotifyUI.syncTint();      // the song colours, if a song is loaded
     layer.addEventListener('click', (e) => {
       if (e.target.closest && e.target.closest('[data-sm-close]')) close();
     });

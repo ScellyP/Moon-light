@@ -17,10 +17,10 @@ function start(extraFiles) {
     { id: 'rock', name: 'Rock', source: 'folder', description: 'Loud', legacy: { folder: 'Rock' }, songs: [{ ref: 'Songs/e.mp3', title: 'e' }] },
   ].concat(extraFiles || []);
   const covers = {};
-  const log = { saves: 0, deleted: [], adds: 0, lists: 0 };
+  const log = { saves: 0, deleted: [], adds: 0, lists: 0, scans: 0 };
   const t = launch({ bluetooth: false });
   const bridge = {
-    scanAudioStartup() {}, scanAudio() {}, isBluetoothAudioConnected: () => false, nativeAudioLoad() {}, nativeAudioPlay() {},
+    scanAudioStartup() {}, scanAudio() { log.scans++; }, isBluetoothAudioConnected: () => false, nativeAudioLoad() {}, nativeAudioPlay() {},
     listPlaylists: () => { log.lists++; return JSON.stringify(files.map(f => Object.assign({}, f, { songs: f.songs.map(s => Object.assign({ available: true }, s)) }))); },
     savePlaylist: (json, overwrite) => {
       const m = JSON.parse(json); const i = files.findIndex(f => f.id === m.id);
@@ -201,6 +201,15 @@ check('the phone is asked for the playlist files only when a playlist changed, n
   t.app.editPlaylist('name:Mix', { description: 'x' });            // a playlist changed: one new read, then cached again
   t.app.getPlaylists(); t.app.getPlaylistTracks('Mix'); t.app.getPlaylistSummary('name:Mix');
   assert.strictEqual(t.log.lists, base + 1);
+});
+
+check('creating a playlist runs "Scan the sky" by itself; a refused name does not', () => {
+  const t = start();
+  const before = t.log.scans;
+  assert.strictEqual(t.app.createPlaylist('Fresh', '').ok, true);
+  assert.strictEqual(t.log.scans, before + 1);
+  assert.strictEqual(t.app.createPlaylist('fresh', '').ok, false);
+  assert.strictEqual(t.log.scans, before + 1);
 });
 
 check('a name used by a playlist file with no songs yet is taken too', () => {

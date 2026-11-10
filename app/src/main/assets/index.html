@@ -3115,6 +3115,9 @@ button, a, li, input[type="range"], select, summary, [role="button"] { touch-act
 .sp-recent-item { display: flex; align-items: center; }
 .sp-recent-item .sp-recent-row { flex: 1; min-width: 0; width: auto; }
 .srch-more { margin-right: -10px; }
+/* Screens outside the music panel that follow the song colours (spotify-ui.js copies --bg/--text/--accent... onto
+   every .dyn-colours element). Same aliases the panel defines, so var(--sp-sub) etc. mean the same thing here. */
+.dyn-colours { --sp-bg: var(--bg); --sp-sub: var(--muted); --sp-accent: var(--accent); --sp-accent-hi: var(--accent-strong); --sp-ink: var(--accent-ink); }
 .sm-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 90; display: flex; flex-direction: column; justify-content: flex-end; }
 .sm-layer.hidden { display: none; }
 .sm-scrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 62%, transparent); animation: fadeIn .2s ease both; }
@@ -3174,11 +3177,11 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
    `flex: none` matters: the base .sm-input has flex: 1, which inside these column forms ignores `height`. */
 .sm-form, .sm-form-plain { display: flex; flex-direction: column; gap: 18px; padding: 8px 20px 12px; }
 .sm-form .sm-input, .sm-form-plain .sm-input { flex: none; width: 100%; box-sizing: border-box; height: 62px; padding: 0 18px; border-radius: 10px; border: 1.5px solid transparent;
-  background: color-mix(in srgb, var(--text) 11%, var(--panel, var(--bg))); color: var(--text); font: 500 19px/1.3 var(--font-ui); caret-color: var(--text);
+  background: color-mix(in srgb, var(--text) 11%, var(--bg)); color: var(--text); font: 500 19px/1.3 var(--font-ui); caret-color: var(--text);
   transition: border-color .18s ease, background .18s ease; }
 .sm-form textarea.sm-input, .sm-form-plain textarea.sm-input { height: auto; min-height: 92px; max-height: 180px; padding: 15px 18px; font-size: 17px; line-height: 1.45; font-weight: 400; }
 .sm-form .sm-input:focus, .sm-form-plain .sm-input:focus { outline: 0; box-shadow: none; border-color: color-mix(in srgb, var(--text) 42%, transparent);
-  background: color-mix(in srgb, var(--text) 14%, var(--panel, var(--bg))); }
+  background: color-mix(in srgb, var(--text) 14%, var(--bg)); }
 .sm-form .sm-input::placeholder, .sm-form-plain .sm-input::placeholder { color: var(--sp-sub, var(--faint)); font-weight: 400; }
 .sm-form .sm-input:disabled, .sm-form-plain .sm-input:disabled { opacity: .6; }
 .sm-form .sm-field-label, .sm-form-plain .sm-field-label { font-size: 12.5px; }
@@ -3840,7 +3843,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <!-- ================= Settings menu (settings-menu.js) =================
      Slides in from the left: swipe right on Home, or tap the sliders button. It holds the app's
      customising choices; the update controls sit at the bottom. -->
-<div id="settings-layer" aria-hidden="true">
+<div id="settings-layer" class="dyn-colours" aria-hidden="true">
   <div id="settings-scrim"></div>
   <aside id="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settings-title" inert>
     <header class="sd-head">

@@ -110,7 +110,7 @@
   /* ---- the screen ---- */
   function build() {
     if (layer) return;
-    layer = el('div', 'hidden');
+    layer = el('div', 'dyn-colours hidden');
     layer.id = 'pp-layer';
     layer.setAttribute('role', 'dialog');
     layer.setAttribute('aria-label', 'Add to this playlist');
@@ -156,6 +156,7 @@
     search.appendChild(input);
     layer.appendChild(search);
     doc.body.appendChild(layer);
+    if (root.SpotifyUI && root.SpotifyUI.syncTint) root.SpotifyUI.syncTint();      // the song colours, if a song is loaded
   }
 
   function sourceTracks(query) {
@@ -196,8 +197,15 @@
   function markAdded(btn, track) {
     btn.className = 'pp-add done';
     btn.replaceChildren(icon('i-check'));
-    btn.setAttribute('aria-label', 'In the playlist: ' + (track.title || 'song'));
+    btn.setAttribute('aria-label', 'In the playlist, tap to take out: ' + (track.title || 'song'));
     btn.setAttribute('aria-pressed', 'true');
+  }
+
+  function markAddable(btn, track) {
+    btn.className = 'pp-add';
+    btn.replaceChildren(icon('i-circle-plus'));
+    btn.setAttribute('aria-label', 'Add to playlist: ' + (track.title || 'song'));
+    btn.setAttribute('aria-pressed', 'false');
   }
 
   function makeRow(track) {
@@ -212,12 +220,18 @@
     const add = button('pp-add', 'Add to playlist: ' + (track.title || 'song'));
     add.appendChild(icon('i-circle-plus'));
     if (ctx.inList.has(track.id)) markAdded(add, track);
+    // The + adds the song; the check takes it out again (only its place in the playlist, never the music file).
     add.addEventListener('click', () => {
-      if (!ctx || ctx.inList.has(track.id)) return;           // already there: never twice
+      if (!ctx) return;
       const a = audio();
+      if (ctx.inList.has(track.id)) {
+        if (!a || !a.removeSongFromPlaylist || !a.removeSongFromPlaylist(ctx.key, track.id, true)) { toast('Could not take the song out'); return; }
+        ctx.inList.delete(track.id);
+        markAddable(add, track);
+        return;
+      }
       if (!a || !a.addSongToPlaylist(ctx.key, track.id, true)) { toast('Could not add the song'); return; }
       ctx.inList.add(track.id);
-      ctx.added++;
       markAdded(add, track);
     });
     row.appendChild(add);
@@ -232,7 +246,8 @@
     if (!a || !a.addSongToPlaylist || !a.getPlaylistInfo || !a.getPlaylistInfo(String(key || ''))) return false;
     build();
     const order = a.getPlaylistOrder ? a.getPlaylistOrder(key) : [];
-    ctx = { key: String(key), title: title || '', inList: new Set(order.map((s) => s.id)), added: 0, query: '', shown: [], drawn: 0 };
+    const was = new Set(order.map((s) => s.id));
+    ctx = { key: String(key), title: title || '', inList: new Set(was), was: was, query: '', shown: [], drawn: 0 };
     subNode.textContent = ctx.title;
     input.value = '';
     ctx.shown = sourceTracks('');
@@ -251,10 +266,19 @@
     artQueue.length = 0;
     if (seen) seen.disconnect();
     list.replaceChildren();
-    if (done && done.added) {
-      const a = audio();
-      if (a && a.refreshPlaylists) a.refreshPlaylists();     // the playlist behind redraws once
-      toast(done.added === 1 ? 'Added 1 song to \u201c' + done.title + '\u201d' : 'Added ' + done.added + ' songs to \u201c' + done.title + '\u201d');
+    if (done) {
+      // What changed by the end (a song added and then taken out again changes nothing).
+      let added = 0, removed = 0;
+      done.inList.forEach((id) => { if (!done.was.has(id)) added++; });
+      done.was.forEach((id) => { if (!done.inList.has(id)) removed++; });
+      if (added || removed) {
+        const a = audio();
+        if (a && a.refreshPlaylists) a.refreshPlaylists();     // the playlist behind redraws once
+        const n = (k) => (k === 1 ? '1 song' : k + ' songs');
+        const q = '\u201c' + done.title + '\u201d';
+        toast(added && removed ? 'Added ' + n(added) + ' and took out ' + n(removed) + ' (' + q + ')'
+          : added ? 'Added ' + n(added) + ' to ' + q : 'Took out ' + n(removed) + ' from ' + q);
+      }
     }
   }
 

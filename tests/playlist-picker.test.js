@@ -21,6 +21,7 @@ function picker(opts) {
     getPlaylistInfo: (k) => (k === 'name:Mix' ? { key: k, name: 'Mix', canEdit: true } : null),
     getPlaylistOrder: () => inList.map((id) => ({ id })),
     addSongToPlaylist: (k, id, quiet) => { calls.push(['add', k, id, quiet]); return o.addFails ? false : true; },
+    removeSongFromPlaylist: (k, id, quiet) => { calls.push(['remove', k, id, quiet]); return o.removeFails ? false : true; },
     refreshPlaylists: () => calls.push(['refresh']),
   };
   const arts = [];
@@ -61,24 +62,58 @@ check('opening for a playlist that does not exist does nothing', () => {
   assert.strictEqual(p.win.PlaylistPicker.isOpen(), false);
 });
 
-check('+ adds the song to the playlist record once; it turns into a check and cannot be added again', () => {
+check('+ adds the song to the playlist record and turns into a check; tapping the check takes it out again', () => {
   const p = picker();
   p.win.PlaylistPicker.open('name:Mix', 'Mix');
   p.tap(p.addBtn(2));
   assert.deepStrictEqual(p.calls, [['add', 'name:Mix', 's2', true]]);
   assert.ok(p.addBtn(2).className.indexOf('done') !== -1);
   assert.ok(/In the playlist/.test(p.addBtn(2).getAttribute('aria-label')));
-  p.tap(p.addBtn(2));
-  assert.strictEqual(p.calls.length, 1);                         // no second add
+  p.tap(p.addBtn(2));                                            // the check: take it out
+  assert.deepStrictEqual(p.calls[1], ['remove', 'name:Mix', 's2', true]);
+  assert.ok(p.addBtn(2).className.indexOf('done') === -1);
+  assert.ok(/Add to playlist/.test(p.addBtn(2).getAttribute('aria-label')));
+  p.tap(p.addBtn(2));                                            // and the + puts it back
+  assert.deepStrictEqual(p.calls[2], ['add', 'name:Mix', 's2', true]);
+  assert.ok(p.addBtn(2).className.indexOf('done') !== -1);
 });
 
-check('songs already in the playlist start as a check and are never added again', () => {
+check('songs already in the playlist start as a check; tapping one takes it out, and a message says so on closing', () => {
   const p = picker({ inList: ['s0', 's1'] });
   p.win.PlaylistPicker.open('name:Mix', 'Mix');
   assert.ok(p.addBtn(0).className.indexOf('done') !== -1 && p.addBtn(1).className.indexOf('done') !== -1);
   assert.ok(p.addBtn(2).className.indexOf('done') === -1);
   p.tap(p.addBtn(0));
-  assert.strictEqual(p.calls.length, 0);
+  assert.deepStrictEqual(p.calls, [['remove', 'name:Mix', 's0', true]]);
+  assert.ok(p.addBtn(0).className.indexOf('done') === -1);
+  p.win.PlaylistPicker.close();
+  assert.deepStrictEqual(p.toasts, ['Took out 1 song from \u201cMix\u201d']);
+  assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 1);
+});
+
+check('a song added and taken out again in one visit changes nothing: no redraw, no message', () => {
+  const p = picker();
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(4)); p.tap(p.addBtn(4));
+  p.win.PlaylistPicker.close();
+  assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 0);
+  assert.deepStrictEqual(p.toasts, []);
+});
+
+check('adding some and taking out others says both', () => {
+  const p = picker({ inList: ['s0'] });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(0)); p.tap(p.addBtn(1)); p.tap(p.addBtn(2));
+  p.win.PlaylistPicker.close();
+  assert.deepStrictEqual(p.toasts, ['Added 2 songs and took out 1 song (\u201cMix\u201d)']);
+});
+
+check('a failed take-out says so and keeps the check', () => {
+  const p = picker({ inList: ['s0'], removeFails: true });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(0));
+  assert.deepStrictEqual(p.toasts, ['Could not take the song out']);
+  assert.ok(p.addBtn(0).className.indexOf('done') !== -1);
 });
 
 check('closing redraws the playlist once and says how many songs were added', () => {

@@ -202,7 +202,7 @@
 
   window.SpotifyUI = {
     setView, stepView, getCover, refreshTint: () => updateTint(),
-    getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged,
+    getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
   };
 
   /* =======================================================================
@@ -531,8 +531,28 @@
 
   /* ---------- applying / clearing ---------- */
 
+  // The song colours live on the music panel AND on every other screen that carries the class `dyn-colours` (the
+  // song / playlist sheets, the add-songs picker, the edit screen, settings), so nothing in the app falls back to
+  // the plain theme while a song with cover art is loaded. `tintVars` is what was last applied (null = plain theme).
+  let tintVars = null;
+
+  function tintTargets() {
+    return [panel].concat(Array.prototype.slice.call(document.querySelectorAll('.dyn-colours')));
+  }
+
+  /** Copies the current song colours (or their absence) onto every screen that wants them; screens call it when they open. */
+  function pushTint() {
+    tintTargets().forEach((node) => {
+      TINT_VARS.forEach((name) => {
+        if (tintVars && tintVars[name] !== undefined) node.style.setProperty(name, tintVars[name]);
+        else node.style.removeProperty(name);
+      });
+    });
+  }
+
   function clearTint() {
-    TINT_VARS.forEach((name) => panel.style.removeProperty(name));
+    tintVars = null;
+    pushTint();
   }
 
   function applyTint(rgb) {
@@ -557,16 +577,18 @@
     const text = hslToRgb(hue, dark ? 0.25 : 0.4, dark ? 0.94 : 0.12);
     const muted = hslToRgb(hue, dark ? 0.15 : 0.2, dark ? 0.68 : 0.36);
 
-    const style = panel.style;
-    style.removeProperty('--sp-tint'); // keep index.html's own mix of accent + bg
-    style.setProperty('--bg', toCssRgb(background));
-    style.setProperty('--text', toCssRgb(text));
-    style.setProperty('--muted', toCssRgb(muted));
-    style.setProperty('--accent', toCssRgb(accent));
-    style.setProperty('--accent-strong', toCssRgb(accentStrong));
-    style.setProperty('--accent-ink', toCssRgb(background));
-    style.setProperty('--accent-soft', toCssRgba(accent, 0.13));
-    style.setProperty('--accent-line', toCssRgba(accent, 0.42));
+    // (--sp-tint is left out on purpose: index.html keeps its own mix of accent + bg)
+    tintVars = {
+      '--bg': toCssRgb(background),
+      '--text': toCssRgb(text),
+      '--muted': toCssRgb(muted),
+      '--accent': toCssRgb(accent),
+      '--accent-strong': toCssRgb(accentStrong),
+      '--accent-ink': toCssRgb(background),
+      '--accent-soft': toCssRgba(accent, 0.13),
+      '--accent-line': toCssRgba(accent, 0.42),
+    };
+    pushTint();
   }
 
   function resetTint() {

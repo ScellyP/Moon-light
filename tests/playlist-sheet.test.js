@@ -241,4 +241,21 @@ check('the name and description boxes are roomy, full width, and the edit sheet 
   assert.strictEqual(s.field('description').rows, 3);
 });
 
+check('every screen outside the music panel follows the song colours (class dyn-colours + the tint is copied onto it)', () => {
+  const dir = path.join(__dirname, '..', 'app/src/main/assets');
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  assert.ok(/\.dyn-colours \{[^}]*--sp-sub: var\(--muted\)[^}]*--sp-accent: var\(--accent\)/.test(html));
+  assert.ok(/id="settings-layer" class="dyn-colours"/.test(html));
+  ['song-menu.js', 'playlist-picker.js'].forEach((f) => {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    assert.ok(/dyn-colours/.test(src), f + ' marks its screen');
+    assert.ok(/SpotifyUI\.syncTint/.test(src), f + ' asks for the colours when it is built');
+  });
+  const ui = fs.readFileSync(path.join(dir, 'spotify-ui.js'), 'utf8');
+  assert.ok(/querySelectorAll\('\.dyn-colours'\)/.test(ui) && /syncTint: \(\) => pushTint\(\)/.test(ui));
+  assert.strictEqual((ui.match(/refreshTint:/g) || []).length, 1);   // Settings' own refreshTint (re-fit the song colour after a theme change) must not be overwritten
+  assert.ok(/refreshTint: \(\) => updateTint\(\)/.test(ui));
+  assert.ok(!/var\(--panel, var\(--bg\)\)/.test(html));           // no static fallback inside the new input styles
+});
+
 finish();
