@@ -1004,6 +1004,7 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         appInForeground = false
         inForeground = false
+        callPage("onAppPause")       // the page notices when the user leaves (to a link, another app...)
         screenHandler.removeCallbacks(releaseScreenRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::webView.isInitialized && !webViewGone) {
@@ -1016,6 +1017,7 @@ class MainActivity : ComponentActivity() {
         appInForeground = true
         inForeground = true
         appUpdater.onResume()
+        callPage("onAppResume")      // ...and when they come back, however they got away (Back, the app switcher, a link)
         // Push the current position right away (the poll may have been in slow mode).
         if (mediaController?.isPlaying == true) startProgressUpdates()
         keepScreenAwake()
@@ -1344,6 +1346,46 @@ class MainActivity : ComponentActivity() {
                 }
             }
             return true
+        }
+
+        // openExternalLink: opens a web link (http / https only) in the phone's browser or the app that handles it.
+        @JavascriptInterface
+        fun openExternalLink(url: String): Boolean {
+            val u = try { Uri.parse(url) } catch (e: Exception) { return false }
+            if (u.scheme != "https" && u.scheme != "http") return false
+            return try { runOnUiThread { openInExternalBrowser(u) }; true } catch (e: Exception) { false }
+        }
+
+        // playlistShareLinks: the page built a plain text file with the SOURCE LINKS of a playlist's songs (one per
+        // line, see NovelAudio.getPlaylistLinksText). It is written to the app's cache (playlist-links/, one file at a
+        // time) and handed to Android's share sheet through FileProvider as a .txt, so it can go to WhatsApp, Telegram,
+        // Drive, mail... True when the sheet was asked for.
+        @JavascriptInterface
+        fun playlistShareLinks(fileName: String, text: String): Boolean {
+            if (text.isBlank() || text.length > 2_000_000) return false
+            return try {
+                val dir = File(this@MainActivity.cacheDir, "playlist-links")
+                dir.mkdirs()
+                dir.listFiles()?.forEach { try { it.delete() } catch (e: Exception) { /* an old copy may stay */ } }
+                val safe = fileName.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().take(60).ifEmpty { "playlist" }
+                val f = File(dir, "$safe.txt")
+                f.writeText(text, Charsets.UTF_8)
+                val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TITLE, f.name)
+                    clipData = ClipData.newRawUri(f.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(send, "Share playlist links")
+                runOnUiThread {
+                    try { startActivity(chooser) } catch (e: Exception) { /* nothing can take it: nothing to open */ }
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
 
         // ---- Song options ("..." menu) ----------------------------------------------------------------

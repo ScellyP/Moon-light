@@ -595,6 +595,7 @@
   }
 
   function takeClipboardText(text) {
+    if (root.Rickroll && root.Rickroll.check(text)) return;      // (an Easter egg: see rickroll.js)
     const parsed = parseLinks(text);
     if (!parsed.links.length) wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
     else reviewLinks(parsed.links);
@@ -749,7 +750,12 @@
     input.setAttribute('data-keep', 'name');
     const hint = el('p', 'dl-hint', nameHint(item.name));
     input.addEventListener('input', () => { wizard.rename(input.value); hint.textContent = nameHint(input.value); });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { input.blur(); wizard.save(); } });
+    // Saving a name goes through the same check as a pasted title: a song that turns out to be the Rickroll is not kept.
+    const trySave = () => {
+      if (root.Rickroll && root.Rickroll.check(input.value)) { wizard.leave(); return; }
+      wizard.save();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { input.blur(); trySave(); } });
     box.appendChild(input);
     box.appendChild(hint);
 
@@ -763,7 +769,7 @@
     refreshSimilar();
 
     const row = el('div', 'dl-row dl-row-end');
-    row.appendChild(button('Save', 'dl-primary', () => wizard.save()));
+    row.appendChild(button('Save', 'dl-primary', trySave));
     box.appendChild(row);
     return box;
   }

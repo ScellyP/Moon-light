@@ -569,7 +569,6 @@
   /* ---- views: create a playlist, edit it (name, description, order), delete it ------------------------------- */
   // The record lives in a playlist file (see SongLibrary.kt); only the record changes here, never a music file.
   let editCtx = null;        // { key: 'name:Lo-fi' | 'list:3', title }
-  const ORDER_ROWS = 300;    // rows drawn in the order list (a very long playlist shows its first part)
 
   function uiName(key) { return key.indexOf('list:') === 0 ? '@list:' + key.slice(5) : key.replace(/^name:/, ''); }
 
@@ -770,9 +769,11 @@
     body.appendChild(form);
 
     const list = el('div', 'sm-list');
-    list.appendChild(row('i-move', 'Reorder songs', () => {
-      editCtx.draft = { name: name.value, description: desc.value };
-      showPlaylistOrder();
+    list.appendChild(row('i-move', 'Reorder or remove songs', () => {
+      if (dirtyCheck && dirtyCheck()) { toast('Save your changes first, then edit the songs'); return; }
+      const key = editCtx.key, title = info.name;
+      closeNow();
+      if (!(root.PlaylistEditor && root.PlaylistEditor.open(key, title))) toast('Could not open the playlist');
     }));
     if (info.canDelete) list.appendChild(row('i-trash', 'Delete playlist', () => { editCtx.draft = null; showPlaylistDelete(); }, { danger: true }));
     body.appendChild(list);
@@ -792,63 +793,6 @@
     };
     save.addEventListener('click', doSave);
     form.addEventListener('submit', (e) => { e.preventDefault(); doSave(); });
-  }
-
-  // Reorder: one button moves a song a place up or down. Every move is saved at once (the record only).
-  function showPlaylistOrder() {
-    const a = audio();
-    if (!a || !editCtx) { closeNow(); return; }
-    dirtyCheck = null;
-    body.replaceChildren();
-    const zone = el('div', 'sm-drag');
-    zone.appendChild(el('div', 'sm-grip'));
-    enableSwipeDown(zone);
-    body.appendChild(zone);
-    const top = el('div', 'sm-top');
-    const back = button('sm-top-btn', 'Back');
-    back.textContent = 'Back';
-    back.addEventListener('click', showPlaylistEdit);
-    top.appendChild(back);
-    top.appendChild(el('div', 'sm-top-title', 'Reorder songs'));
-    top.appendChild(el('span'));
-    body.appendChild(top);
-    const orderBox = el('div', 'sm-ord');
-    body.appendChild(orderBox);
-    drawOrder(orderBox, null);
-    body.appendChild(el('p', 'sm-hint sm-pad', 'Moves save right away. The songs themselves stay where they are.'));
-  }
-
-  function drawOrder(box, focus) {
-    const a = audio();
-    if (!a || !editCtx) return;
-    const songs = a.getPlaylistOrder(editCtx.key);
-    box.replaceChildren();
-    if (!songs.length) { box.appendChild(el('div', 'sm-empty', 'No songs yet.')); return; }
-    const shown = songs.slice(0, ORDER_ROWS);
-    shown.forEach((s, i) => {
-      const line = el('div', 'sm-ord-row');
-      const text = el('div', 'sm-ord-text');
-      text.appendChild(el('div', 'sm-ord-title', s.title || 'Unknown song'));
-      if (s.artist) text.appendChild(el('div', 'sm-ord-artist', s.artist));
-      line.appendChild(text);
-      [['up', -1, 'Move up'], ['down', 1, 'Move down']].forEach(([cls, delta, word]) => {
-        const b = button('sm-ord-btn ' + cls, word + ': ' + (s.title || 'song'));
-        b.appendChild(icon('i-chev-down'));
-        b.disabled = (delta < 0 && i === 0) || (delta > 0 && i === shown.length - 1);
-        b.setAttribute('data-ord', cls);
-        b.addEventListener('click', () => {
-          if (!a.movePlaylistSong(editCtx.key, s.id, delta)) { toast('Could not move the song'); return; }
-          drawOrder(box, { id: s.id, cls: cls });
-        });
-        line.appendChild(b);
-      });
-      box.appendChild(line);
-      if (focus && focus.id === s.id) {
-        const keep = line.querySelector('[data-ord="' + focus.cls + '"]');
-        if (keep && !keep.disabled && keep.focus) keep.focus();
-      }
-    });
-    if (songs.length > ORDER_ROWS) box.appendChild(el('p', 'sm-hint sm-pad', 'Showing the first ' + ORDER_ROWS + ' of ' + songs.length + ' songs.'));
   }
 
   function showPlaylistDelete() {
