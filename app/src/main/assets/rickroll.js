@@ -22,6 +22,13 @@
 (function (root) {
   'use strict';
 
+  const SETTING_KEY = 'moonlight_rr_enabled';
+  const UNLOCK_KEY  = 'moonlight_rr_unlocked';
+
+  function isEnabled() {
+    try { return root.localStorage.getItem(SETTING_KEY) !== 'false'; } catch (e) { return true; }
+  }
+
   const RICKROLL_LINK = 'https://youtu.be/gDjMZvYWUdo';
   const SONG_LINK = RICKROLL_LINK;                       // where the hidden copy is downloaded from
   const SONG_NAME = 'Never Gonna Give You Up';           // file name in Songs/ (audio-player.js hides exactly this name)
@@ -137,6 +144,7 @@
 
   function check(text) {
     if (!looksLikeRickroll(text)) return false;
+    if (!isEnabled()) return false;
     return trigger();
   }
 
@@ -204,6 +212,36 @@
     if (store.get(KEY_ATTEMPT)) root.setTimeout(comeBack, 900);
     // An appearance in playlists still owed from before (the app was closed while the song downloaded).
     if (Number(store.get(KEY_OWED)) > 0) root.setTimeout(() => { ensureSong().then(payOwed); }, 5000);
+
+    // --- secret unlock: tap the moon 20 times within 3 s to reveal the toggle in settings ---
+    const moonEl = root.document && root.document.getElementById('sp-lib-avatar');
+    if (moonEl) {
+      let tapCount = 0, tapTimer = null;
+      moonEl.addEventListener('click', () => {
+        tapCount++;
+        clearTimeout(tapTimer);
+        tapTimer = root.setTimeout(() => { tapCount = 0; }, 3000);
+        if (tapCount >= 20) {
+          tapCount = 0;
+          try { root.localStorage.setItem(UNLOCK_KEY, '1'); } catch (e) {}
+          const row = root.document.getElementById('set-rr-row');
+          if (row) row.hidden = false;
+        }
+      });
+    }
+
+    // restore toggle visibility and state on startup
+    const rrRow    = root.document && root.document.getElementById('set-rr-row');
+    const rrToggle = root.document && root.document.getElementById('set-rr');
+    if (rrRow && rrToggle) {
+      try {
+        if (root.localStorage.getItem(UNLOCK_KEY) === '1') rrRow.hidden = false;
+        rrToggle.checked = root.localStorage.getItem(SETTING_KEY) !== 'false';
+        rrToggle.addEventListener('change', () => {
+          try { root.localStorage.setItem(SETTING_KEY, rrToggle.checked ? 'true' : 'false'); } catch (e) {}
+        });
+      } catch (e) {}
+    }
   }
 
   root.Rickroll = { looksLikeRickroll: looksLikeRickroll, squash: squash, check: check, trigger: trigger, isOpen: isOpen, dismiss: dismiss, init: init };
