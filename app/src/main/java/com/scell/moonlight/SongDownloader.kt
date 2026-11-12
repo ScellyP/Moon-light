@@ -49,6 +49,8 @@ class SongDownloader(
     private val library: () -> SongLibrary,
     /** Reports a result to the page. Always called on the main thread. */
     private val onStatus: (jobId: String, status: String, message: String) -> Unit,
+    /** Sends an arbitrary JS call back to the page: fn("arg1", "arg2"). Called on the UI thread. */
+    private val onPage: (fn: String, args: String) -> Unit = { _, _ -> },
 ) {
 
     companion object {
@@ -146,6 +148,74 @@ class SongDownloader(
     }
 
     /** Remembers which square of the staged song's thumbnail becomes its cover. False when [path] is not a staged song. */
+    /**
+     * Fetches the title and track URLs of a YouTube or Spotify playlist without downloading audio.
+     * Calls window.onPlaylistInfo(jobId, json) on the page when done:
+     *   json = { "title": "...", "tracks": ["url1", "url2", ...] }   on success
+     *   json = { "error": "..." }                                     on failure
+     */
+    fun fetchPlaylistInfo(jobId: String, url: String): Boolean {
+        if (!begin(jobId, isDownload = false)) return false
+        pool.execute {
+            val error = ensureEngine()
+            if (error != null) {
+                report(jobId, "failed", error)
+                return@execute
+            }
+            try {
+                val request = YoutubeDLRequest(url)
+                    .addOption("--flat-playlist")
+                    .addOption("--dump-single-json")
+                    .addOption("--no-warnings")
+                cookiesCopy(activity.cacheDir)?.let { request.addOption("--cookies", it.absolutePath) }
+                val out = StringBuilder()
+                YoutubeDL.getInstance().execute(request, jobId) { _, _, line -> out.appendLine(line) }
+                val json = org.json.JSONObject(out.toString().trim())
+                val title = json.optString("title", "Playlist")
+                val entries = json.optJSONArray("entries") ?: org.json.JSONArray()
+                val tracks = org.json.JSONArray()
+                for (i in 0 until entries.length()) {
+                    val entry = entries.optJSONObject(i) ?: continue
+                    val trackUrl = entry.optString("url").takeIf { it.isNotBlank() }
+                        ?: entry.optString("webpage_url").takeIf { it.isNotBlank() }
+                        ?: continue
+                    // yt-dlp flat entries give a bare video id for YouTube; expand it
+                    val full = if (trackUrl.startsWith("http")) trackUrl
+                               else "https://www.youtube.com/watch?v=$trackUrl"
+                    tracks.put(full)
+                }
+                val result = org.json.JSONObject()
+                    .put("title", cleanFolderNameKt(title))
+                    .put("tracks", tracks)
+                activity.runOnUiThread {
+                    onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, ${result}")
+                }
+            } catch (e: YoutubeDL.CanceledException) {
+                activity.runOnUiThread {
+                    onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, {\"error\":\"Stopped\"}")
+                }
+            } catch (e: Exception) {
+                val msg = SongNames.failureReason(e.message ?: e.cause?.message).ifEmpty { "Could not read the playlist." }
+                activity.runOnUiThread {
+                    onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, {\"error\":${org.json.JSONObject.quote(msg)}}")
+                }
+            } finally {
+                synchronized(lock) { running.remove(jobId) }
+            }
+        }
+        return true
+    }
+
+    /** Kotlin-side helper matching cleanFolderName in song-download.js (letters, digits, space _ - ( ) . & ' ,). */
+    private fun cleanFolderNameKt(name: String): String =
+        name.replace(Regex("[^A-Za-z0-9 _\\-().&',]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .trimStart('.').trimEnd('.')
+            .trim()
+            .take(60)
+            .ifEmpty { "Playlist" }
+
     fun setCrop(path: String, x: Float, y: Float, size: Float): Boolean {
         if (!isStagedPath(path)) return false
         if (size < 0f) { crops.remove(path); return true }                // back to the whole thumbnail
