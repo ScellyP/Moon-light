@@ -2291,7 +2291,7 @@ class MainActivity : ComponentActivity() {
         }
         val notif = androidx.core.app.NotificationCompat.Builder(this, PLAYLIST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Downloading "$title"")
+            .setContentTitle("Downloading \"$title\"")
             .setContentText("$done of $total songs done")
             .setProgress(total, done, false)
             .setOngoing(true)
