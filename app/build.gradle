@@ -34,6 +34,11 @@ android {
             applicationIdSuffix idSuffix
         }
         manifestPlaceholders = [appLabel: System.getenv("APP_LABEL") ?: "@string/app_name"]
+
+        // Bake in which update channel this APK belongs to.
+        // The testing workflow sets APP_ID_SUFFIX=.testing; live builds leave it unset.
+        def isTesting = idSuffix.contains("testing")
+        buildConfigField "String", "BUILD_VARIANT", isTesting ? '"testing"' : '"release"'
     }
 
     // youtubedl-android starts Python and ffmpeg as programs out of the app's native-library folder,
@@ -86,6 +91,10 @@ android {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {
