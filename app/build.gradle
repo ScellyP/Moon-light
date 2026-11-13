@@ -24,6 +24,16 @@ android {
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
+
+        // Testing builds (.github/workflows/build-testing-apk.yml) set APP_ID_SUFFIX=.testing and
+        // APP_LABEL="Moonlight Testing". That gives them their own package name
+        // (com.scell.moonlight.testing), so they install NEXT TO the live app instead of
+        // replacing it. Live builds leave both unset and are unchanged.
+        def idSuffix = System.getenv("APP_ID_SUFFIX") ?: ""
+        if (idSuffix) {
+            applicationIdSuffix idSuffix
+        }
+        manifestPlaceholders = [appLabel: System.getenv("APP_LABEL") ?: "@string/app_name"]
     }
 
     // youtubedl-android starts Python and ffmpeg as programs out of the app's native-library folder,

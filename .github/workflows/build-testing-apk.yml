@@ -1,9 +1,11 @@
 name: Build Testing APK
 
-# Builds a signed RELEASE apk (no debug apk) from the "Testing" branch, using the
-# same four signing secrets as build-apk.yml. It does NOT publish a GitHub Release,
-# so the in-app updater (which reads the newest Release) never sees test builds.
-# Download the apk from the run's Artifacts section.
+# Builds a signed RELEASE apk (no debug apk) from the "Testing" branch.
+# - Signed with a SEPARATE testing key (TESTING_* secrets), not the live key.
+# - Gets its own package name (com.scell.moonlight.testing) and the label
+#   "Moonlight Testing", so it installs side by side with the live app.
+# It does NOT publish a GitHub Release, so the in-app updater (which reads the
+# newest Release) never sees test builds. Download the apk from the run's Artifacts.
 
 on:
   push:
@@ -48,10 +50,10 @@ jobs:
 
       - name: Decode signing key from GitHub secrets
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.TESTING_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.TESTING_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.TESTING_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.TESTING_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] \
              && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
@@ -62,12 +64,15 @@ jobs:
               echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
               echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
             } >> "$GITHUB_ENV"
-            echo "Signing with the key from GitHub secrets."
+            echo "Signing with the testing key from GitHub secrets."
           else
-            echo "::warning::Signing secrets are not set - building with the default debug key (this APK cannot update an app signed with the real key)."
+            echo "::warning::TESTING_* signing secrets are not set - building with the default debug key."
           fi
 
       - name: Build release APK
+        env:
+          APP_ID_SUFFIX: .testing
+          APP_LABEL: Moonlight Testing
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Upload testing release APK
