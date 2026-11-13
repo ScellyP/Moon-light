@@ -59,13 +59,19 @@ class AppUpdater(
 ) {
     companion object {
         const val OWNER_REPO = "ScellyP/Moon-light"
-        private const val LATEST_URL = "https://api.github.com/repos/$OWNER_REPO/releases/latest"
+        // Live app → GET /releases/latest  (skips pre-releases automatically)
+        // Testing app → GET /releases list, then pick the newest testing- pre-release
+        private val IS_TESTING = BuildConfig.BUILD_VARIANT == "testing"
+        private val RELEASES_URL =
+            if (IS_TESTING) "https://api.github.com/repos/$OWNER_REPO/releases?per_page=20"
+            else            "https://api.github.com/repos/$OWNER_REPO/releases/latest"
         private const val INSTALL_ACTION = "com.scell.moonlight.UPDATE_INSTALL_RESULT"
         private const val PREFS = "updater"
         private const val KEY_AUTO = "auto"
         private const val KEY_LAST_CHECK = "lastCheck"
         private const val CHECK_EVERY_MS = 6L * 60 * 60 * 1000
-        private const val FILE_PREFIX = "moonlight-"
+        // Testing APK filenames are "moonlight-testing-v1.05.00-42.apk"; live are "moonlight-v1.05.00.apk"
+        private val FILE_PREFIX = if (BuildConfig.BUILD_VARIANT == "testing") "moonlight-testing-" else "moonlight-"
 
         private val VERSION_RE = Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)")
         private val APP_VERSION_RE = Regex("APP_VERSION\\s*=\\s*'([^']+)'")
@@ -202,12 +208,10 @@ class AppUpdater(
         Thread {
             var downloadNext = false
             try {
-                val conn = open(LATEST_URL)
+                val conn = open(RELEASES_URL)
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 val code = conn.responseCode
                 if (code == 404) {
-                    // No Release found: nothing to update to. When the user asked, say so plainly (a wrong
-                    // repository name or a private repository look exactly like "up to date" otherwise).
                     forgetRelease()
                     prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
                     if (manual) {
@@ -229,9 +233,44 @@ class AppUpdater(
                 conn.disconnect()
                 prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
 
-                val release = JSONObject(body)
-                val tag = release.optString("tag_name", "")
-                if (!isNewer(tag, installedVersion)) {
+                // --- pick the right release object ---
+                val release: JSONObject
+                val tag: String
+                if (IS_TESTING) {
+                    // Array response: find the newest pre-release tagged "testing-*"
+                    val list = org.json.JSONArray(body)
+                    var found: JSONObject? = null
+                    for (i in 0 until list.length()) {
+                        val r = list.optJSONObject(i) ?: continue
+                        val t = r.optString("tag_name", "")
+                        if (t.startsWith("testing-") && r.optBoolean("prerelease", false)) {
+                            found = r  // list is newest-first
+                            break
+                        }
+                    }
+                    if (found == null) {
+                        forgetRelease()
+                        if (manual) {
+                            fail("check", "No testing pre-release found at $OWNER_REPO.", manual)
+                        } else {
+                            setState("uptodate", manual = manual)
+                        }
+                        return@Thread
+                    }
+                    release = found
+                    tag = release.optString("tag_name", "")
+                } else {
+                    // Single object response from /releases/latest
+                    release = JSONObject(body)
+                    tag = release.optString("tag_name", "")
+                }
+                // For testing tags like "testing-v1.05.00-42": strip prefix + run-number suffix
+                // so isNewer() sees a plain "v1.05.00" for the version comparison.
+                val tagVersion = if (IS_TESTING)
+                    tag.removePrefix("testing-").replace(Regex("-\\d+$"), "")
+                else tag
+
+                if (!isNewer(tagVersion, installedVersion)) {
                     forgetRelease()
                     setState("uptodate", manual = manual)
                     return@Thread
@@ -258,9 +297,9 @@ class AppUpdater(
                     }
                     return@Thread
                 }
-                newVersion = tag
+                newVersion = tagVersion   // shown in the UI: "v1.05.00"
                 apkUrl = found.optString("browser_download_url", "")
-                apkName = FILE_PREFIX + tag + ".apk"
+                apkName = FILE_PREFIX + tag + ".apk"  // matches the actual filename on GitHub
                 apkSize = found.optLong("size", 0L)
                 val digest = found.optString("digest", "")
                 apkSha256 = if (digest.startsWith("sha256:")) digest.substring(7).lowercase() else null
