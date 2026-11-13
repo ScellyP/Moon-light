@@ -26,6 +26,8 @@
   let searchTimer = 0;
 
   const audio = () => root.NovelAudio || null;
+  let worker = 0;
+  const buttons = new Map();     // song id -> its + / check button (only for rows that are drawn)
 
   function el(tag, cls, text) {
     const n = doc.createElement(tag);
@@ -176,6 +178,7 @@
   function renderList() {
     list.replaceChildren();
     artQueue.length = 0;
+    buttons.clear();
     if (seen) seen.disconnect();
     ctx.drawn = 0;
     if (!ctx.shown.length) {
@@ -194,15 +197,50 @@
     ctx.drawn = end;
   }
 
-  function markAdded(btn, track) {
-    btn.className = 'pp-add done';
+  function markAdded(btn, track, pop) {
+    btn.className = 'pp-add done' + (pop ? ' pop' : '');
     btn.replaceChildren(icon('i-check'));
     btn.setAttribute('aria-label', 'In the playlist, tap to take out: ' + (track.title || 'song'));
     btn.setAttribute('aria-pressed', 'true');
   }
 
-  function markAddable(btn, track) {
-    btn.className = 'pp-add';
+  // Writes the wanted changes to the playlist one song per task, so taps and scrolling stay smooth in between.
+  function kick() {
+    if (worker) return;
+    worker = -1;                                    // (a timer that fires at once must not be overwritten below)
+    const id = root.setTimeout(step, 0);
+    if (worker === -1) worker = id;
+  }
+
+  function writeOne() {
+    const next = ctx.wanted.entries().next();
+    if (next.done) return false;
+    const id = next.value[0], want = next.value[1];
+    ctx.wanted.delete(id);
+    if (ctx.written.has(id) === want) return true;              // already in that state on the phone (a tap and an undo)
+    const a = audio();
+    const ok = a && (want ? a.addSongToPlaylist(ctx.key, id, true) : (a.removeSongFromPlaylist && a.removeSongFromPlaylist(ctx.key, id, true)));
+    if (ok) {
+      if (want) ctx.written.add(id); else ctx.written.delete(id);
+      return true;
+    }
+    // It did not work: the button goes back to what is really in the playlist, and says so.
+    if (want) ctx.inList.delete(id); else ctx.inList.add(id);
+    const shown = buttons.get(id);
+    if (shown) { if (want) markAddable(shown.btn, shown.track, true); else markAdded(shown.btn, shown.track, true); }
+    toast(want ? 'Could not add the song' : 'Could not take the song out');
+    return true;
+  }
+
+  function step() {
+    worker = 0;
+    if (!ctx) return;
+    writeOne();
+    if (ctx.wanted.size) kick();
+  }
+
+  function markAddable(btn, track, pop) {
+    btn.className = 'pp-add' + (pop ? ' pop' : '');
     btn.replaceChildren(icon('i-circle-plus'));
     btn.setAttribute('aria-label', 'Add to playlist: ' + (track.title || 'song'));
     btn.setAttribute('aria-pressed', 'false');
@@ -221,18 +259,15 @@
     add.appendChild(icon('i-circle-plus'));
     if (ctx.inList.has(track.id)) markAdded(add, track);
     // The + adds the song; the check takes it out again (only its place in the playlist, never the music file).
+    // The button answers at once; the write to the phone follows right after (see step()), one song per task.
+    buttons.set(track.id, { btn: add, track: track });
     add.addEventListener('click', () => {
       if (!ctx) return;
-      const a = audio();
-      if (ctx.inList.has(track.id)) {
-        if (!a || !a.removeSongFromPlaylist || !a.removeSongFromPlaylist(ctx.key, track.id, true)) { toast('Could not take the song out'); return; }
-        ctx.inList.delete(track.id);
-        markAddable(add, track);
-        return;
-      }
-      if (!a || !a.addSongToPlaylist(ctx.key, track.id, true)) { toast('Could not add the song'); return; }
-      ctx.inList.add(track.id);
-      markAdded(add, track);
+      const want = !ctx.inList.has(track.id);
+      if (want) ctx.inList.add(track.id); else ctx.inList.delete(track.id);
+      if (want) markAdded(add, track, true); else markAddable(add, track, true);
+      ctx.wanted.set(track.id, want);
+      kick();
     });
     row.appendChild(add);
     if (seen) { rowJobs.set(row, { tile: tile, track: track }); seen.observe(row); }      // art when it scrolls into view
@@ -247,7 +282,7 @@
     build();
     const order = a.getPlaylistOrder ? a.getPlaylistOrder(key) : [];
     const was = new Set(order.map((s) => s.id));
-    ctx = { key: String(key), title: title || '', inList: new Set(was), was: was, query: '', shown: [], drawn: 0 };
+    ctx = { key: String(key), title: title || '', inList: new Set(was), was: was, written: new Set(was), wanted: new Map(), query: '', shown: [], drawn: 0 };
     subNode.textContent = ctx.title;
     input.value = '';
     ctx.shown = sourceTracks('');
@@ -261,9 +296,11 @@
     if (!layer || layer.classList.contains('hidden')) return;
     layer.classList.add('hidden');
     if (searchTimer) { root.clearTimeout(searchTimer); searchTimer = 0; }
+    while (ctx && ctx.wanted.size) writeOne();                  // nothing tapped is left unwritten when the screen closes
     const done = ctx;
     ctx = null;
     artQueue.length = 0;
+    buttons.clear();
     if (seen) seen.disconnect();
     list.replaceChildren();
     if (done) {

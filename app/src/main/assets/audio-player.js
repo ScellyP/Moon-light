@@ -352,6 +352,7 @@ window.NovelAudio = (function () {
       return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
     },
 
+
     /* ---- Duplicate songs ------------------------------------------------------------------------------
        The same song downloaded twice by accident. Two songs are copies of each other when
          * they have the same title and the same artist(s) AND play for about the same time (within 2 seconds), so a
@@ -2119,6 +2120,13 @@ window.NovelAudio = (function () {
       if (typeof patch.description === 'string') { if (patch.description) p.description = patch.description; else delete p.description; }
       Prefs.save(); return true;
     },
+    // Writes a whole new order (the same ids, as the edit screen left them).
+    setOrder(id, ids) {
+      const p = this._find(id);
+      if (!p || !Array.isArray(ids) || ids.length !== p.ids.length) return false;
+      p.ids = ids.slice();
+      Prefs.save(); return true;
+    },
     // Swaps two songs of this list (the caller picks the shown neighbours).
     swap(id, a, b) {
       const p = this._find(id);
@@ -3328,7 +3336,7 @@ window.NovelAudio = (function () {
     // Redraws the lists after several quiet adds.
     refreshPlaylists() { this._playlistsChanged(); },
 
-    removeSongFromPlaylist(key, id) {
+    removeSongFromPlaylist(key, id, quiet) {
       const track = MediaLibrary.getTrack(id);
       if (!track || typeof key !== 'string') return false;
       if (key.indexOf('list:') === 0) {
@@ -3342,8 +3350,87 @@ window.NovelAudio = (function () {
         track.playlists = MediaLibrary._namesOf(track).filter(n => n !== name);
         if (track.playlist === name) track.playlist = track.playlists[0] || null;
       } else { return false; }
+      if (quiet) { MediaLibrary.infoRev++; MediaLibrary.playlistFilesChanged(); return true; }
       this._playlistsChanged();
       return true;
+    },
+
+    // The "Edit playlist" screen saves once: `order` = the song ids in the wanted order, `removed` = the ids taken
+    // out. Removals go through the same path as "Remove from this playlist" (a folder playlist remembers the
+    // exclusion), then the saved order is written in ONE file write and the lists redraw once.
+    applyPlaylistEdit(key, order, removed) {
+      const name = this._keyName(key);
+      if (!name || !Array.isArray(order)) return { ok: false, error: 'locked' };
+      const gone = Array.isArray(removed) ? removed : [];
+      let done = 0;
+      for (let i = 0; i < gone.length; i++) {
+        if (!this.removeSongFromPlaylist(key, gone[i], true)) { if (done) this._playlistsChanged(); return { ok: false, error: 'save' }; }
+        done++;
+      }
+      if (key.indexOf('list:') === 0) {
+        const info = AudioFeatures.customPlaylists.info(key.slice(5));
+        if (!info) return { ok: false, error: 'missing' };
+        const mine = new Set(info.ids), seen = new Set(), next = [];
+        order.forEach(id => { if (mine.has(id) && !seen.has(id)) { seen.add(id); next.push(id); } });
+        info.ids.forEach(id => { if (!seen.has(id)) next.push(id); });          // songs that are gone from the phone keep their place at the end
+        if (next.join('\n') !== info.ids.join('\n') && !AudioFeatures.customPlaylists.setOrder(key.slice(5), next)) return { ok: false, error: 'save' };
+      } else {
+        const rec = MediaLibrary.playlistRecord(name);
+        if (!rec) return { ok: false, error: 'missing' };
+        const old = new Map();
+        (rec.songs || []).forEach(sg => { if (sg && sg.ref && !old.has(sg.ref)) old.set(sg.ref, sg); });
+        const seen = new Set(), full = [];
+        order.forEach(id => {
+          const t = MediaLibrary.getTrack(id);
+          if (!t || !t.ref || seen.has(t.ref)) return;
+          seen.add(t.ref);
+          const was = old.get(t.ref);
+          full.push({ ref: t.ref, title: was ? was.title : t.title, size: was ? was.size : t.size });
+        });
+        (rec.songs || []).forEach(sg => { if (sg && sg.ref && !seen.has(sg.ref)) { seen.add(sg.ref); full.push({ ref: sg.ref, title: sg.title, size: sg.size }); } });
+        const before = (rec.songs || []).map(sg => sg.ref).join('\n');
+        if (full.map(sg => sg.ref).join('\n') !== before && !this._saveRecord(Object.assign({}, rec, { songs: full }))) {
+          if (done) this._playlistsChanged();
+          return { ok: false, error: 'save' };
+        }
+      }
+      this._playlistsChanged();
+      return { ok: true, removed: done };
+    },
+
+    /* ---- Share a playlist's source links as a text file ----------------------------------------------------
+       One link per line (the page each song was downloaded from, see Id3Tag.kt), notes start with #, so the same
+       file can be read back by an import later. Songs without a source link are only counted. */
+    getPlaylistLinksText(uiName, title) {
+      const tracks = this.getPlaylistTracks(uiName || 'all');
+      const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+      const seen = new Set(), body = [];
+      let withLink = 0;
+      tracks.forEach(t => {
+        const link = clean(t.source);
+        if (!/^https?:\/\/\S+$/.test(link)) return;
+        withLink++;
+        if (seen.has(link)) return;                       // the same link twice is one download
+        seen.add(link);
+        const label = clean(t.title) + (t.artist ? ' - ' + clean(t.artist) : '');
+        body.push('# ' + label, link, '');
+      });
+      const name = clean(title) || 'Playlist';
+      const head = ['# Moonlight playlist links', '# name: ' + name];
+      const info = uiName && uiName !== 'all' ? this.getPlaylistInfo(uiName.indexOf('@list:') === 0 ? 'list:' + uiName.slice(6) : 'name:' + uiName) : null;
+      if (info && info.description) head.push('# description: ' + clean(info.description));
+      head.push('# songs: ' + tracks.length + ' (' + seen.size + ' with a source link)', '# One link per line. Lines that start with # are notes.', '');
+      return { text: head.concat(body).join('\n'), count: seen.size, total: tracks.length, name: name };
+    },
+
+    // Opens the phone's share sheet with that text file. { ok, count, total } or { ok: false, error }.
+    sharePlaylistLinks(uiName, title) {
+      const made = this.getPlaylistLinksText(uiName, title);
+      if (!made.count) return { ok: false, error: 'none', total: made.total };
+      const b = window.AndroidBridge;
+      let ok = false;
+      try { ok = !!(b && b.playlistShareLinks && b.playlistShareLinks(made.name + ' links', made.text)); } catch (e) { ok = false; }
+      return ok ? { ok: true, count: made.count, total: made.total } : { ok: false, error: 'share', total: made.total };
     },
 
     // After a playlist changed: refresh what the Songs list shows (the queue keeps the song that is playing).

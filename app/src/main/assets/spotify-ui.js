@@ -86,8 +86,9 @@
     albumTitle: $('sp-album-title'),
     albumMeta: $('sp-album-meta'),
     albumDesc: $('sp-album-desc'),
-    albumEdit: $('sp-album-edit'),
-    albumAdd: $('sp-album-add'),
+    albumChips: $('sp-album-chips'),
+    albumFind: $('sp-album-find-input'),
+    albumFindEmpty: $('sp-album-find-empty'),
     albumPlay: $('sp-album-play'),
     albumShuffle: $('sp-album-shuffle'),
 
@@ -223,6 +224,7 @@
     const show = (act, on) => { const b = el.sheet.querySelector('[data-sp-act="' + act + '"]'); if (b) b.classList.toggle('hidden', !on); };
     show('addsongs', !!(info && info.canEdit));
     show('editpl', !!(info && info.canEdit));
+    show('editsongs', !!(info && info.canEdit));
     show('deletepl', !!(info && info.canDelete));
     el.sheet.classList.remove('hidden');
     sync();
@@ -253,6 +255,12 @@
         }
         break;
 
+      case 'sharelinks': {
+        closeSheet();
+        shareLinks();
+        break;
+      }
+
       case 'addsongs': {
         const a = window.NovelAudio;
         const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
@@ -273,6 +281,14 @@
         const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
         closeSheet();
         if (key && window.SongMenu && window.SongMenu.openDelete) window.SongMenu.openDelete(key, getPlaylistTitle());
+        break;
+      }
+
+      case 'editsongs': {
+        const a = window.NovelAudio;
+        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+        closeSheet();
+        if (key && window.PlaylistEditor && window.PlaylistEditor.open) window.PlaylistEditor.open(key, getPlaylistTitle());
         break;
       }
 
@@ -344,7 +360,18 @@
       return;
     }
 
-    // The pencil on a playlist: name, description, order, delete.
+    // The share icon is only a place-holder for now: it does nothing (the source-links text file is in the ... menu).
+    if (target.closest('#sp-album-share')) return;
+
+    // "Edit" chip: the drag-to-reorder screen.
+    if (target.closest('#sp-album-reorder')) {
+      const audio = window.NovelAudio;
+      const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
+      if (key && window.PlaylistEditor && window.PlaylistEditor.open) window.PlaylistEditor.open(key, getPlaylistTitle());
+      return;
+    }
+
+    // "Name and details" chip.
     if (target.closest('#sp-album-edit')) {
       const audio = window.NovelAudio;
       const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
@@ -1286,6 +1313,61 @@
     }
   }
 
+  /** Opens the phone's share sheet with a text file of the source links of this list's songs. */
+  function shareLinks() {
+    const a = window.NovelAudio;
+    const toast = (m) => { if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(m); };
+    if (!a || !a.sharePlaylistLinks) return;
+    const name = (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || 'all';
+    const r = a.sharePlaylistLinks(name, getPlaylistTitle());
+    if (r.ok) return;
+    toast(r.error === 'none' ? (r.total ? 'None of these songs has a source link yet' : 'There are no songs here yet') : 'Could not open the share sheet');
+  }
+
+  /* ---- Find in playlist: hides the rows of the Songs list that do not match what was typed ---- */
+  let lastFindPlaylist = null;
+  const findText = new WeakMap();
+  let findFrame = 0;
+
+  function findNorm(s) {
+    return String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function applyFind() {
+    const queue = $('audio-queue');
+    if (!queue || !el.albumFind) return;
+    const words = findNorm(el.albumFind.value).split(' ').filter(Boolean);
+    let shown = 0;
+    Array.prototype.forEach.call(queue.children, (li) => {
+      let text = findText.get(li);
+      if (text === undefined) {
+        const t = li.querySelector('.sp-t'), a = li.querySelector('.sp-a');
+        text = findNorm((t ? t.textContent : '') + ' ' + (a ? a.textContent : ''));
+        findText.set(li, text);
+      }
+      const hit = words.every((w) => text.indexOf(w) !== -1);
+      li.classList.toggle('sp-find-miss', !hit);
+      if (hit) shown++;
+    });
+    if (el.albumFindEmpty) el.albumFindEmpty.classList.toggle('hidden', !(words.length && !shown && queue.children.length));
+  }
+
+  function scheduleFind() {
+    if (findFrame) return;
+    findFrame = window.requestAnimationFrame ? window.requestAnimationFrame(() => { findFrame = 0; applyFind(); }) : window.setTimeout(() => { findFrame = 0; applyFind(); }, 16);
+  }
+
+  function initFind() {
+    if (!el.albumFind) return;
+    el.albumFind.addEventListener('input', scheduleFind);
+    el.albumFind.addEventListener('keydown', (e) => { if (e.key === 'Enter' && el.albumFind.blur) el.albumFind.blur(); });
+    const queue = $('audio-queue');
+    // The list is rebuilt after adds, removes and edits: filter the new rows too.
+    if (queue && typeof window.MutationObserver === 'function') {
+      new window.MutationObserver(() => { if (el.albumFind.value) scheduleFind(); }).observe(queue, { childList: true });
+    }
+  }
+
   /** In the Songs tab's ... menu the picture is the playlist's cover, like the big cover behind it, never the song playing. */
   function syncSheetCover() {
     const target = el.sheetArt;
@@ -1361,8 +1443,8 @@
     const audio = window.NovelAudio;
     const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
     const sum = key && audio.getPlaylistSummary ? audio.getPlaylistSummary(key) : { canEdit: false, description: '' };
-    if (el.albumEdit) el.albumEdit.classList.toggle('hidden', !sum.canEdit);
-    if (el.albumAdd) el.albumAdd.classList.toggle('hidden', !sum.canEdit);
+    if (el.albumChips) el.albumChips.classList.toggle('hidden', !sum.canEdit);
+    if (el.albumFind && lastFindPlaylist !== playlist) { lastFindPlaylist = playlist; if (el.albumFind.value) { el.albumFind.value = ''; applyFind(); } }
     if (el.albumDesc) {
       el.albumDesc.textContent = sum.description || '';
       el.albumDesc.classList.toggle('hidden', !sum.description);
@@ -1475,6 +1557,7 @@
 
   setInterval(updateMiniProgress, PROGRESS_INTERVAL_MS);
 
+  initFind();
   setView('library');
   scheduleSync();
 })();

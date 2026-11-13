@@ -2510,7 +2510,25 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-album-title { font: 700 24px/1.2 var(--font-ui); margin: 26px 20px 0; overflow-wrap: anywhere; }
 #sp-album-meta { font-size: 13px; color: var(--sp-sub); margin: 6px 20px 0; }
 #sp-album-desc { font-size: 13px; line-height: 1.4; color: var(--sp-sub); margin: 8px 20px 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-#sp-album-desc.hidden, #sp-album-edit.hidden, #sp-album-add.hidden { display: none; }
+#sp-album-desc.hidden, #sp-album-chips.hidden, #sp-album-find-empty.hidden { display: none; }
+#sp-album-actions .sp-fab { margin-left: 0; }
+#sp-album-shuffle { margin-left: auto; }
+#sp-album-find { display: flex; align-items: center; gap: 10px; margin: 2px 16px 6px; padding: 0 14px; height: 44px; border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 12%, transparent); }
+#sp-album-find .ico { width: 20px; height: 20px; flex: none; color: var(--sp-sub); }
+#sp-album-find-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font: 600 15px/1 var(--font-ui);
+  -webkit-appearance: none; appearance: none; }
+#sp-album-find-input::placeholder { color: var(--text); opacity: .85; }
+#sp-album-find-input::-webkit-search-cancel-button, #sp-album-find-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+#sp-view-album .sp-topbar .sp-icon-btn { width: 46px; height: 46px; border-radius: 50%; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+#sp-album-find-empty { padding: 18px 22px; font-size: 14px; color: var(--sp-sub); }
+#sp-album-chips { display: flex; gap: 10px; padding: 0 20px 14px; overflow-x: auto; scrollbar-width: none; }
+#sp-album-chips::-webkit-scrollbar { display: none; }
+.sp-chip { flex: none; display: inline-flex; align-items: center; gap: 10px; height: 46px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--text) 13%, transparent); color: var(--text); font: 700 15px/1 var(--font-ui); transition: transform .15s var(--ease), background .15s ease; }
+.sp-chip .ico { width: 22px; height: 22px; }
+.sp-chip:active { transform: scale(.96); background: color-mix(in srgb, var(--text) 20%, transparent); }
+#audio-queue li.sp-find-miss { display: none; }
 #sp-album-actions { display: flex; align-items: center; gap: 12px; padding: 10px 20px 14px; }
 .sp-fab {
   margin-left: auto; width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
@@ -3187,6 +3205,45 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-form .sm-field-label, .sm-form-plain .sm-field-label { font-size: 12.5px; }
 .sm-top-btn.save:disabled { color: var(--sp-sub, var(--faint)); }
 .sm-pad { padding: 4px 22px 8px; }
+/* Edit playlist screen (playlist-editor.js): fixed 72px rows so dragging is plain arithmetic */
+#pe-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 93; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
+#pe-layer.hidden { display: none; }
+.pe-bar { display: grid; grid-template-columns: 56px 1fr 72px; align-items: center; min-height: 60px; padding: 4px 8px; background: color-mix(in srgb, var(--text) 6%, var(--bg)); }
+.pe-back, .pe-save { border: 0; background: none; color: var(--text); cursor: pointer; min-height: 44px; font: 700 16px/1 var(--font-ui); transition: opacity .15s; }
+.pe-back { display: grid; place-items: center; border-radius: 50%; width: 48px; }
+.pe-back .ico { width: 26px; height: 26px; }
+.pe-save { color: var(--accent); justify-self: end; padding: 0 10px; }
+.pe-save:disabled { color: var(--sp-sub, var(--faint)); opacity: .55; cursor: default; }
+.pe-title { text-align: center; font: 700 17px/1.2 var(--font-ui); }
+.pe-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 8px; }
+.pe-row { position: relative; display: flex; align-items: center; gap: 12px; height: 72px; box-sizing: border-box; padding: 0 6px 0 8px; background: var(--bg); }
+.pe-row.dragging { z-index: 2; background: color-mix(in srgb, var(--text) 10%, var(--bg)); box-shadow: 0 8px 22px rgba(0,0,0,.45); }
+.pe-minus { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--sp-sub, var(--text)); cursor: pointer; }
+.pe-minus .ico { width: 26px; height: 26px; }
+.pe-minus .pe-i-check { display: none; }
+#pe-layer.selecting .pe-minus .pe-i-minus { display: none; }
+#pe-layer.selecting .pe-minus .pe-i-check { display: block; width: 18px; height: 18px; padding: 3px; border: 2px solid var(--sp-sub, var(--text)); border-radius: 50%; stroke: transparent; }
+#pe-layer.selecting .pe-row.picked .pe-i-check { background: var(--accent); border-color: var(--accent); stroke: var(--accent-ink, #000); }
+.pe-art { flex: none; width: 48px; height: 48px; border-radius: 3px; display: grid; place-items: center; color: var(--sp-sub, var(--faint));
+  background: color-mix(in srgb, var(--text) 10%, transparent) center / cover no-repeat var(--pe-cover); }
+.pe-art[data-pe-cover] .ico { display: none; }
+.pe-art .ico { width: 22px; height: 22px; }
+.pe-text { flex: 1; min-width: 0; }
+.pe-name, .pe-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-name { font: 400 17px/1.3 var(--font-ui); }
+.pe-artist { font: 400 15px/1.35 var(--font-ui); color: var(--sp-sub, var(--faint)); }
+.pe-grip { flex: none; width: 52px; height: 60px; display: grid; place-items: center; border: 0; background: none; color: var(--sp-sub, var(--text)); cursor: grab; touch-action: none; }
+.pe-grip .ico { width: 26px; height: 26px; }
+#pe-layer.selecting .pe-grip { visibility: hidden; }
+.pe-empty { padding: 48px 28px; text-align: center; color: var(--sp-sub, var(--faint)); font: 400 15px/1.5 var(--font-ui); }
+.pe-selectbar { display: flex; gap: 10px; margin: 6px 16px calc(12px + var(--nav-bar-height, 0px)); }
+.pe-pill { flex: 1; height: 52px; border: 0; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--text) 13%, var(--bg)); color: var(--text);
+  font: 600 16px/1 var(--font-ui); transition: transform .15s, opacity .15s; }
+.pe-pill:active { transform: scale(.98); }
+.pe-pill.danger { background: #d93a3a; color: #fff; }
+.pe-pill:disabled { opacity: .4; }
+.pe-pill.hidden { display: none; }
 #pp-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 92; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
   padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
 #pp-layer.hidden { display: none; }
@@ -3213,7 +3270,10 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .pp-add { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--sp-sub, var(--text)); cursor: pointer; transition: transform .15s, color .15s, background .15s; }
 .pp-add .ico { width: 30px; height: 30px; }
 .pp-add:active { transform: scale(.88); }
-.pp-add.done { color: var(--accent); cursor: default; }
+.pp-add.done { color: var(--accent); }
+.pp-add.pop .ico { animation: pp-pop .26s cubic-bezier(.2, .9, .3, 1.4); }
+@keyframes pp-pop { 0% { transform: scale(.55); opacity: .35; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pp-add.pop .ico { animation: none; } }
 .pp-empty { padding: 48px 28px; text-align: center; font: 400 15px/1.5 var(--font-ui); color: var(--sp-sub, var(--faint)); }
 .pp-search { display: flex; align-items: center; gap: 10px; margin: 6px 14px calc(12px + var(--nav-bar-height, 0px)); padding: 0 16px; border-radius: 999px;
   background: color-mix(in srgb, var(--text) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); }
@@ -3223,17 +3283,6 @@ html.kb-open .pp-search { margin-bottom: 10px; }
 .pp-input::placeholder { color: var(--sp-sub, var(--faint)); }
 .pp-input::-webkit-search-cancel-button, .pp-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
 .sm-section { padding: 18px 22px 6px; font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
-.sm-ord { display: flex; flex-direction: column; padding: 0 12px; }
-.sm-ord-row { display: flex; align-items: center; gap: 4px; min-height: 52px; padding: 4px 4px 4px 10px; border-radius: 10px; }
-.sm-ord-text { flex: 1; min-width: 0; }
-.sm-ord-title, .sm-ord-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sm-ord-title { font: 400 15px/1.25 var(--font-ui); color: var(--text); }
-.sm-ord-artist { font: 400 12px/1.25 var(--font-ui); color: var(--sp-sub, var(--faint)); }
-.sm-ord-btn { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--text); cursor: pointer; transition: background .15s, opacity .15s; }
-.sm-ord-btn .ico { width: 22px; height: 22px; }
-.sm-ord-btn.up .ico { transform: rotate(180deg); }
-.sm-ord-btn:active { background: color-mix(in srgb, var(--text) 12%, transparent); }
-.sm-ord-btn:disabled { opacity: .25; cursor: default; }
 .sm-field { display: flex; flex-direction: column; gap: 6px; }
 .sm-field-label { font: 600 12px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); text-transform: uppercase; letter-spacing: .4px; }
 .sm-hint { margin: 0; font: 400 12.5px/1.45 var(--font-ui); color: var(--sp-sub, var(--faint)); }
@@ -3673,20 +3722,26 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" class="sp-icon-btn" id="sp-back-library" title="Library" aria-label="Back to library"><svg class="ico"><use href="#i-chev-left"/></svg></button>
             <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
           </div>
+          <div id="sp-album-find"><svg class="ico"><use href="#i-search"/></svg><input id="sp-album-find-input" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="Find in playlist" aria-label="Find in playlist"></div>
           <div id="sp-album-cover"><svg class="ico"><use href="#i-moon-music"/></svg></div>
           <div id="sp-album-title">All songs</div>
           <div id="sp-album-meta"></div>
           <div id="sp-album-desc" class="hidden"></div>
           <div id="sp-album-actions">
-            <button type="button" class="sp-icon-btn" id="sp-album-shuffle" title="Shuffle" aria-label="Shuffle"><svg class="ico"><use href="#i-shuffle"/></svg></button>
-            <button type="button" class="sp-icon-btn hidden" id="sp-album-add" title="Add songs" aria-label="Add songs"><svg class="ico"><use href="#i-plus"/></svg></button>
-            <button type="button" class="sp-icon-btn hidden" id="sp-album-edit" title="Edit playlist" aria-label="Edit playlist"><svg class="ico"><use href="#i-pencil"/></svg></button>
+            <button type="button" class="sp-icon-btn" id="sp-album-share" title="Share source links" aria-label="Share the source links of these songs"><svg class="ico"><use href="#i-share"/></svg></button>
             <button type="button" class="sp-icon-btn" data-sp-more title="More" aria-label="More options"><svg class="ico"><use href="#sp-more"/></svg></button>
+            <button type="button" class="sp-icon-btn" id="sp-album-shuffle" title="Shuffle" aria-label="Shuffle"><svg class="ico"><use href="#i-shuffle"/></svg></button>
             <button type="button" id="sp-album-play" class="sp-fab" title="Play or pause" aria-label="Play or pause">
               <svg class="ico fill sp-i-play"><use href="#sp-play-solid"/></svg>
               <svg class="ico fill sp-i-pause"><use href="#sp-pause-solid"/></svg>
             </button>
           </div>
+          <div id="sp-album-chips" class="hidden">
+            <button type="button" class="sp-chip" id="sp-album-add"><svg class="ico"><use href="#i-plus"/></svg><span>Add</span></button>
+            <button type="button" class="sp-chip" id="sp-album-reorder"><svg class="ico"><use href="#i-menu"/></svg><span>Edit</span></button>
+            <button type="button" class="sp-chip" id="sp-album-edit"><svg class="ico"><use href="#i-pencil"/></svg><span>Name and details</span></button>
+          </div>
+          <div id="sp-album-find-empty" class="hidden">No songs match that.</div>
           <div id="audio-song-list-heading">Songs</div>
           <ul id="audio-queue"></ul>
           <div id="audio-empty">No audio files yet. Put music in <code>/storage/emulated/0/Novel/Audio</code>, then tap Scan the sky.</div>
@@ -3815,7 +3870,9 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-sheet-artist"></div>
           <div id="sp-sheet-list">
             <button type="button" class="sp-pl-only hidden" data-sp-act="addsongs"><svg class="ico"><use href="#i-plus"/></svg><span>Add songs</span></button>
-            <button type="button" class="sp-pl-only hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Edit playlist</span></button>
+            <button type="button" class="sp-pl-only hidden" data-sp-act="editsongs"><svg class="ico"><use href="#i-menu"/></svg><span>Edit songs</span></button>
+            <button type="button" class="sp-pl-only hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Name and details</span></button>
+            <button type="button" class="sp-pl-only" data-sp-act="sharelinks"><svg class="ico"><use href="#i-share"/></svg><span>Share source links</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="cover"><svg class="ico"><use href="#i-image"/></svg><span>Change cover</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="deletepl"><svg class="ico"><use href="#i-trash"/></svg><span>Delete playlist</span></button>
             <button type="button" class="sp-song-only" data-sp-act="like"><svg class="ico"><use href="#i-heart"/></svg><span id="sp-act-like-label">Like</span></button>
@@ -3914,6 +3971,10 @@ body.settings-open #srch-input { pointer-events: none; }
         <span id="app-version"></span>
         <button type="button" id="update-check" class="sd-btn">Check for updates</button>
       </div>
+      <label class="sd-switch" id="set-rr-row" for="set-rr" hidden>
+        <span class="sd-switch-text">Easter egg<small>You found it.</small></span>
+        <input type="checkbox" id="set-rr" checked>
+      </label>
     </footer>
   </aside>
 </div>
@@ -3927,6 +3988,23 @@ body.settings-open #srch-input { pointer-events: none; }
 </div>
 
 <script src="splash.js"></script>
+<style>
+/* ---- Playlist download flow -------------------------------------------- */
+.dl-pl-bar-wrap{width:100%;height:4px;background:var(--panel-2);border-radius:2px;margin:10px 0;overflow:hidden}
+.dl-pl-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s ease}
+.dl-pl-list{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow-y:auto;margin-top:8px}
+.dl-pl-row{display:flex;justify-content:space-between;align-items:center;padding:5px 2px;font-size:13px;color:var(--text);border-bottom:1px solid var(--panel-2);gap:8px}
+.dl-pl-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl-pl-row-status{flex-shrink:0;color:var(--faint)}
+.dl-pl-row-done .dl-pl-row-status{color:var(--accent)}
+.dl-pl-row-failed .dl-pl-row-status{color:#e05}
+.dl-pl-edit-list{display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;margin:10px 0}
+.dl-pl-edit-card{display:flex;align-items:center;gap:10px}
+.dl-pl-edit-cover{width:48px;height:48px;flex-shrink:0;border-radius:6px;border:none;cursor:pointer;background:var(--panel-2);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center}
+.dl-pl-edit-cover svg{width:24px;height:24px;opacity:.4}
+.dl-pl-edit-card .dl-name-input{flex:1}
+.dl-pl-warn{color:#e05}
+</style>
 <script src="version.js"></script>
 <script src="settings-file.js"></script>
 <script src="audio-player.js"></script>
@@ -3934,6 +4012,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="spotify-ui.js"></script>
 <script src="song-menu.js"></script>
 <script src="playlist-picker.js"></script>
+<script src="playlist-editor.js"></script>
 <script src="song-search.js"></script>
 <script src="song-download.js"></script>
 <script src="moon-phase.js"></script>

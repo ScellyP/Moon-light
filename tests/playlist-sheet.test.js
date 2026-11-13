@@ -23,6 +23,7 @@ function sheet(overrides, bridgeOverrides) {
   }, overrides || {});
   const win = {
     document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio,
+    PlaylistEditor: { open: (k, t) => { calls.push(['editor', k, t]); return true; } },
     SpotifyUI: { openPlaylist: (n) => calls.push(['open', n]), setView: (v) => calls.push(['view', v]), coverChanged: (n) => calls.push(['coverChanged', n]) },
     AndroidBridge: Object.assign({
       playlistCoverPick: (k) => calls.push(['pick', k]),
@@ -51,10 +52,21 @@ check('Name & details: Cancel / title / Save, the name, the description, Reorder
   assert.ok(s.byLabel('Cancel') && s.byLabel('Save'));
   assert.strictEqual(s.field('name').value, 'Mix');
   assert.strictEqual(s.field('description').value, 'Old');
-  assert.ok(s.rowLabel('Reorder songs') && s.rowLabel('Delete playlist'));
-  s.tapNode(s.rowLabel('Reorder songs'));
-  const titles = findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent);
-  assert.deepStrictEqual(titles, ['Alpha', 'Beta', 'Gamma']);
+  assert.ok(s.rowLabel('Reorder or remove songs') && s.rowLabel('Delete playlist'));
+});
+
+check('"Reorder or remove songs" leaves the sheet for the full-screen Edit playlist; with unsaved typing it asks to save first', () => {
+  const s = sheet();
+  s.win.SongMenu.openEdit('name:Mix', 'Mix');
+  s.field('description').value = 'Typed';
+  s.tapNode(s.rowLabel('Reorder or remove songs'));
+  assert.ok(!s.calls.some((c) => c[0] === 'editor'));              // not yet: the typing would be lost
+  assert.ok(/Save your changes first/.test(s.toast()));
+  assert.ok(!s.layer().classList.contains('hidden'));
+  s.field('description').value = 'Old';                            // back to what was saved
+  s.tapNode(s.rowLabel('Reorder or remove songs'));
+  assert.deepStrictEqual(s.calls.find((c) => c[0] === 'editor'), ['editor', 'name:Mix', 'Mix']);
+  assert.ok(s.layer().classList.contains('hidden'));
 });
 
 check('Save sends the typed name and description; a refused name keeps the sheet open with a message', () => {
@@ -73,17 +85,6 @@ check('Save sends the typed name and description; a refused name keeps the sheet
   assert.ok(/already have a playlist/.test(t.toast()));
 });
 
-check('a trip to Reorder keeps what was typed', () => {
-  const s = sheet();
-  s.win.SongMenu.openEdit('name:Mix', 'Mix');
-  s.field('description').value = 'Typed';
-  s.tapNode(s.rowLabel('Reorder songs'));
-  s.tapNode(s.byLabel('Back'));
-  assert.strictEqual(s.field('description').value, 'Typed');
-  s.tapNode(s.byLabel('Save'));
-  assert.deepStrictEqual(s.calls[0], ['edit', 'name:Mix', { name: 'Mix', description: 'Typed' }]);
-});
-
 check('unsaved changes are not lost by a stray tap; Cancel discards them', () => {
   const s = sheet();
   s.win.SongMenu.openEdit('name:Mix', 'Mix');
@@ -97,19 +98,6 @@ check('unsaved changes are not lost by a stray tap; Cancel discards them', () =>
   s.tapNode(s.byLabel('Cancel'));
   assert.ok(s.layer().classList.contains('hidden'));
   assert.strictEqual(s.calls.length, 0);                          // nothing was saved
-});
-
-check('move buttons: first row cannot go up, last cannot go down; a move reaches the player and redraws', () => {
-  const s = sheet();
-  s.win.SongMenu.openEdit('name:Mix', 'Mix');
-  s.tapNode(s.rowLabel('Reorder songs'));
-  const ups = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn up') !== -1);
-  const downs = findAll(s.layer(), (n) => n.className.indexOf('sm-ord-btn down') !== -1);
-  assert.deepStrictEqual([ups[0].disabled, ups[1].disabled, downs[2].disabled, downs[0].disabled], [true, false, true, false]);
-  s.tapNode(downs[0]);
-  assert.deepStrictEqual(s.calls[0], ['move', 'name:Mix', 'a', 1]);
-  assert.deepStrictEqual(findAll(s.layer(), hasClass('sm-ord-title')).map((n) => n.textContent), ['Beta', 'Alpha', 'Gamma']);
-  assert.ok(findAll(s.layer(), (n) => n.getAttribute && /Move up: /.test(n.getAttribute('aria-label') || '')).length === 3);   // accessible names
 });
 
 check('Delete playlist asks first, says the songs stay, and Cancel goes back', () => {
@@ -165,12 +153,12 @@ check('the Songs-tab ... menu is about the playlist; Now playing keeps the song 
   const sheet = html.slice(html.indexOf('id="sp-sheet-list"'), html.indexOf('id="sp-sheet-close"'));
   const mark = (act) => (sheet.match(new RegExp('<button[^>]*data-sp-act="' + act + '"[^>]*>')) || [''])[0];
   ['like', 'addto', 'songmenu'].forEach((a) => assert.ok(/sp-song-only/.test(mark(a)), a + ' is a song action'));
-  ['addsongs', 'editpl', 'cover', 'deletepl'].forEach((a) => assert.ok(/sp-pl-only/.test(mark(a)), a + ' is a playlist action'));
+  ['addsongs', 'editsongs', 'editpl', 'cover', 'sharelinks', 'deletepl'].forEach((a) => assert.ok(/sp-pl-only/.test(mark(a)), a + ' is a playlist action'));
   assert.ok(!/sp-(song|pl)-only/.test(mark('sleep')) && !/sp-(song|pl)-only/.test(mark('rescan')));   // app-wide items stay in both
   assert.ok(/#sp-sheet\[data-sheet-mode="playlist"\] \.sp-song-only[^{]*\.sp-pl-only[^{]*\{\s*display:\s*none/.test(html));
   const js = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/spotify-ui.js'), 'utf8');
   assert.ok(/data-sheet-mode', playlistMode \? 'playlist' : 'song'/.test(js));
-  ['addsongs', 'cover', 'deletepl', 'editpl'].forEach((a) => assert.ok(js.indexOf("case '" + a + "'") !== -1, a + ' has a handler'));
+  ['addsongs', 'editsongs', 'cover', 'sharelinks', 'deletepl', 'editpl'].forEach((a) => assert.ok(js.indexOf("case '" + a + "'") !== -1, a + ' has a handler'));
 });
 
 check('Delete playlist from the ... menu goes straight to the confirmation; folder playlists are refused', () => {

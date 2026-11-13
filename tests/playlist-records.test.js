@@ -8,7 +8,8 @@ const mk = (name, ref, playlists) => ({ id: '/storage/emulated/0/Moonlight/Songs
   title: name, durationSec: 100, ref: ref, inSongs: true, playlists: playlists, playlist: playlists[0] || null, size: 1000 });
 const A = mk('a', 'Songs/a.mp3', ['Mix']), B = mk('b', 'Songs/b.mp3', ['Mix']), C = mk('c', 'Songs/c.mp3', ['Mix']),
   D = mk('d', 'Songs/d.mp3', ['Mix']), E = mk('e', 'Songs/e.mp3', ['Rock']), F = mk('f', 'Songs/f.mp3', []);
-const lib = () => [A, B, C, D, E, F].map(t => Object.assign({}, t, { playlists: t.playlists.slice() }));
+const SRC_LINKS = { a: 'https://youtu.be/aaa', b: 'https://youtu.be/bbb', c: 'https://youtu.be/ccc', e: 'https://youtu.be/ccc' };   // c and e share a link; d and f have none
+const lib = () => [A, B, C, D, E, F].map(t => Object.assign({}, t, { playlists: t.playlists.slice(), source: SRC_LINKS[t.title] }));
 const refsOf = (list) => list.map(t => t.ref);
 
 function start(extraFiles) {
@@ -36,6 +37,7 @@ function start(extraFiles) {
       if (i < 0) return false; log.deleted.push(files[i].id); files.splice(i, 1); return true;
     },
     playlistAddSong: (name, path) => { log.adds++; const f = files.find(x => x.name === name); if (!f) return false; f.songs.push({ ref: 'Songs/' + path.replace(/^.*\//, ''), title: '' }); return true; },
+    playlistRemoveSong: (name, path) => { const f = files.find(x => x.name === name); if (!f) return false; const ref = 'Songs/' + path.replace(/^.*\//, ''); f.songs = f.songs.filter(x => x.ref !== ref); return true; },
     playlistCoverGet: (n) => covers[n] || '', playlistCoverSave: (n, u) => { covers[n] = u; return true; }, playlistCoverClear: (n) => { delete covers[n]; return true; },
   };
   global.AndroidBridge = bridge;
@@ -188,6 +190,83 @@ check('adding songs for the picker: appended in the order tapped, never twice, r
   assert.strictEqual(orderOf(t, 'Fresh'), 'fe');
   assert.strictEqual(t.app.addSongToPlaylist('name:Mix', A.id, true), true);          // a folder/file member is already in
   assert.strictEqual(t.log.adds - calls0, 2);
+});
+
+check('Edit playlist saves once: removals + the new order in one go, folder-only songs written in, missing ones kept at the end', () => {
+  const t = start();
+  const id = (n) => A.id.replace('/a.', '/' + n + '.');
+  const savesBefore = t.log.saves;
+  const r = t.app.applyPlaylistEdit('name:Mix', [id('d'), id('c'), id('a')], [id('b')]);
+  assert.deepStrictEqual([r.ok, r.removed], [true, 1]);
+  assert.strictEqual(t.log.saves - savesBefore, 1);                                   // ONE file write for the new order
+  assert.deepStrictEqual(t.files[0].songs.map(x => x.ref), ['Songs/d.mp3', 'Songs/c.mp3', 'Songs/a.mp3']);
+  assert.strictEqual(orderOf(t, 'Mix'), 'dca');
+  assert.strictEqual(t.state.tracks.length, 6);                                       // b is still on the phone
+  assert.strictEqual(t.app.getPlaylistInfo('name:Mix').count, 3);
+});
+
+check('Edit playlist: nothing changed = no file write; a failed removal stops before the order is written', () => {
+  const t = start();
+  const id = (n) => A.id.replace('/a.', '/' + n + '.');
+  const s0 = t.log.saves;
+  assert.strictEqual(t.app.applyPlaylistEdit('name:Mix', [id('c'), id('a'), id('b'), id('d')], []).ok, true);
+  assert.strictEqual(t.log.saves, s0 + 1);                                             // the folder-only d was not in the record yet, so it is written once
+  const s2 = t.log.saves;
+  assert.strictEqual(t.app.applyPlaylistEdit('name:Mix', [id('c'), id('a'), id('b'), id('d')], []).ok, true);
+  assert.strictEqual(t.log.saves, s2);                                                  // the same order again: no write at all
+  const t2 = start();
+  delete global.AndroidBridge.playlistRemoveSong;
+  global.AndroidBridge.playlistRemoveSong = () => false;
+  const s1 = t2.log.saves;
+  assert.strictEqual(t2.app.applyPlaylistEdit('name:Mix', [id('a')], [id('b')]).ok, false);
+  assert.strictEqual(t2.log.saves, s1);
+  assert.strictEqual(orderOf(t2, 'Mix'), 'cabd');
+});
+
+check('Edit playlist on a hand-picked list: removals and order, songs that are gone keep their place at the end', () => {
+  const t = start();
+  delete global.AndroidBridge.playlistCreate;
+  const key = t.app.createPlaylist('Pick', '').key;
+  [A, B, C].forEach(x => t.app.addSongToPlaylist(key, x.id));
+  t.state.features.customPlaylists.lists[0].ids.push('gone-song');
+  const r = t.app.applyPlaylistEdit(key, [C.id, A.id], [B.id]);
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(t.state.features.customPlaylists.lists[0].ids, [C.id, A.id, 'gone-song']);
+  assert.deepStrictEqual(t.app.getPlaylistOrder(key).map(x => x.title), ['c', 'a']);
+});
+
+check('share links: one link per line with a note above it, duplicates once, songs without a link only counted', () => {
+  const t = start();
+  const made = t.app.getPlaylistLinksText('Mix', 'Mix');
+  assert.deepStrictEqual([made.count, made.total], [3, 4]);                          // c, a, b have links; d has none
+  const lines = made.text.split('\n');
+  assert.strictEqual(lines[0], '# Moonlight playlist links');
+  assert.ok(lines.indexOf('# name: Mix') > 0 && lines.indexOf('# songs: 4 (3 with a source link)') > 0);
+  assert.deepStrictEqual(lines.filter(l => /^https?:/.test(l)), ['https://youtu.be/ccc', 'https://youtu.be/aaa', 'https://youtu.be/bbb']);   // saved order
+  assert.strictEqual(lines[lines.indexOf('https://youtu.be/ccc') - 1], '# c');
+  const rock = t.app.getPlaylistLinksText('Rock', 'Rock');                           // e shares c's link: listed once overall
+  assert.deepStrictEqual(rock.text.split('\n').filter(l => /^https?:/.test(l)), ['https://youtu.be/ccc']);
+  const all = t.app.getPlaylistLinksText('all', 'All songs');
+  assert.deepStrictEqual([all.count, all.total], [3, 6]);                             // a, b, c (e is a repeat); d, f have none
+});
+
+check('share links: asks the phone to share a .txt, says why when there is nothing to share', () => {
+  const t = start();
+  const sent = [];
+  global.AndroidBridge.playlistShareLinks = (name, text) => { sent.push([name, text]); return true; };
+  const ok = t.app.sharePlaylistLinks('Mix', 'Road trip');
+  assert.deepStrictEqual([ok.ok, ok.count, ok.total], [true, 3, 4]);
+  assert.strictEqual(sent.length, 1);
+  assert.strictEqual(sent[0][0], 'Road trip links');
+  assert.ok(sent[0][1].indexOf('https://youtu.be/aaa') !== -1);
+  const none = t.app.sharePlaylistLinks('name:nothing', 'Nothing');
+  assert.deepStrictEqual([none.ok, none.error], [false, 'none']);
+  assert.strictEqual(sent.length, 1);
+  global.AndroidBridge.playlistShareLinks = () => false;
+  assert.strictEqual(t.app.sharePlaylistLinks('Mix', 'Mix').error, 'share');
+  const p = start();                                                                   // no native bridge method at all
+  delete global.AndroidBridge.playlistShareLinks;
+  assert.strictEqual(p.app.sharePlaylistLinks('Mix', 'Mix').ok, false);
 });
 
 check('the phone is asked for the playlist files only when a playlist changed, not for every redraw or song edit', () => {

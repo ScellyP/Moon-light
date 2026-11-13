@@ -230,6 +230,7 @@ class MainActivity : ComponentActivity() {
                 JSONObject.quote(jobId) + ", " + JSONObject.quote(status) + ", " + JSONObject.quote(message)
             )
         },
+        onPage = { fn, args -> callPage(fn, args) },
     )
 
     // "Sign in to YouTube" for downloads that YouTube blocks with its bot check (see YouTubeSignIn.kt).
@@ -1072,6 +1073,19 @@ class MainActivity : ComponentActivity() {
         // return false only when a job with that id is already running. Two jobs may run at once
         // (the next song downloads while the current one is placed). See SongDownloader.kt.
         //
+        // fetchPlaylistInfo: resolves a YouTube or Spotify playlist URL into a title + list of
+        // track URLs without downloading audio. Result arrives via window.onPlaylistInfo(jobId, json).
+        @JavascriptInterface
+        fun fetchPlaylistInfo(jobId: String, url: String): Boolean =
+            songDownloader.fetchPlaylistInfo(jobId, url)
+
+        // notifyPlaylistProgress: updates (or dismisses) the playlist download notification.
+        // Call with done == total to cancel it.
+        @JavascriptInterface
+        fun notifyPlaylistProgress(title: String, done: Int, total: Int) {
+            runOnUiThread { updatePlaylistNotification(title, done, total) }
+        }
+
         // stageSong: downloads one link into Audio/.staging/ (invisible to the music scan). The
         // "done" message is the downloaded file's full path.
         @JavascriptInterface
@@ -1344,6 +1358,38 @@ class MainActivity : ComponentActivity() {
                 }
             }
             return true
+        }
+
+        // playlistShareLinks: the page built a plain text file with the SOURCE LINKS of a playlist's songs (one per
+        // line, see NovelAudio.getPlaylistLinksText). It is written to the app's cache (playlist-links/, one file at a
+        // time) and handed to Android's share sheet through FileProvider as a .txt, so it can go to WhatsApp, Telegram,
+        // Drive, mail... True when the sheet was asked for.
+        @JavascriptInterface
+        fun playlistShareLinks(fileName: String, text: String): Boolean {
+            if (text.isBlank() || text.length > 2_000_000) return false
+            return try {
+                val dir = File(this@MainActivity.cacheDir, "playlist-links")
+                dir.mkdirs()
+                dir.listFiles()?.forEach { try { it.delete() } catch (e: Exception) { /* an old copy may stay */ } }
+                val safe = fileName.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().take(60).ifEmpty { "playlist" }
+                val f = File(dir, "$safe.txt")
+                f.writeText(text, Charsets.UTF_8)
+                val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TITLE, f.name)
+                    clipData = ClipData.newRawUri(f.name, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val chooser = Intent.createChooser(send, "Share playlist links")
+                runOnUiThread {
+                    try { startActivity(chooser) } catch (e: Exception) { /* nothing can take it: nothing to open */ }
+                }
+                true
+            } catch (e: Exception) {
+                false
+            }
         }
 
         // ---- Song options ("..." menu) ----------------------------------------------------------------
@@ -2203,6 +2249,45 @@ class MainActivity : ComponentActivity() {
 
     private fun notifyError(message: String) {
         callPage("onFolderPickError", JSONObject.quote(message))
+    }
+
+    // ---- Playlist download progress notification ------------------------------------------------
+    private val PLAYLIST_NOTIF_ID = 2001
+    private val PLAYLIST_CHANNEL_ID = "moonlight_playlist_dl"
+
+    private fun ensurePlaylistChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(PLAYLIST_CHANNEL_ID) == null) {
+                val ch = android.app.NotificationChannel(
+                    PLAYLIST_CHANNEL_ID,
+                    "Playlist downloads",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "Progress while a playlist is being downloaded." }
+                nm.createNotificationChannel(ch)
+            }
+        }
+    }
+
+    /** Shows or updates the playlist download progress notification.
+     *  [done] and [total] are song counts; [title] is the playlist name.
+     *  Pass done == total to auto-dismiss. */
+    fun updatePlaylistNotification(title: String, done: Int, total: Int) {
+        ensurePlaylistChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (done >= total) {
+            nm.cancel(PLAYLIST_NOTIF_ID)
+            return
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(this, PLAYLIST_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Downloading \"$title\"")
+            .setContentText("$done of $total songs done")
+            .setProgress(total, done, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(PLAYLIST_NOTIF_ID, notif)
     }
 
     /**

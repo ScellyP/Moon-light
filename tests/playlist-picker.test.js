@@ -25,7 +25,9 @@ function picker(opts) {
     refreshPlaylists: () => calls.push(['refresh']),
   };
   const arts = [];
-  const win = { document: doc, setTimeout: (f) => { f(); return 1; }, clearTimeout() {}, NovelAudio: audio, SongMenu: { toast: (m) => toasts.push(m) },
+  const timers = [];
+  const win = { document: doc, setTimeout: o.defer ? (f) => { timers.push(f); return timers.length; } : (f) => { f(); return 1; }, clearTimeout() {},
+    requestAnimationFrame: o.defer ? (f) => { f(); return 1; } : undefined, NovelAudio: audio, SongMenu: { toast: (m) => toasts.push(m) },
     AndroidBridge: { getArtwork: (path) => { arts.push(path); return 'data:image/jpeg;base64,X'; } } };
   if (o.observer) {
     win.IntersectionObserver = function (cb) { o.observer.cb = cb; o.observer.seen = []; this.observe = (n) => o.observer.seen.push(n); this.unobserve = () => {}; this.disconnect = () => { o.observer.seen = []; }; };
@@ -39,7 +41,9 @@ function picker(opts) {
   const type = (text) => { const i = findAll(layer(), (n) => n.tag === 'input')[0]; i.value = text; (i.listeners.input || []).forEach((f) => f({})); };
   const scrollDown = () => { const l = list(); l.scrollTop = 1e9; l.clientHeight = 600; l.scrollHeight = 0; (l.listeners.scroll || []).forEach((f) => f({})); };
   const addBtn = (i) => findAll(rows()[i], hasClass('pp-add'))[0];
-  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, tracks, arts };
+  const flushOne = () => { const f = timers.shift(); if (f) f(); return !!f; };
+  const flushAll = () => { while (flushOne()); };
+  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, tracks, arts, timers, flushOne, flushAll };
 }
 
 check('opens with the playlist name and lists ALL songs, drawing more as you scroll', () => {
@@ -170,6 +174,53 @@ check('artwork is asked only for rows that come on screen, one at a time', () =>
   assert.deepStrictEqual(p.arts, ['/m/s0.mp3', '/m/s2.mp3']);    // only the two that are visible
   const tile = findAll(p.rows()[0], hasClass('pp-art'))[0];
   assert.ok(tile.getAttribute('data-pp-cover'));
+});
+
+check('the + answers at once with a little pop; the write to the phone follows, one song per task', () => {
+  const p = picker({ defer: true });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(0)); p.tap(p.addBtn(1)); p.tap(p.addBtn(2));
+  assert.ok([0, 1, 2].every((i) => p.addBtn(i).className.indexOf('done') !== -1 && p.addBtn(i).className.indexOf('pop') !== -1));   // the buttons are already checks, animating
+  assert.strictEqual(p.calls.length, 0);                          // nothing has been written yet: the screen did not wait for the phone
+  p.flushOne();
+  assert.deepStrictEqual(p.calls.map((c) => c[2]), ['s0']);       // one song per task ...
+  p.flushOne();
+  assert.deepStrictEqual(p.calls.map((c) => c[2]), ['s0', 's1']);
+  p.flushAll();
+  assert.deepStrictEqual(p.calls.map((c) => c[2]), ['s0', 's1', 's2']);
+});
+
+check('tapping + and then the check before anything was written costs nothing', () => {
+  const p = picker({ defer: true });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(3)); p.tap(p.addBtn(3));
+  assert.ok(p.addBtn(3).className.indexOf('done') === -1);
+  p.flushAll();
+  assert.strictEqual(p.calls.length, 0);
+  p.win.PlaylistPicker.close();
+  assert.deepStrictEqual(p.toasts, []);
+});
+
+check('a write that fails puts the button back and says so', () => {
+  const p = picker({ defer: true, addFails: true });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(0));
+  assert.ok(p.addBtn(0).className.indexOf('done') !== -1);       // optimistic first
+  p.flushAll();
+  assert.ok(p.addBtn(0).className.indexOf('done') === -1);
+  assert.deepStrictEqual(p.toasts, ['Could not add the song']);
+  p.win.PlaylistPicker.close();
+  assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 0);
+});
+
+check('closing right after tapping still writes everything that was tapped', () => {
+  const p = picker({ defer: true });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.tap(p.addBtn(0)); p.tap(p.addBtn(1));
+  p.win.PlaylistPicker.close();
+  assert.deepStrictEqual(p.calls.filter((c) => c[0] === 'add').map((c) => c[2]), ['s0', 's1']);
+  assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 1);
+  assert.deepStrictEqual(p.toasts, ['Added 2 songs to \u201cMix\u201d']);
 });
 
 finish();

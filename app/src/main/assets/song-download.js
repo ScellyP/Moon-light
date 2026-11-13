@@ -594,10 +594,23 @@
     render();
   }
 
+  function isPlaylistUrl(url) {
+    return /youtube\.com\/(playlist|watch)\?[^#]*list=/.test(url) ||
+           /youtu\.be\/[^?]+\?[^#]*list=/.test(url) ||
+           /open\.spotify\.com\/(playlist|album|user\/[^/]+\/playlist)\//.test(url);
+  }
+
   function takeClipboardText(text) {
     const parsed = parseLinks(text);
-    if (!parsed.links.length) wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
-    else reviewLinks(parsed.links);
+    if (!parsed.links.length) {
+      wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
+      return;
+    }
+    if (parsed.links.length === 1 && isPlaylistUrl(parsed.links[0])) {
+      startPlaylistFlow(parsed.links[0]);
+      return;
+    }
+    reviewLinks(parsed.links);
   }
 
   function pasteFromClipboard() {
@@ -891,9 +904,237 @@
     return box;
   }
 
+  /* =========================================================================
+     Playlist download flow  (separate from the per-song wizard)
+     =========================================================================
+     Steps:
+       pl-resolving   spinner while yt-dlp fetches the track list
+       pl-confirm     show track count + title; user confirms or cancels
+       pl-downloading progress bar + per-song status list; notification running
+       pl-edit        all done; per-song name field + tappable cover crop
+       pl-saving      placing songs one by one into the library
+  ========================================================================= */
+
+  let pl = null;   // null when no playlist flow is active
+
+  function startPlaylistFlow(url) {
+    pl = { url, step: 'pl-resolving', title: '', tracks: [], items: [], done: 0, failed: 0 };
+    render();
+    const jobId = 'pl-resolve-' + Date.now().toString(36);
+    const b = bridge();
+    if (!b || typeof b.fetchPlaylistInfo !== 'function') {
+      pl = { url, step: 'pl-error', error: 'Not connected to the app yet.' };
+      render(); return;
+    }
+    root.onPlaylistInfo = function (id, json) {
+      if (id !== jobId) return;
+      let data;
+      try { data = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { data = { error: 'Bad response.' }; }
+      if (data.error) { pl.step = 'pl-error'; pl.error = data.error; render(); return; }
+      pl.title  = data.title  || 'Playlist';
+      pl.tracks = Array.isArray(data.tracks) ? data.tracks : [];
+      pl.step   = 'pl-confirm';
+      render();
+    };
+    b.fetchPlaylistInfo(jobId, url);
+  }
+
+  function startPlaylistDownloads() {
+    pl.step  = 'pl-downloading';
+    pl.items = pl.tracks.map((url) => ({
+      url, jobId: '', name: '', path: '', fullArt: '', art: '', crop: null,
+      status: 'queued', error: '',
+    }));
+    render();
+    pl.items.forEach((item, i) => {
+      const jobId = 'pl-dl-' + i + '-' + Date.now().toString(36);
+      item.jobId = jobId;
+      const b = bridge();
+      if (!b || typeof b.stageSong !== 'function') { item.status = 'failed'; item.error = 'Not connected.'; return; }
+      item.status = 'dl';
+      b.stageSong(jobId, item.url);
+    });
+    plNotify();
+  }
+
+  function onPlSongStatus(jobId, status, message) {
+    if (!pl || pl.step !== 'pl-downloading') return false;
+    const item = pl.items.find((it) => it.jobId === jobId);
+    if (!item) return false;
+    if (status === 'running') return true;   // suppress from the wizard
+    if (status === 'done') {
+      item.path = message;
+      item.status = 'done';
+      pl.done++;
+      const b = bridge();
+      if (b && typeof b.getArtwork === 'function') {
+        try { const a = b.getArtwork(item.path); item.fullArt = a || ''; item.art = item.fullArt; } catch (e) {}
+      }
+      item.name = stemOf(item.path);
+    } else if (status === 'failed') {
+      item.status = 'failed'; item.error = message; pl.failed++;
+    }
+    plNotify();
+    render();
+    if (pl.done + pl.failed >= pl.items.length) { pl.step = 'pl-edit'; plNotify(); render(); }
+    return true;
+  }
+
+  function onPlPlaceDone(jobId, ok) {
+    if (!pl || pl.step !== 'pl-saving') return false;
+    const item = (pl.saving || [])[pl.saveIndex];
+    if (!item || item.placeJobId !== jobId) return false;
+    pl.saveIndex++;
+    placeSaved();
+    return true;
+  }
+
+  function plNotify() {
+    const b = bridge();
+    if (!b || typeof b.notifyPlaylistProgress !== 'function') return;
+    const total = pl.items.length;
+    const done  = pl.done + pl.failed;
+    try { b.notifyPlaylistProgress(pl.title, done, total); } catch (e) {}
+  }
+
+  function savePlSongs() {
+    const toPlace = pl.items.filter((it) => it.status === 'done');
+    if (!toPlace.length) { pl = null; render(); return; }
+    pl.saving    = toPlace;
+    pl.saveIndex = 0;
+    pl.step      = 'pl-saving';
+    render();
+    placeSaved();
+  }
+
+  function placeSaved() {
+    if (!pl || pl.step !== 'pl-saving') return;
+    const item = (pl.saving || [])[pl.saveIndex];
+    if (!item) { pl = null; render(); return; }
+    const b = bridge();
+    if (!b || typeof b.placeSong !== 'function') { pl = null; render(); return; }
+    const jobId = 'pl-place-' + pl.saveIndex + '-' + Date.now().toString(36);
+    item.placeJobId = jobId;
+    b.placeSong(jobId, item.path, cleanSongName(item.name), cleanFolderName(pl.title));
+  }
+
+  // ---- BUILDERS for playlist steps ----------------------------------------
+
+  function buildPlResolving() {
+    const box = el('div', 'dl-step dl-pl-step');
+    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon')); box.appendChild(mark);
+    box.appendChild(el('h2', 'dl-title', 'Reading playlist\u2026'));
+    box.appendChild(el('p', 'dl-hint', 'Fetching the track list. This takes a moment.'));
+    return box;
+  }
+
+  function buildPlError() {
+    const box = el('div', 'dl-step dl-pl-step');
+    const mark = el('span', 'dl-mark dl-mark-warn'); mark.appendChild(icon('i-info')); box.appendChild(mark);
+    box.appendChild(el('h2', 'dl-title', 'Could not read playlist'));
+    box.appendChild(el('p', 'dl-hint', pl.error || 'Unknown error.'));
+    box.appendChild(button('Back', 'dl-primary', () => { pl = null; render(); }));
+    return box;
+  }
+
+  function buildPlConfirm() {
+    const box = el('div', 'dl-step dl-pl-step');
+    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon-music')); box.appendChild(mark);
+    box.appendChild(el('h2', 'dl-title', pl.title));
+    const n = pl.tracks.length;
+    box.appendChild(el('p', 'dl-hint', n + ' song' + (n === 1 ? '' : 's') +
+      ' will download in the background. Rename songs and re-crop covers once they\u2019re done.'));
+    const row = el('div', 'dl-actions');
+    row.appendChild(button('Download all', 'dl-primary', startPlaylistDownloads));
+    row.appendChild(button('Cancel', 'dl-secondary', () => { pl = null; render(); }));
+    box.appendChild(row);
+    return box;
+  }
+
+  function buildPlDownloading() {
+    const done  = pl.done + pl.failed;
+    const total = pl.items.length;
+    const box = el('div', 'dl-step dl-pl-step');
+    box.appendChild(el('h2', 'dl-title', '\u201c' + pl.title + '\u201d'));
+    box.appendChild(el('p', 'dl-hint', done + ' of ' + total + ' done'));
+    const barWrap = el('div', 'dl-pl-bar-wrap');
+    const barFill = el('div', 'dl-pl-bar-fill');
+    barFill.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+    barWrap.appendChild(barFill); box.appendChild(barWrap);
+    const list = el('div', 'dl-pl-list');
+    pl.items.forEach((item) => {
+      const row = el('div', 'dl-pl-row dl-pl-row-' + item.status);
+      row.appendChild(el('span', 'dl-pl-row-name', item.name || shortLink(item.url)));
+      row.appendChild(el('span', 'dl-pl-row-status',
+        item.status === 'done' ? '\u2713' : item.status === 'failed' ? '\u2717' : item.status === 'dl' ? '\u2026' : '\u2014'));
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  function buildPlEdit() {
+    const box = el('div', 'dl-step dl-pl-step');
+    box.appendChild(el('h2', 'dl-title', '\u201c' + pl.title + '\u201d \u2014 ' + pl.done + ' song' + (pl.done === 1 ? '' : 's')));
+    if (pl.failed) box.appendChild(el('p', 'dl-hint dl-pl-warn', pl.failed + ' failed to download.'));
+    box.appendChild(el('p', 'dl-hint', 'Tap a cover to re-crop. Edit names, then save.'));
+    const list = el('div', 'dl-pl-edit-list');
+    pl.items.forEach((item, i) => {
+      if (item.status !== 'done') return;
+      const card = el('div', 'dl-pl-edit-card');
+      // Cover — tappable, re-uses the existing openCrop(item) which needs item.fullArt + item.path
+      const coverBtn = el('button', 'dl-pl-edit-cover sp-cover');
+      coverBtn.type = 'button';
+      coverBtn.setAttribute('aria-label', 'Re-crop cover');
+      if (item.art) coverBtn.style.setProperty('--sp-cover', 'url("' + item.art + '")');
+      coverBtn.appendChild(icon('i-moon-music'));
+      coverBtn.addEventListener('click', () => openCrop(item));
+      card.appendChild(coverBtn);
+      // Name field
+      const nameInput = el('input');
+      nameInput.type  = 'text';
+      nameInput.className = 'dl-name-input';
+      nameInput.value = item.name;
+      nameInput.setAttribute('aria-label', 'Song name');
+      nameInput.setAttribute('data-keep', 'pl-name-' + i);
+      nameInput.addEventListener('input', () => { item.name = cleanSongName(nameInput.value); });
+      card.appendChild(nameInput);
+      list.appendChild(card);
+    });
+    box.appendChild(list);
+    box.appendChild(button('Save all to \u201c' + pl.title + '\u201d', 'dl-primary', savePlSongs));
+    return box;
+  }
+
+  function buildPlSaving() {
+    const done  = pl.saveIndex || 0;
+    const total = (pl.saving || []).length;
+    const box = el('div', 'dl-step dl-pl-step');
+    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon-music')); box.appendChild(mark);
+    box.appendChild(el('h2', 'dl-title', 'Saving to \u201c' + pl.title + '\u201d\u2026'));
+    box.appendChild(el('p', 'dl-hint', done + ' of ' + total + ' saved'));
+    const barWrap = el('div', 'dl-pl-bar-wrap');
+    const barFill = el('div', 'dl-pl-bar-fill');
+    barFill.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+    barWrap.appendChild(barFill); box.appendChild(barWrap);
+    return box;
+  }
+
+  // Hook onSongDownloadStatus to intercept pl- jobs before the wizard sees them.
+  const _prevStatus = root.onSongDownloadStatus;
+  root.onSongDownloadStatus = function (jobId, status, message) {
+    if (typeof jobId === 'string') {
+      if (jobId.startsWith('pl-dl-')    && onPlSongStatus(jobId, status, message)) return;
+      if (jobId.startsWith('pl-place-') && onPlPlaceDone(jobId, status === 'done')) return;
+    }
+    if (typeof _prevStatus === 'function') _prevStatus(jobId, status, message);
+  };
+
   const BUILDERS = {
     paste: buildPaste, download: buildDownload, name: buildName, playlist: buildPlaylist,
     newplaylist: buildNewPlaylist, placing: buildPlacing, placefail: buildPlaceFail, done: buildDone,
+    'pl-resolving': buildPlResolving, 'pl-error': buildPlError, 'pl-confirm': buildPlConfirm,
+    'pl-downloading': buildPlDownloading, 'pl-edit': buildPlEdit, 'pl-saving': buildPlSaving,
   };
 
   function render() {
@@ -906,8 +1147,9 @@
     const selEnd = keep ? active.selectionEnd : 0;
 
     stageEl.textContent = '';
-    stageEl.setAttribute('data-step', s.step);
-    stageEl.appendChild(BUILDERS[s.step](s));
+    const step = pl ? pl.step : s.step;
+    stageEl.setAttribute('data-step', step);
+    stageEl.appendChild((BUILDERS[step] || BUILDERS['paste'])(s));
 
     if (keep) {
       const again = stageEl.querySelector('[data-keep="' + keep + '"]');

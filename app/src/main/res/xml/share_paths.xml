@@ -5,4 +5,6 @@
 <paths>
     <external-path name="moonlight_songs" path="Moonlight/Songs/" />
     <external-path name="novel_audio" path="Novel/Audio/" />
+    <!-- The text file of a playlist's source links (MainActivity.playlistShareLinks): written here, then shared. -->
+    <cache-path name="playlist_links" path="playlist-links/" />
 </paths>
