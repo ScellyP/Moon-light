@@ -4,8 +4,13 @@ name: Build Testing APK
 # - Signed with a SEPARATE testing key (TESTING_* secrets), not the live key.
 # - Gets its own package name (com.scell.moonlight.testing) and the label
 #   "Moonlight Testing", so it installs side by side with the live app.
-# It does NOT publish a GitHub Release, so the in-app updater (which reads the
-# newest Release) never sees test builds. Download the apk from the run's Artifacts.
+#
+# Publishes a GitHub Release for every push, tagged "testing-<run number>" so one
+# test build never overwrites another even when version.js wasn't bumped. The
+# Release is marked PRE-RELEASE: it shows on the repo's Releases page for anyone
+# to download by hand, but GET /releases/latest (what AppUpdater.kt polls) always
+# skips pre-releases, so the live app's in-app updater never sees a test build.
+# The apk is also kept as a run Artifact, same as before.
 
 on:
   push:
@@ -20,6 +25,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Needed to publish the pre-release GitHub Release (last step).
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -81,3 +89,18 @@ jobs:
           name: moonlight-testing-release-apk-${{ github.run_number }}
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      # Tag includes the run number so every push gets its own Release, even when
+      # version.js wasn't bumped between test builds. --prerelease keeps it out of
+      # GET /releases/latest, so AppUpdater.kt (the live app's updater) never sees it.
+      - name: Publish pre-release GitHub Release (for manual testing downloads only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(grep -oE "APP_VERSION = 'v[0-9]+\.[0-9]+\.[0-9]+" app/src/main/assets/version.js | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" || true)
+          TAG="testing-${VER:-build}-${{ github.run_number }}"
+          APK="moonlight-testing-$TAG.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          gh release create "$TAG" "$APK" --target "${{ github.sha }}" --prerelease \
+            --title "Moonlight Testing ${VER:+$VER }(build ${{ github.run_number }})" \
+            --notes "Test build from commit ${{ github.sha }} on Testing. Not used by the in-app updater."
