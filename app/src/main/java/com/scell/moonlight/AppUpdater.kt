@@ -299,7 +299,9 @@ class AppUpdater(
                 }
                 newVersion = tagVersion   // shown in the UI: "v1.05.00"
                 apkUrl = found.optString("browser_download_url", "")
-                apkName = FILE_PREFIX + tag + ".apk"  // matches the actual filename on GitHub
+                // Strip "testing-" from tag so "moonlight-testing-" + "v1.00.00-5" + ".apk"
+                // matches the filename the workflow uploads, not "moonlight-testing-testing-...".
+                apkName = FILE_PREFIX + tag.removePrefix("testing-") + ".apk"
                 apkSize = found.optLong("size", 0L)
                 val digest = found.optString("digest", "")
                 apkSha256 = if (digest.startsWith("sha256:")) digest.substring(7).lowercase() else null
