@@ -349,20 +349,9 @@ window.NovelAudio = (function () {
     search(query) {
       const words = this.normalize(query).split(' ').filter(Boolean);
       if (!words.length) return [];
-      return this.visibleTracks().filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
+      return state.tracks.filter(t => { const k = this.searchKey(t); return words.every(w => k.indexOf(w) !== -1); });
     },
 
-    // The songs the plain "All songs" views (the list, search, the add-songs picker, counts) show. One song kept in
-    // the Songs folder under a fixed name is left out of them; it still plays and still shows inside a playlist.
-    isHidden(t) { return !!t && /\/Songs\/never gonna give you up\.[a-z0-9]+$/i.test(String(t.path || '')); },
-    visibleTracks() {
-      const c = this._vis;
-      if (c && c.src === state.tracks && c.len === state.tracks.length) return c.list;
-      const list = state.tracks.some(t => this.isHidden(t)) ? state.tracks.filter(t => !this.isHidden(t)) : state.tracks;
-      this._vis = { src: state.tracks, len: state.tracks.length, list: list };
-      return list;
-    },
-    _vis: null,
 
     /* ---- Duplicate songs ------------------------------------------------------------------------------
        The same song downloaded twice by accident. Two songs are copies of each other when
@@ -694,7 +683,7 @@ window.NovelAudio = (function () {
       const sel = state.activePlaylist;
       const virtual = AudioFeatures.selectionFor(sel);   // '@recent' / '@liked' / '@list:<id>'
       if (virtual) return virtual;
-      if (!sel || sel === 'all') return this.visibleTracks().map(t => t.id);
+      if (!sel || sel === 'all') return state.tracks.map(t => t.id);
       return this.tracksInPlaylist(sel).map(t => t.id);
     },
   };
@@ -2131,13 +2120,6 @@ window.NovelAudio = (function () {
       if (typeof patch.description === 'string') { if (patch.description) p.description = patch.description; else delete p.description; }
       Prefs.save(); return true;
     },
-    // Writes a list's ids as they are (one more song than before, for instance).
-    setOrderAnyLength(id, ids) {
-      const p = this._find(id);
-      if (!p || !Array.isArray(ids)) return false;
-      p.ids = ids.slice();
-      Prefs.save(); return true;
-    },
     // Writes a whole new order (the same ids, as the edit screen left them).
     setOrder(id, ids) {
       const p = this._find(id);
@@ -2615,7 +2597,7 @@ window.NovelAudio = (function () {
     },
 
     _playlistCount(name) {
-      if (name === 'all') return MediaLibrary.visibleTracks().length;
+      if (name === 'all') return state.tracks.length;
       const v = AudioFeatures.selectionFor(name);
       return v ? v.length : MediaLibrary.tracksInPlaylist(name).length;
     },
@@ -3078,7 +3060,7 @@ window.NovelAudio = (function () {
     },
 
     /* Search tab and song memory (song-search.js, song-memory.js). */
-    getTracks() { return MediaLibrary.visibleTracks(); },
+    getTracks() { return state.tracks; },
     isScanning() { return !!state.scanning; },
     // Changes whenever a song's info or playlists were edited, so caches built from them (Search) know to refresh.
     getInfoRev() { return MediaLibrary.infoRev; },
@@ -3559,59 +3541,6 @@ window.NovelAudio = (function () {
       AudioUI.render();
       return true;
     },
-    // The song kept out of "All songs" (see MediaLibrary.isHidden), or null while it is not on the phone.
-    getHiddenTrack() { return state.tracks.find(t => MediaLibrary.isHidden(t)) || null; },
-
-    // Plays that song: inside a playlist that holds it, else on its own.
-    playHiddenTrack() {
-      const t = this.getHiddenTrack();
-      if (!t) return false;
-      if (t.playlist) return this.playTrack(t.id);
-      PlaybackQueue.buildFrom([t.id]);
-      AudioEngine.play(t.id);
-      return true;
-    },
-
-    // A fresh scan; the promise settles when its result is in (the new file is then in getTracks()/getHiddenTrack()).
-    rescanThen() {
-      return new Promise((resolve) => { MediaLibrary._waiters.push(resolve); MediaLibrary.scan(); });
-    },
-
-    // Puts one song into up to `max` of the user's playlists (never into one that already holds it), at a random
-    // place in each, not always the top or the bottom. Only the playlists' records change. Returns the playlist keys.
-    injectIntoPlaylists(id, max) {
-      const track = MediaLibrary.getTrack(id);
-      if (!track || !track.ref) return [];
-      const pick = (n) => Math.floor(Math.random() * n);
-      const homes = [];
-      MediaLibrary.playlistFiles().forEach(m => {
-        if (m && m.source !== 'curated' && m.name && !(m.songs || []).some(sg => sg && sg.ref === track.ref)) homes.push({ file: m });
-      });
-      AudioFeatures.customPlaylists.list().forEach(p => {
-        const info = AudioFeatures.customPlaylists.info(p.id);
-        if (info && info.ids.indexOf(id) === -1) homes.push({ list: info });
-      });
-      const keys = [];
-      for (let n = Math.max(0, Math.min(max | 0, 2)); n > 0 && homes.length; n--) {
-        const home = homes.splice(pick(homes.length), 1)[0];
-        if (home.file) {
-          const songs = (home.file.songs || []).map(sg => ({ ref: sg.ref, title: sg.title, size: sg.size }));
-          songs.splice(pick(songs.length + 1), 0, { ref: track.ref, title: track.title, size: track.size });
-          if (!this._saveRecord(Object.assign({}, home.file, { songs: songs }))) continue;
-          track.playlists = MediaLibrary._namesOf(track).concat(home.file.name);
-          if (!track.playlist) track.playlist = home.file.name;
-          keys.push('name:' + home.file.name);
-        } else {
-          const ids = home.list.ids.slice();
-          ids.splice(pick(ids.length + 1), 0, id);
-          if (!AudioFeatures.customPlaylists.setOrderAnyLength(home.list.id, ids)) continue;
-          keys.push('list:' + home.list.id);
-        }
-      }
-      if (keys.length) this._playlistsChanged();
-      return keys;
-    },
-
     // Play one song from the Search tab: in its own playlist (or All songs), like tapping it there.
     playTrack(id) {
       const track = MediaLibrary.getTrack(id);
@@ -3679,7 +3608,7 @@ window.NovelAudio = (function () {
 
     // The songs of any playlist by the name used in the UI ('all', '@list:3', '@liked', 'Lo-fi'): the Songs-list order.
     getPlaylistTracks(name) {
-      if (!name || name === 'all') return MediaLibrary.visibleTracks().slice();
+      if (!name || name === 'all') return state.tracks.slice();
       const virtual = AudioFeatures.selectionFor(name);
       if (virtual) return virtual.map(id => MediaLibrary.getTrack(id)).filter(Boolean);
       return MediaLibrary.tracksInPlaylist(name);

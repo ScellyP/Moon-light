@@ -3206,14 +3206,6 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .sm-top-btn.save:disabled { color: var(--sp-sub, var(--faint)); }
 .sm-pad { padding: 4px 22px 8px; }
 /* Edit playlist screen (playlist-editor.js): fixed 72px rows so dragging is plain arithmetic */
-#rr-dialog { position: fixed; inset: 0; z-index: 99; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.6); animation: rr-fade .2s ease-out; }
-.rr-card { width: min(100%, 340px); box-sizing: border-box; padding: 26px 24px 20px; border-radius: 18px; text-align: center; color: var(--text);
-  background: color-mix(in srgb, var(--text) 9%, var(--bg)); box-shadow: 0 18px 48px rgba(0,0,0,.55); animation: rr-pop .26s cubic-bezier(.2, .9, .3, 1.2); }
-.rr-card h2 { margin: 0 0 8px; font: 700 22px/1.2 var(--font-ui); }
-.rr-card p { margin: 0 0 20px; font: 400 17px/1.4 var(--font-ui); color: var(--muted); }
-.rr-card button { min-width: 110px; height: 46px; border: 0; border-radius: 999px; cursor: pointer; background: var(--accent); color: var(--accent-ink); font: 700 16px/1 var(--font-ui); }
-@keyframes rr-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes rr-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
 #pe-layer { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 93; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
   padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
 #pe-layer.hidden { display: none; }
@@ -4023,7 +4015,6 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="playlist-editor.js"></script>
 <script src="song-search.js"></script>
 <script src="song-download.js"></script>
-<script src="rickroll.js"></script>      <!-- after song-download.js: it wraps window.onSongDownloadStatus -->
 <script src="moon-phase.js"></script>
 <script src="moon-theme.js"></script>
 <script src="player-app.js"></script>

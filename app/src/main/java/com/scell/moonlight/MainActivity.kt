@@ -1005,7 +1005,6 @@ class MainActivity : ComponentActivity() {
         super.onPause()
         appInForeground = false
         inForeground = false
-        callPage("onAppPause")       // the page notices when the user leaves (to a link, another app...)
         screenHandler.removeCallbacks(releaseScreenRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::webView.isInitialized && !webViewGone) {
@@ -1018,7 +1017,6 @@ class MainActivity : ComponentActivity() {
         appInForeground = true
         inForeground = true
         appUpdater.onResume()
-        callPage("onAppResume")      // ...and when they come back, however they got away (Back, the app switcher, a link)
         // Push the current position right away (the poll may have been in slow mode).
         if (mediaController?.isPlaying == true) startProgressUpdates()
         keepScreenAwake()
@@ -1360,14 +1358,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
             return true
-        }
-
-        // openExternalLink: opens a web link (http / https only) in the phone's browser or the app that handles it.
-        @JavascriptInterface
-        fun openExternalLink(url: String): Boolean {
-            val u = try { Uri.parse(url) } catch (e: Exception) { return false }
-            if (u.scheme != "https" && u.scheme != "http") return false
-            return try { runOnUiThread { openInExternalBrowser(u) }; true } catch (e: Exception) { false }
         }
 
         // playlistShareLinks: the page built a plain text file with the SOURCE LINKS of a playlist's songs (one per
