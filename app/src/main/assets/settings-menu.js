@@ -260,6 +260,11 @@
   }
   bindSwitch('set-bt', 'btAutoStart', null);
   bindSwitch('set-dupes', 'removeDuplicates', null);
+  bindSwitch('set-bg-dl', 'backgroundDownloads', function (on) {
+    // Tell the native side immediately so SongDownloader can honour it mid-download.
+    var b = root.AndroidBridge || null;
+    if (b && b.setBackgroundDownloads) b.setBackgroundDownloads(on);
+  });
   bindSwitch('set-sky', 'animatedSky', function (on) { document.body.classList.toggle('no-sky-motion', !on); });
   bindSwitch('set-tint', 'coverTint', function () {
     if (root.SpotifyUI && root.SpotifyUI.refreshTint) root.SpotifyUI.refreshTint();

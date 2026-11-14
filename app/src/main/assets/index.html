@@ -3934,6 +3934,10 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <section class="sd-group" aria-labelledby="sd-downloads">
         <h3 class="sd-title" id="sd-downloads">Downloads</h3>
+        <label class="sd-switch" for="set-bg-dl">
+          <span class="sd-switch-text">Background downloads<small>Keep downloading when you switch to another app. Android will ask for notification permission the first time.</small></span>
+          <input type="checkbox" id="set-bg-dl" checked>
+        </label>
         <div class="sd-account" id="yt-account-row" hidden>
           <span class="sd-switch-text">YouTube<small id="yt-account-status">Not signed in</small><small>Sign in once if YouTube says “Sign in to confirm you’re not a bot”. The login stays on this phone.</small></span>
           <button type="button" id="yt-account-btn" class="sd-btn">Sign in</button>
@@ -3971,10 +3975,7 @@ body.settings-open #srch-input { pointer-events: none; }
         <span id="app-version"></span>
         <button type="button" id="update-check" class="sd-btn">Check for updates</button>
       </div>
-      <label class="sd-switch" id="set-rr-row" for="set-rr" hidden>
-        <span class="sd-switch-text">Easter egg<small>You found it.</small></span>
-        <input type="checkbox" id="set-rr" checked>
-      </label>
+
     </footer>
   </aside>
 </div>

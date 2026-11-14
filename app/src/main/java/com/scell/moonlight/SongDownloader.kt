@@ -117,6 +117,18 @@ class SongDownloader(
     private var engineReady = false
     // Tracks whether DownloadForegroundService is running so we start/stop it exactly once.
     private var fgServiceRunning = false
+    // Mirrors the "Background downloads" setting toggle. When false the foreground service is
+    // never started, so downloads stop if the user switches away (original behaviour).
+    @Volatile private var backgroundDownloadsEnabled = true
+
+    fun setBackgroundDownloadsEnabled(enabled: Boolean) {
+        backgroundDownloadsEnabled = enabled
+        // If the user just turned it OFF and the service is currently running, stop it now.
+        if (!enabled && fgServiceRunning) {
+            synchronized(lock) { fgServiceRunning = false }
+            main.post { DownloadForegroundService.stop(activity) }
+        }
+    }
     // Per staged song: the part of its thumbnail you chose for the cover (x, y, size: fractions, see CoverCrop), and
     // the web page it was downloaded from (written into the song as its source link when it is saved).
     private val crops = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
@@ -244,7 +256,7 @@ class SongDownloader(
         val fresh = running.add(jobId)
         if (fresh && isDownload) {
             downloading.add(jobId)
-            if (!fgServiceRunning) {
+            if (!fgServiceRunning && backgroundDownloadsEnabled) {
                 fgServiceRunning = true
                 main.post { DownloadForegroundService.start(activity) }
             }

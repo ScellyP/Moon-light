@@ -1440,6 +1440,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Background-downloads toggle — called by settings-menu.js when the user flips the switch.
+        // SongDownloader reads this flag before starting DownloadForegroundService so that the
+        // foreground service (and its persistent notification) are only started when the user wants it.
+        @JavascriptInterface
+        fun setBackgroundDownloads(enabled: Boolean) {
+            songDownloader.setBackgroundDownloadsEnabled(enabled)
+        }
+
         // YouTube sign-in for the downloader. youtubeSignInStatus: "signed-in" | "signed-out".
         // youtubeSignIn opens the sign-in page; the result arrives as window.onYouTubeSignIn(status, message).
         @JavascriptInterface
