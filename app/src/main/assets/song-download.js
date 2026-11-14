@@ -1082,19 +1082,74 @@
   function buildPlDownloading() {
     const done  = pl.done + pl.failed;
     const total = pl.items.length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+
     const box = el('div', 'dl-step dl-pl-step');
-    box.appendChild(el('h2', 'dl-title', '\u201c' + pl.title + '\u201d'));
-    box.appendChild(el('p', 'dl-hint', done + ' of ' + total + ' done'));
+
+    // Header
+    const hdr = el('div', 'dl-pl-hdr');
+    const titleEl = el('h2', 'dl-title', '\u201c' + pl.title + '\u201d');
+    const prog = el('span', 'dl-pl-prog', done + ' / ' + total);
+    hdr.appendChild(titleEl); hdr.appendChild(prog);
+    box.appendChild(hdr);
+
+    // Progress bar
     const barWrap = el('div', 'dl-pl-bar-wrap');
     const barFill = el('div', 'dl-pl-bar-fill');
-    barFill.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
-    barWrap.appendChild(barFill); box.appendChild(barWrap);
-    const list = el('div', 'dl-pl-list');
-    pl.items.forEach((item) => {
-      const row = el('div', 'dl-pl-row dl-pl-row-' + item.status);
-      row.appendChild(el('span', 'dl-pl-row-name', item.name || shortLink(item.url)));
-      row.appendChild(el('span', 'dl-pl-row-status',
-        item.status === 'done' ? '\u2713' : item.status === 'failed' ? '\u2717' : item.status === 'dl' ? '\u2026' : '\u2014'));
+    barFill.style.width = pct + '%';
+    barWrap.appendChild(barFill);
+    box.appendChild(barWrap);
+
+    // Song list — Spotify-style rows
+    const list = el('div', 'dl-pl-sp-list');
+    pl.items.forEach((item, i) => {
+      const row = el('div', 'dl-pl-sp-row dl-pl-sp-' + item.status);
+
+      // Cover thumbnail (shown when done; skeleton otherwise)
+      const cover = el('div', 'dl-pl-sp-cover sp-cover');
+      if (item.art) {
+        cover.style.setProperty('--sp-cover', 'url("' + item.art + '")');
+        cover.setAttribute('data-sp-cover', '1');
+      } else {
+        cover.appendChild(icon('i-moon-music'));
+      }
+      row.appendChild(cover);
+
+      // Text block
+      const text = el('div', 'dl-pl-sp-text');
+      const nameEl = el('div', 'dl-pl-sp-name');
+      if (item.name) {
+        nameEl.textContent = item.name;
+      } else if (item.status === 'dl') {
+        // Animated skeleton bar while actively downloading
+        nameEl.appendChild(el('span', 'dl-pl-sp-skel', ''));
+      } else {
+        // Queued — show track number
+        nameEl.textContent = 'Track ' + (i + 1);
+      }
+      text.appendChild(nameEl);
+      row.appendChild(text);
+
+      // Status pill
+      const pill = el('span', 'dl-pl-sp-pill');
+      if (item.status === 'done') {
+        pill.textContent = '\u2713';
+        pill.classList.add('dl-pl-sp-pill-done');
+      } else if (item.status === 'failed') {
+        pill.textContent = '\u2717';
+        pill.classList.add('dl-pl-sp-pill-fail');
+        // Show truncated error on second line
+        if (item.error) {
+          const errEl = el('div', 'dl-pl-sp-err', item.error.split('\n')[0].slice(0, 60));
+          text.appendChild(errEl);
+        }
+      } else if (item.status === 'dl') {
+        pill.textContent = '\u2026';
+        pill.classList.add('dl-pl-sp-pill-dl');
+      }
+      // queued: no pill
+      row.appendChild(pill);
+
       list.appendChild(row);
     });
     box.appendChild(list);

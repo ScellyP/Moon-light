@@ -359,6 +359,9 @@ class SongDownloader(
             .addOption("--embed-thumbnail")
             .addOption("--convert-thumbnails", "jpg")
             .addOption("--trim-filenames", "180")
+            // Reject any source audio track over 60 MB before downloading it.
+            // This protects against very long videos (concerts, mixes) in a playlist.
+            .addOption("--max-filesize", "60m")
             .addOption("-P", "home:" + runDir.absolutePath)
             .addOption("-P", "temp:" + tmpDir.absolutePath)
             .addOption("-o", "%(title)s.%(ext)s")

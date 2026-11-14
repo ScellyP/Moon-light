@@ -3991,14 +3991,32 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="splash.js"></script>
 <style>
 /* ---- Playlist download flow -------------------------------------------- */
-.dl-pl-bar-wrap{width:100%;height:4px;background:var(--panel-2);border-radius:2px;margin:10px 0;overflow:hidden}
-.dl-pl-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s ease}
-.dl-pl-list{display:flex;flex-direction:column;gap:2px;max-height:260px;overflow-y:auto;margin-top:8px}
-.dl-pl-row{display:flex;justify-content:space-between;align-items:center;padding:5px 2px;font-size:13px;color:var(--text);border-bottom:1px solid var(--panel-2);gap:8px}
-.dl-pl-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dl-pl-row-status{flex-shrink:0;color:var(--faint)}
-.dl-pl-row-done .dl-pl-row-status{color:var(--accent)}
-.dl-pl-row-failed .dl-pl-row-status{color:#e05}
+/* Playlist download — progress header */
+.dl-pl-hdr{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px}
+.dl-pl-hdr .dl-title{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl-pl-prog{flex-shrink:0;font-size:12px;font-weight:600;color:var(--faint)}
+/* Progress bar */
+.dl-pl-bar-wrap{width:100%;height:3px;background:var(--panel-2);border-radius:2px;margin:8px 0 10px;overflow:hidden}
+.dl-pl-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s ease}
+/* Spotify-style song rows */
+.dl-pl-sp-list{display:flex;flex-direction:column;gap:2px;max-height:360px;overflow-y:auto;margin:0 -4px}
+.dl-pl-sp-row{display:flex;align-items:center;gap:10px;padding:6px 4px;border-radius:8px;transition:background .12s}
+.dl-pl-sp-row:hover{background:var(--panel)}
+.dl-pl-sp-cover{width:44px;height:44px;flex-shrink:0;border-radius:6px}
+.dl-pl-sp-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.dl-pl-sp-name{font-size:13.5px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl-pl-sp-err{font-size:11px;color:#e05;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Skeleton shimmer for in-progress names */
+.dl-pl-sp-skel{display:block;height:12px;width:140px;max-width:80%;border-radius:6px;background:linear-gradient(90deg,var(--panel-2) 25%,var(--panel) 50%,var(--panel-2) 75%);background-size:200% 100%;animation:dl-shimmer 1.4s infinite}
+@keyframes dl-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Status pills */
+.dl-pl-sp-pill{flex-shrink:0;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.dl-pl-sp-pill-done{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)}
+.dl-pl-sp-pill-fail{background:color-mix(in srgb,#e05 15%,transparent);color:#e05}
+.dl-pl-sp-pill-dl{color:var(--faint);animation:dl-pulse 1.2s ease-in-out infinite}
+@keyframes dl-pulse{0%,100%{opacity:.4}50%{opacity:1}}
+/* Dim queued rows */
+.dl-pl-sp-queued .dl-pl-sp-name,.dl-pl-sp-queued .dl-pl-sp-cover{opacity:.4}
 .dl-pl-edit-list{display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;margin:10px 0}
 .dl-pl-edit-card{display:flex;align-items:center;gap:10px;transition:opacity .2s}
 .dl-pl-card-skip{opacity:.38}
