@@ -1326,45 +1326,107 @@
 
   /* ---- Find in playlist: hides the rows of the Songs list that do not match what was typed ---- */
   let lastFindPlaylist = null;
-  const findText = new WeakMap();
   let findFrame = 0;
 
   function findNorm(s) {
     return String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
+  /**
+   * Read the searchable text for a queue row directly from its DOM every time.
+   * We intentionally do NOT cache per-li node: the queue is rebuilt on every playlist
+   * switch / add / remove, so a stale WeakMap entry on an old node is harmless, but
+   * a stale entry on a *reused* node (which never happens here — innerHTML='' discards
+   * all children) would silently return wrong results. Reading live is fast enough for
+   * lists up to a few thousand rows and is always correct.
+   */
+  function rowText(li) {
+    const t = li.querySelector('.sp-t');
+    const a = li.querySelector('.sp-a');
+    return findNorm((t ? t.textContent : '') + ' ' + (a ? a.textContent : ''));
+  }
+
   function applyFind() {
+    findFrame = 0;                           // frame consumed — allow next scheduleFind
     const queue = $('audio-queue');
     if (!queue || !el.albumFind) return;
-    const words = findNorm(el.albumFind.value).split(' ').filter(Boolean);
+    const raw = el.albumFind.value;
+    const words = findNorm(raw).split(' ').filter(Boolean);
     let shown = 0;
+    let total = 0;
     Array.prototype.forEach.call(queue.children, (li) => {
-      let text = findText.get(li);
-      if (text === undefined) {
-        const t = li.querySelector('.sp-t'), a = li.querySelector('.sp-a');
-        text = findNorm((t ? t.textContent : '') + ' ' + (a ? a.textContent : ''));
-        findText.set(li, text);
+      total++;
+      if (!words.length) {
+        // No query — show everything and exit early per row.
+        li.classList.remove('sp-find-miss');
+        shown++;
+        return;
       }
+      const text = rowText(li);
       const hit = words.every((w) => text.indexOf(w) !== -1);
       li.classList.toggle('sp-find-miss', !hit);
       if (hit) shown++;
     });
-    if (el.albumFindEmpty) el.albumFindEmpty.classList.toggle('hidden', !(words.length && !shown && queue.children.length));
+    // "No results" banner: only when a query is typed AND every row is hidden.
+    if (el.albumFindEmpty) {
+      el.albumFindEmpty.classList.toggle('hidden', !(words.length && shown === 0 && total > 0));
+    }
+    // Show/hide the clear ✕ button that sits inside the find bar.
+    const clearBtn = $('sp-album-find-clear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !raw);
   }
 
   function scheduleFind() {
-    if (findFrame) return;
-    findFrame = window.requestAnimationFrame ? window.requestAnimationFrame(() => { findFrame = 0; applyFind(); }) : window.setTimeout(() => { findFrame = 0; applyFind(); }, 16);
+    // Cancel any pending frame before requesting a new one so rapid typing
+    // never queues more than one pending applyFind call.
+    if (findFrame) {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(findFrame);
+      else window.clearTimeout(findFrame);
+    }
+    findFrame = window.requestAnimationFrame
+      ? window.requestAnimationFrame(applyFind)
+      : window.setTimeout(applyFind, 16);
+  }
+
+  /** Clears the find input and re-shows all rows. */
+  function clearFind() {
+    if (!el.albumFind) return;
+    el.albumFind.value = '';
+    applyFind();
+    el.albumFind.focus();
   }
 
   function initFind() {
     if (!el.albumFind) return;
     el.albumFind.addEventListener('input', scheduleFind);
-    el.albumFind.addEventListener('keydown', (e) => { if (e.key === 'Enter' && el.albumFind.blur) el.albumFind.blur(); });
+    el.albumFind.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { clearFind(); return; }
+      if (e.key === 'Enter' && el.albumFind.blur) el.albumFind.blur();
+    });
+    // Clear button inside the find bar (injected here so the HTML stays simple).
+    let clearBtn = $('sp-album-find-clear');
+    if (!clearBtn) {
+      const findBar = $('sp-album-find');
+      if (findBar) {
+        clearBtn = document.createElement('button');
+        clearBtn.id = 'sp-album-find-clear';
+        clearBtn.type = 'button';
+        clearBtn.setAttribute('aria-label', 'Clear search');
+        clearBtn.className = 'sp-icon-btn hidden';
+        clearBtn.innerHTML = '<svg class="ico"><use href="#i-close"/></svg>';
+        clearBtn.addEventListener('click', clearFind);
+        findBar.appendChild(clearBtn);
+      }
+    }
     const queue = $('audio-queue');
-    // The list is rebuilt after adds, removes and edits: filter the new rows too.
     if (queue && typeof window.MutationObserver === 'function') {
-      new window.MutationObserver(() => { if (el.albumFind.value) scheduleFind(); }).observe(queue, { childList: true });
+      // childList: true  — catches rows being added / removed (playlist switch, add, remove).
+      // subtree: false   — we only care about the li children, not what's inside them.
+      // We always re-read row text live (rowText()), so subtree changes (title edits)
+      // are picked up automatically on the next keystroke — no subtree observer needed.
+      new window.MutationObserver(() => {
+        if (el.albumFind && el.albumFind.value) scheduleFind();
+      }).observe(queue, { childList: true });
     }
   }
 
@@ -1444,7 +1506,14 @@
     const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
     const sum = key && audio.getPlaylistSummary ? audio.getPlaylistSummary(key) : { canEdit: false, description: '' };
     if (el.albumChips) el.albumChips.classList.toggle('hidden', !sum.canEdit);
-    if (el.albumFind && lastFindPlaylist !== playlist) { lastFindPlaylist = playlist; if (el.albumFind.value) { el.albumFind.value = ''; applyFind(); } }
+    // Use the internal key (not the display label) so playlists with identical display
+    // names still trigger a clear, and so programmatic switches (openPlaylist()) always clear.
+    const findKey = key || playlist;
+    if (el.albumFind && lastFindPlaylist !== findKey) {
+      lastFindPlaylist = findKey;
+      if (el.albumFind.value) { el.albumFind.value = ''; applyFind(); }
+      else { applyFind(); }  // ensure no rows are stuck hidden from a prior playlist
+    }
     if (el.albumDesc) {
       el.albumDesc.textContent = sum.description || '';
       el.albumDesc.classList.toggle('hidden', !sum.description);

@@ -2513,6 +2513,10 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sp-album-desc.hidden, #sp-album-chips.hidden, #sp-album-find-empty.hidden { display: none; }
 #sp-album-actions .sp-fab { margin-left: 0; }
 #sp-album-shuffle { margin-left: auto; }
+#sp-album-find-clear { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: 0; background: none; color: var(--sp-sub); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s, background .15s; padding: 0; }
+#sp-album-find-clear .ico { width: 16px; height: 16px; }
+#sp-album-find-clear:hover { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+#sp-album-find-clear.hidden { display: none; }
 #sp-album-find { display: flex; align-items: center; gap: 10px; margin: 2px 16px 6px; padding: 0 14px; height: 44px; border-radius: 8px;
   background: color-mix(in srgb, var(--text) 12%, transparent); }
 #sp-album-find .ico { width: 20px; height: 20px; flex: none; color: var(--sp-sub); }
