@@ -1066,16 +1066,27 @@
   }
 
   function buildPlConfirm() {
-    const box = el('div', 'dl-step dl-pl-step');
-    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon-music')); box.appendChild(mark);
-    box.appendChild(el('h2', 'dl-title', pl.title));
+    const box = el('div', 'dl-step dl-wide dl-pl-step');
+
+    // Top row: icon + title + count
+    const topRow = el('div', 'dl-pl-cf-top');
+    const mark = el('span', 'dl-mark dl-pl-cf-icon'); mark.appendChild(icon('i-moon-music'));
+    topRow.appendChild(mark);
+    const textCol = el('div', 'dl-pl-cf-text');
+    textCol.appendChild(el('div', 'dl-pl-cf-title', pl.title));
     const n = pl.tracks.length;
-    box.appendChild(el('p', 'dl-hint', n + ' song' + (n === 1 ? '' : 's') +
-      ' will download in the background. Rename songs and re-crop covers once they\u2019re done.'));
-    const row = el('div', 'dl-actions');
-    row.appendChild(button('Download all', 'dl-primary', startPlaylistDownloads));
-    row.appendChild(button('Cancel', 'dl-secondary', () => { pl = null; render(); }));
-    box.appendChild(row);
+    textCol.appendChild(el('div', 'dl-pl-cf-sub', n + ' song' + (n === 1 ? '' : 's')));
+    topRow.appendChild(textCol);
+    box.appendChild(topRow);
+
+    box.appendChild(el('p', 'dl-hint dl-pl-cf-hint',
+      'Songs download in the background. Rename and re-crop covers once they\u2019re done.'));
+
+    // Buttons: Download all full-width, Cancel below
+    const dlBtn = button('Download all', 'dl-primary dl-pl-cf-btn', startPlaylistDownloads);
+    box.appendChild(dlBtn);
+    const cancelBtn = button('Cancel', 'dl-secondary dl-pl-cf-btn', () => { pl = null; render(); });
+    box.appendChild(cancelBtn);
     return box;
   }
 
@@ -1084,28 +1095,32 @@
     const total = pl.items.length;
     const pct   = total ? Math.round(done / total * 100) : 0;
 
-    const box = el('div', 'dl-step dl-pl-step');
+    const box = el('div', 'dl-step dl-wide dl-pl-step');
 
-    // Header
+    // Left-aligned header: title + X/Y counter
     const hdr = el('div', 'dl-pl-hdr');
-    const titleEl = el('h2', 'dl-title', '\u201c' + pl.title + '\u201d');
-    const prog = el('span', 'dl-pl-prog', done + ' / ' + total);
+    const titleEl = el('div', 'dl-pl-hdr-title', '\u201c' + pl.title + '\u201d');
+    const prog = el('span', 'dl-pl-prog', done + '\u2009/\u2009' + total);
     hdr.appendChild(titleEl); hdr.appendChild(prog);
     box.appendChild(hdr);
 
-    // Progress bar
+    // Thin progress bar
     const barWrap = el('div', 'dl-pl-bar-wrap');
     const barFill = el('div', 'dl-pl-bar-fill');
     barFill.style.width = pct + '%';
     barWrap.appendChild(barFill);
     box.appendChild(barWrap);
 
-    // Song list — Spotify-style rows
+    // Spotify-style song rows
     const list = el('div', 'dl-pl-sp-list');
     pl.items.forEach((item, i) => {
       const row = el('div', 'dl-pl-sp-row dl-pl-sp-' + item.status);
 
-      // Cover thumbnail (shown when done; skeleton otherwise)
+      // Track number (left column, like Spotify)
+      const num = el('span', 'dl-pl-sp-num', (i + 1) + '');
+      row.appendChild(num);
+
+      // Cover square
       const cover = el('div', 'dl-pl-sp-cover sp-cover');
       if (item.art) {
         cover.style.setProperty('--sp-cover', 'url("' + item.art + '")');
@@ -1115,39 +1130,38 @@
       }
       row.appendChild(cover);
 
-      // Text block
+      // Text
       const text = el('div', 'dl-pl-sp-text');
       const nameEl = el('div', 'dl-pl-sp-name');
       if (item.name) {
         nameEl.textContent = item.name;
       } else if (item.status === 'dl') {
-        // Animated skeleton bar while actively downloading
-        nameEl.appendChild(el('span', 'dl-pl-sp-skel', ''));
+        nameEl.appendChild(el('span', 'dl-pl-sp-skel'));
       } else {
-        // Queued — show track number
-        nameEl.textContent = 'Track ' + (i + 1);
+        // Queued: show a narrower skeleton so row still looks structured
+        const sk = el('span', 'dl-pl-sp-skel dl-pl-sp-skel-q');
+        nameEl.appendChild(sk);
       }
       text.appendChild(nameEl);
+      if (item.status === 'failed' && item.error) {
+        text.appendChild(el('div', 'dl-pl-sp-err', item.error.split('\n')[0].slice(0, 55)));
+      }
       row.appendChild(text);
 
-      // Status pill
+      // Right status icon
       const pill = el('span', 'dl-pl-sp-pill');
       if (item.status === 'done') {
-        pill.textContent = '\u2713';
+        pill.innerHTML = '<svg class="ico" style="width:16px;height:16px"><use href="#i-check"/></svg>';
         pill.classList.add('dl-pl-sp-pill-done');
       } else if (item.status === 'failed') {
-        pill.textContent = '\u2717';
+        pill.innerHTML = '<svg class="ico" style="width:16px;height:16px"><use href="#i-close"/></svg>';
         pill.classList.add('dl-pl-sp-pill-fail');
-        // Show truncated error on second line
-        if (item.error) {
-          const errEl = el('div', 'dl-pl-sp-err', item.error.split('\n')[0].slice(0, 60));
-          text.appendChild(errEl);
-        }
       } else if (item.status === 'dl') {
-        pill.textContent = '\u2026';
         pill.classList.add('dl-pl-sp-pill-dl');
+        // Spinning mini loader
+        const spin = el('span', 'dl-pl-sp-spin');
+        pill.appendChild(spin);
       }
-      // queued: no pill
       row.appendChild(pill);
 
       list.appendChild(row);
@@ -1158,41 +1172,88 @@
 
   function buildPlEdit() {
     const successItems = pl.items.filter((it) => it.status === 'done');
-    // Initialise the keep flag once (default: all selected).
     successItems.forEach((item) => { if (item.keep === undefined) item.keep = true; });
 
-    const box = el('div', 'dl-step dl-pl-step');
-    box.appendChild(el('h2', 'dl-title', '\u201c' + pl.title + '\u201d \u2014 ' + pl.done + ' song' + (pl.done === 1 ? '' : 's')));
-    if (pl.failed) box.appendChild(el('p', 'dl-hint dl-pl-warn', pl.failed + ' failed to download.'));
-    box.appendChild(el('p', 'dl-hint', 'Uncheck songs you don\u2019t want. Tap a cover to re-crop. Edit names, then save.'));
+    const box = el('div', 'dl-step dl-wide dl-pl-step');
 
-    // Select-all / deselect-all row
+    // Header — left-aligned like Spotify
+    const hdr = el('div', 'dl-pl-hdr');
+    hdr.appendChild(el('div', 'dl-pl-hdr-title', '\u201c' + pl.title + '\u201d'));
+    const countSpan = el('span', 'dl-pl-prog',
+      successItems.filter((it) => it.keep).length + '\u2009/\u2009' + successItems.length + ' selected');
+    hdr.appendChild(countSpan);
+    box.appendChild(hdr);
+
+    if (pl.failed) {
+      box.appendChild(el('p', 'dl-hint dl-pl-warn',
+        pl.failed + ' track' + (pl.failed === 1 ? '' : 's') + ' failed to download.'));
+    }
+
+    // Thin helper line + select-all toggle
     const selRow = el('div', 'dl-pl-sel-row');
+    box.appendChild(el('p', 'dl-pl-edit-hint', 'Tap a cover to re-crop. Edit names. Uncheck songs to skip.'));
     const allChecked = () => successItems.every((it) => it.keep);
-    const selBtn = el('button', 'dl-secondary dl-pl-sel-btn');
+    const updateCount = () => {
+      countSpan.textContent =
+        successItems.filter((it) => it.keep).length + '\u2009/\u2009' + successItems.length + ' selected';
+      selBtn.textContent = allChecked() ? 'Deselect all' : 'Select all';
+    };
+    const selBtn = el('button', 'dl-pl-sel-btn');
     selBtn.type = 'button';
-    const updateSelBtn = () => { selBtn.textContent = allChecked() ? 'Deselect all' : 'Select all'; };
-    updateSelBtn();
+    selBtn.textContent = allChecked() ? 'Deselect all' : 'Select all';
     selBtn.addEventListener('click', () => {
       const next = !allChecked();
       successItems.forEach((it) => { it.keep = next; });
-      render();
+      list.querySelectorAll('.dl-pl-edit-card').forEach((card, ci) => {
+        card.classList.toggle('dl-pl-card-skip', !successItems[ci].keep);
+        const chk = card.querySelector('.dl-pl-chk');
+        if (chk) chk.checked = successItems[ci].keep;
+      });
+      updateCount();
     });
     selRow.appendChild(selBtn);
-    const countSpan = el('span', 'dl-pl-sel-count',
-      successItems.filter((it) => it.keep).length + ' of ' + successItems.length + ' selected');
-    selRow.appendChild(countSpan);
     box.appendChild(selRow);
 
+    // Song list
     const list = el('div', 'dl-pl-edit-list');
+
     pl.items.forEach((item, i) => {
       if (item.status !== 'done') return;
+      const siIdx = successItems.indexOf(item);
 
       const card = el('div', 'dl-pl-edit-card' + (item.keep ? '' : ' dl-pl-card-skip'));
 
-      // Checkbox
-      const chkWrap = el('label', 'dl-pl-chk-wrap');
-      chkWrap.setAttribute('aria-label', item.keep ? 'Keep this song' : 'Skip this song');
+      // Cover button — tap to crop, shows real art when available
+      const coverBtn = el('button', 'dl-pl-edit-cover sp-cover');
+      coverBtn.type = 'button';
+      coverBtn.setAttribute('aria-label', 'Tap to re-crop cover');
+      if (item.art) {
+        coverBtn.style.setProperty('--sp-cover', 'url("' + item.art + '")');
+      }
+      // Always show music icon (hidden by CSS when art is set via --sp-cover)
+      coverBtn.appendChild(icon('i-moon-music'));
+      // Crop icon overlay
+      const cropHint = el('span', 'dl-pl-cover-crop-hint');
+      cropHint.innerHTML = '<svg class="ico" style="width:14px;height:14px"><use href="#i-image"/></svg>';
+      coverBtn.appendChild(cropHint);
+      coverBtn.addEventListener('click', () => openCrop(item));
+      card.appendChild(coverBtn);
+
+      // Right side: name input + checkbox
+      const right = el('div', 'dl-pl-edit-right');
+
+      const nameInput = el('input');
+      nameInput.type = 'text';
+      nameInput.className = 'dl-pl-edit-name';
+      nameInput.value = item.name;
+      nameInput.setAttribute('aria-label', 'Song name');
+      nameInput.setAttribute('data-keep', 'pl-name-' + i);
+      nameInput.addEventListener('input', () => { item.name = cleanSongName(nameInput.value); });
+      right.appendChild(nameInput);
+
+      // Checkbox toggle
+      const chkLabel = el('label', 'dl-pl-chk-wrap');
+      chkLabel.setAttribute('aria-label', 'Keep this song');
       const chk = el('input');
       chk.type = 'checkbox';
       chk.className = 'dl-pl-chk';
@@ -1200,31 +1261,12 @@
       chk.addEventListener('change', () => {
         item.keep = chk.checked;
         card.classList.toggle('dl-pl-card-skip', !item.keep);
-        updateSelBtn();
-        countSpan.textContent = successItems.filter((it) => it.keep).length + ' of ' + successItems.length + ' selected';
+        updateCount();
       });
-      chkWrap.appendChild(chk);
-      card.appendChild(chkWrap);
+      chkLabel.appendChild(chk);
+      right.appendChild(chkLabel);
 
-      // Cover — tappable, re-uses the existing openCrop(item)
-      const coverBtn = el('button', 'dl-pl-edit-cover sp-cover');
-      coverBtn.type = 'button';
-      coverBtn.setAttribute('aria-label', 'Re-crop cover');
-      if (item.art) coverBtn.style.setProperty('--sp-cover', 'url("' + item.art + '")');
-      coverBtn.appendChild(icon('i-moon-music'));
-      coverBtn.addEventListener('click', () => openCrop(item));
-      card.appendChild(coverBtn);
-
-      // Name field
-      const nameInput = el('input');
-      nameInput.type  = 'text';
-      nameInput.className = 'dl-name-input';
-      nameInput.value = item.name;
-      nameInput.setAttribute('aria-label', 'Song name');
-      nameInput.setAttribute('data-keep', 'pl-name-' + i);
-      nameInput.addEventListener('input', () => { item.name = cleanSongName(nameInput.value); });
-      card.appendChild(nameInput);
-
+      card.appendChild(right);
       list.appendChild(card);
     });
     box.appendChild(list);
