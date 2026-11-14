@@ -3999,10 +3999,16 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-pl-row-done .dl-pl-row-status{color:var(--accent)}
 .dl-pl-row-failed .dl-pl-row-status{color:#e05}
 .dl-pl-edit-list{display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;margin:10px 0}
-.dl-pl-edit-card{display:flex;align-items:center;gap:10px}
+.dl-pl-edit-card{display:flex;align-items:center;gap:10px;transition:opacity .2s}
+.dl-pl-card-skip{opacity:.38}
 .dl-pl-edit-cover{width:48px;height:48px;flex-shrink:0;border-radius:6px;border:none;cursor:pointer;background:var(--panel-2);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center}
 .dl-pl-edit-cover svg{width:24px;height:24px;opacity:.4}
 .dl-pl-edit-card .dl-name-input{flex:1}
+.dl-pl-chk-wrap{display:flex;align-items:center;flex-shrink:0;cursor:pointer}
+.dl-pl-chk{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.dl-pl-sel-row{display:flex;align-items:center;gap:10px;margin:6px 0 2px}
+.dl-pl-sel-btn{padding:4px 10px;font-size:12px}
+.dl-pl-sel-count{font-size:12px;color:var(--faint)}
 .dl-pl-warn{color:#e05}
 </style>
 <script src="version.js"></script>

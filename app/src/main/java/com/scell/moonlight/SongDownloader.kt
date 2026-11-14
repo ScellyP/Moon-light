@@ -1,8 +1,10 @@
 package com.scell.moonlight
 
+import android.app.NotificationManager
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
+import androidx.core.app.NotificationCompat
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -90,6 +92,9 @@ class SongDownloader(
         /** The old music folder (one sub-folder per playlist). Still read, never written to by downloads. */
         const val AUDIO_DIR = "/storage/emulated/0/Novel/Audio"
 
+        // Per-song notification IDs start at 3000 and are incremented per job.
+        private val songNotifCounter = java.util.concurrent.atomic.AtomicInteger(3000)
+
         /** Is [path] a file inside the staging folder? (Nothing else may be moved or renamed.) */
         fun isStagedPath(path: String?): Boolean {
             if (path.isNullOrBlank()) return false
@@ -110,6 +115,8 @@ class SongDownloader(
     private val downloading = HashSet<String>()                     // the stage jobs among them
     private val cancelled = Collections.synchronizedSet(HashSet<String>())
     private var engineReady = false
+    // Tracks whether DownloadForegroundService is running so we start/stop it exactly once.
+    private var fgServiceRunning = false
     // Per staged song: the part of its thumbnail you chose for the cover (x, y, size: fractions, see CoverCrop), and
     // the web page it was downloaded from (written into the song as its source link when it is saved).
     private val crops = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
@@ -235,13 +242,26 @@ class SongDownloader(
 
     private fun begin(jobId: String, isDownload: Boolean): Boolean = synchronized(lock) {
         val fresh = running.add(jobId)
-        if (fresh && isDownload) downloading.add(jobId)
+        if (fresh && isDownload) {
+            downloading.add(jobId)
+            if (!fgServiceRunning) {
+                fgServiceRunning = true
+                main.post { DownloadForegroundService.start(activity) }
+            }
+        }
         fresh
     }
 
     // ---- worker threads from here on ---------------------------------------------------
 
-    /** Unpacks and starts the bundled tools. Returns null when ready, else a message for the user. */
+    /**
+     * Unpacks and starts the bundled tools. Returns null when ready, else a message for the user.
+     *
+     * yt-dlp and Python are loaded once per app session: after [engineReady] is true the init call
+     * is skipped entirely, so each song in a playlist batch does NOT pay the cold-start cost again.
+     * This is the main reason playlist downloads were slow — every song was re-initialising the
+     * Python interpreter from scratch.
+     */
     @Synchronized
     private fun ensureEngine(): String? {
         if (engineReady) return null
@@ -517,12 +537,63 @@ class SongDownloader(
     }
 
     private fun finish(jobId: String, status: String, message: String) {
-        val mine = synchronized(lock) {
+        val (mine, noMoreDownloads) = synchronized(lock) {
             downloading.remove(jobId)
-            running.remove(jobId)
+            val mine = running.remove(jobId)
+            Pair(mine, fgServiceRunning && downloading.isEmpty())
         }
         cancelled.remove(jobId)
         if (!mine) return                    // a late or repeated answer changes nothing
         onStatus(jobId, status, message)
+
+        // Post a per-song result notification so the user sees outcome even when backgrounded.
+        postSongResultNotification(jobId, status, message)
+
+        // Stop the foreground service when the last download finishes.
+        if (noMoreDownloads) {
+            synchronized(lock) { fgServiceRunning = false }
+            main.post { DownloadForegroundService.stop(activity) }
+        }
+    }
+
+    /** Posts a brief notification for a completed or failed single-song download. */
+    private fun postSongResultNotification(jobId: String, status: String, message: String) {
+        // Only for stage (download) jobs, not place jobs.
+        if (!jobId.startsWith("dl-") && !jobId.startsWith("pl-dl-")) return
+        val nm = activity.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+                as? NotificationManager ?: return
+        val title = when (status) {
+            "done"   -> "Song downloaded"
+            "failed" -> "Download failed"
+            else     -> return   // "running" — no notification
+        }
+        val songName = if (status == "done") {
+            try { java.io.File(message).nameWithoutExtension } catch (e: Exception) { "" }
+        } else ""
+        val body = when {
+            status == "failed"      -> message.take(120)
+            songName.isNotBlank()   -> "\u201c$songName\u201d saved"
+            else                    -> "Tap to open Moonlight"
+        }
+        val tapIntent = android.content.Intent(activity, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val tap = android.app.PendingIntent.getActivity(
+            activity, 0, tapIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(activity, DownloadForegroundService.CHANNEL_SONG)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setContentIntent(tap)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        val notifId = songNotifCounter.getAndIncrement()
+        nm.notify(notifId, notif)
+        // Auto-cancel after 8 seconds so the shade doesn't pile up with download results.
+        main.postDelayed({ nm.cancel(notifId) }, 8_000L)
     }
 }

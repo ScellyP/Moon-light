@@ -939,22 +939,46 @@
     b.fetchPlaylistInfo(jobId, url);
   }
 
+  // Max parallel yt-dlp processes for a playlist batch. More than 3 gives no speed benefit
+  // (yt-dlp is CPU + network bound) and causes the library to re-init Python per extra fork.
+  const PL_CONCURRENCY = 3;
+
   function startPlaylistDownloads() {
-    pl.step  = 'pl-downloading';
+    pl.step       = 'pl-downloading';
+    pl.queueIndex = 0;      // next item in pl.items to kick off
     pl.items = pl.tracks.map((url) => ({
       url, jobId: '', name: '', path: '', fullArt: '', art: '', crop: null,
       status: 'queued', error: '',
     }));
     render();
-    pl.items.forEach((item, i) => {
-      const jobId = 'pl-dl-' + i + '-' + Date.now().toString(36);
-      item.jobId = jobId;
-      const b = bridge();
-      if (!b || typeof b.stageSong !== 'function') { item.status = 'failed'; item.error = 'Not connected.'; return; }
-      item.status = 'dl';
-      b.stageSong(jobId, item.url);
-    });
+    // Start up to PL_CONCURRENCY jobs immediately; onPlSongStatus drains the queue.
+    const slots = Math.min(PL_CONCURRENCY, pl.items.length);
+    for (let s = 0; s < slots; s++) plStartNext();
     plNotify();
+  }
+
+  /** Kick off the next queued item (if any). */
+  function plStartNext() {
+    if (!pl || pl.step !== 'pl-downloading') return;
+    const idx = pl.queueIndex;
+    if (idx >= pl.items.length) return;
+    pl.queueIndex++;
+    const item = pl.items[idx];
+    const jobId = 'pl-dl-' + idx + '-' + Date.now().toString(36);
+    item.jobId = jobId;
+    const b = bridge();
+    if (!b || typeof b.stageSong !== 'function') {
+      item.status = 'failed'; item.error = 'Not connected.'; pl.failed++;
+      plCheckDone(); return;
+    }
+    item.status = 'dl';
+    b.stageSong(jobId, item.url);
+  }
+
+  function plCheckDone() {
+    if (!pl || pl.step !== 'pl-downloading') return;
+    plNotify(); render();
+    if (pl.done + pl.failed >= pl.items.length) { pl.step = 'pl-edit'; plNotify(); render(); }
   }
 
   function onPlSongStatus(jobId, status, message) {
@@ -974,9 +998,9 @@
     } else if (status === 'failed') {
       item.status = 'failed'; item.error = message; pl.failed++;
     }
-    plNotify();
-    render();
-    if (pl.done + pl.failed >= pl.items.length) { pl.step = 'pl-edit'; plNotify(); render(); }
+    // A slot freed — start the next queued item (concurrency pump).
+    plStartNext();
+    plCheckDone();
     return true;
   }
 
@@ -998,7 +1022,11 @@
   }
 
   function savePlSongs() {
-    const toPlace = pl.items.filter((it) => it.status === 'done');
+    // Items the user deselected (keep=false): discard their staged files via placeSong with empty
+    // folder AND empty name, which the bridge treats as "just delete the staged file".
+    // For simplicity we cancel them on the JS side — the staged files stay in .staging (they will
+    // be cleaned up on the next app start, same as an interrupted single-song download).
+    const toPlace = pl.items.filter((it) => it.status === 'done' && it.keep !== false);
     if (!toPlace.length) { pl = null; render(); return; }
     pl.saving    = toPlace;
     pl.saveIndex = 0;
@@ -1074,15 +1102,56 @@
   }
 
   function buildPlEdit() {
+    const successItems = pl.items.filter((it) => it.status === 'done');
+    // Initialise the keep flag once (default: all selected).
+    successItems.forEach((item) => { if (item.keep === undefined) item.keep = true; });
+
     const box = el('div', 'dl-step dl-pl-step');
     box.appendChild(el('h2', 'dl-title', '\u201c' + pl.title + '\u201d \u2014 ' + pl.done + ' song' + (pl.done === 1 ? '' : 's')));
     if (pl.failed) box.appendChild(el('p', 'dl-hint dl-pl-warn', pl.failed + ' failed to download.'));
-    box.appendChild(el('p', 'dl-hint', 'Tap a cover to re-crop. Edit names, then save.'));
+    box.appendChild(el('p', 'dl-hint', 'Uncheck songs you don\u2019t want. Tap a cover to re-crop. Edit names, then save.'));
+
+    // Select-all / deselect-all row
+    const selRow = el('div', 'dl-pl-sel-row');
+    const allChecked = () => successItems.every((it) => it.keep);
+    const selBtn = el('button', 'dl-secondary dl-pl-sel-btn');
+    selBtn.type = 'button';
+    const updateSelBtn = () => { selBtn.textContent = allChecked() ? 'Deselect all' : 'Select all'; };
+    updateSelBtn();
+    selBtn.addEventListener('click', () => {
+      const next = !allChecked();
+      successItems.forEach((it) => { it.keep = next; });
+      render();
+    });
+    selRow.appendChild(selBtn);
+    const countSpan = el('span', 'dl-pl-sel-count',
+      successItems.filter((it) => it.keep).length + ' of ' + successItems.length + ' selected');
+    selRow.appendChild(countSpan);
+    box.appendChild(selRow);
+
     const list = el('div', 'dl-pl-edit-list');
     pl.items.forEach((item, i) => {
       if (item.status !== 'done') return;
-      const card = el('div', 'dl-pl-edit-card');
-      // Cover — tappable, re-uses the existing openCrop(item) which needs item.fullArt + item.path
+
+      const card = el('div', 'dl-pl-edit-card' + (item.keep ? '' : ' dl-pl-card-skip'));
+
+      // Checkbox
+      const chkWrap = el('label', 'dl-pl-chk-wrap');
+      chkWrap.setAttribute('aria-label', item.keep ? 'Keep this song' : 'Skip this song');
+      const chk = el('input');
+      chk.type = 'checkbox';
+      chk.className = 'dl-pl-chk';
+      chk.checked = !!item.keep;
+      chk.addEventListener('change', () => {
+        item.keep = chk.checked;
+        card.classList.toggle('dl-pl-card-skip', !item.keep);
+        updateSelBtn();
+        countSpan.textContent = successItems.filter((it) => it.keep).length + ' of ' + successItems.length + ' selected';
+      });
+      chkWrap.appendChild(chk);
+      card.appendChild(chkWrap);
+
+      // Cover — tappable, re-uses the existing openCrop(item)
       const coverBtn = el('button', 'dl-pl-edit-cover sp-cover');
       coverBtn.type = 'button';
       coverBtn.setAttribute('aria-label', 'Re-crop cover');
@@ -1090,6 +1159,7 @@
       coverBtn.appendChild(icon('i-moon-music'));
       coverBtn.addEventListener('click', () => openCrop(item));
       card.appendChild(coverBtn);
+
       // Name field
       const nameInput = el('input');
       nameInput.type  = 'text';
@@ -1099,10 +1169,17 @@
       nameInput.setAttribute('data-keep', 'pl-name-' + i);
       nameInput.addEventListener('input', () => { item.name = cleanSongName(nameInput.value); });
       card.appendChild(nameInput);
+
       list.appendChild(card);
     });
     box.appendChild(list);
-    box.appendChild(button('Save all to \u201c' + pl.title + '\u201d', 'dl-primary', savePlSongs));
+
+    const keptCount = successItems.filter((it) => it.keep).length;
+    const saveBtn = button(
+      'Save ' + keptCount + ' song' + (keptCount === 1 ? '' : 's') + ' to \u201c' + pl.title + '\u201d',
+      'dl-primary', savePlSongs
+    );
+    box.appendChild(saveBtn);
     return box;
   }
 
