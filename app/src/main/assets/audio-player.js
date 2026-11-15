@@ -2344,34 +2344,61 @@ window.NovelAudio = (function () {
         else AudioUI.render();
       });
 
-      // Shuffle: every tap starts a NEW shuffle of the songs now shown and plays it from its first song. Holding
-      // the button (about half a second) turns shuffle off. Both shuffle buttons (the player's and the Songs tab's)
-      // behave the same; the Songs tab's one forwards its click to this one, so the hold is watched on both.
-      const HOLD_MS = 550;
-      const hold = { timer: 0, fired: false };
-      const beginHold = () => {
-        hold.fired = false;
-        clearTimeout(hold.timer);
-        hold.timer = setTimeout(() => {
-          hold.fired = true;
+      // ── Media player shuffle button (audio-shuffle-btn) ──────────────────
+      // TAP when shuffle is ON  → turn shuffle OFF and resume in playlist order from the current song.
+      // TAP when shuffle is OFF → start a brand-new shuffle of the current selection.
+      // (The old hold-to-turn-off is replaced by the simpler tap-to-toggle.)
+      els.shuffleBtn.addEventListener('click', () => {
+        if (state.shuffle) {
           PlaybackQueue.setShuffle(false);
           Prefs.save();
+          AudioUI.render();
           if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Shuffle off');
-        }, HOLD_MS);
-      };
-      const endHold = () => clearTimeout(hold.timer);
-      [els.shuffleBtn, document.getElementById('sp-album-shuffle')].forEach((b) => {
-        if (!b || !b.addEventListener) return;
-        b.addEventListener('pointerdown', beginHold);
-        ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => b.addEventListener(t, endHold));
-      });
-      els.shuffleBtn.addEventListener('click', () => {
-        if (hold.fired) { hold.fired = false; return; }          // that was a hold: shuffle was just turned off
-        if (PlaybackQueue.startNewShuffle()) {
-          Prefs.save();
-          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('New shuffle');
+        } else {
+          if (PlaybackQueue.startNewShuffle()) {
+            Prefs.save();
+            if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('New shuffle');
+          }
         }
       });
+
+      // ── Playlist-view shuffle button (sp-album-shuffle) ──────────────────
+      // Tapping this picks a random song from the current playlist that has not been
+      // played recently (uses the shuffle-round played list to exclude recent plays),
+      // then plays it immediately. If every song has been played recently, the whole
+      // recently-played list is cleared and a fresh random pick is made.
+      const spAlbumShuffle = document.getElementById('sp-album-shuffle');
+      if (spAlbumShuffle && spAlbumShuffle.addEventListener) {
+        spAlbumShuffle.addEventListener('click', () => {
+          const ids = MediaLibrary.currentSelectionIds();
+          if (!ids.length) return;
+
+          // Build the set of recently-played hashes from the cycle store.
+          const cyc = PlaybackQueue._cycle();
+          const playedSet = new Set(cyc.played || []);
+
+          // Filter out recently-played songs; if all have been played, start fresh.
+          let candidates = ids.filter(id => !playedSet.has(PlaybackQueue._hash(id)));
+          if (!candidates.length) {
+            // All songs played — clear the cycle so the round restarts.
+            cyc.played = [];
+            PlaybackQueue._saveCycle();
+            candidates = ids.slice();
+          }
+
+          // Also exclude the song currently playing so we always move to something different.
+          const current = state.currentTrackId;
+          const others = candidates.filter(id => id !== current);
+          const pool = others.length ? others : candidates;
+
+          // Pick at random and play.
+          const pick = pool[Math.floor(Math.random() * pool.length)];
+          if (pick) {
+            AudioEngine.play(pick);
+            if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Random pick');
+          }
+        });
+      }
 
       els.repeatBtn.addEventListener('click', () => {
         PlaybackQueue.cycleRepeat();

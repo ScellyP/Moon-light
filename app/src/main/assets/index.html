@@ -3995,58 +3995,63 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="splash.js"></script>
 <style>
 /* ---- Playlist download flow -------------------------------------------- */
-/* Shared header + bar */
-.dl-pl-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin-bottom:6px}
-.dl-pl-hdr-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:700 18px/1.25 var(--font-ui);color:var(--text)}
-.dl-pl-prog{flex-shrink:0;font:600 12px/1 var(--font-ui);color:var(--sp-sub);letter-spacing:.2px}
-.dl-pl-bar-wrap{width:100%;height:3px;background:color-mix(in srgb,var(--text) 12%,transparent);border-radius:2px;margin:0 0 12px;overflow:hidden}
-.dl-pl-bar-fill{height:100%;background:var(--sp-accent);border-radius:2px;transition:width .4s ease}
-/* Confirm screen */
-.dl-pl-cf-top{display:flex;align-items:center;gap:14px;width:100%;margin-bottom:12px}
-.dl-pl-cf-icon{flex-shrink:0;width:52px;height:52px}
-.dl-pl-cf-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.dl-pl-cf-title{font:700 17px/1.25 var(--font-ui);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dl-pl-cf-sub{font:400 13px/1 var(--font-ui);color:var(--sp-sub)}
-.dl-pl-cf-hint{margin:0 0 20px;font:400 13px/1.4 var(--font-ui);color:var(--sp-sub);width:100%}
-.dl-pl-cf-btn{width:100%;margin-bottom:10px}
-/* Downloading rows */
-.dl-pl-sp-list{display:flex;flex-direction:column;width:100%;max-height:380px;overflow-y:auto}
-.dl-pl-sp-row{display:flex;align-items:center;gap:12px;padding:8px 4px;border-radius:6px;transition:background .12s}
-.dl-pl-sp-row:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
-.dl-pl-sp-num{flex-shrink:0;width:18px;text-align:right;font:400 12px/1 var(--font-ui);color:var(--sp-sub)}
-.dl-pl-sp-cover{width:40px;height:40px;flex-shrink:0;border-radius:5px}
-.dl-pl-sp-cover .ico{width:18px;height:18px;opacity:.35}
-.dl-pl-sp-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.dl-pl-sp-name{font:500 13.5px/1.3 var(--font-ui);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dl-pl-sp-err{font:400 11px/1.3 var(--font-ui);color:#e05;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dl-pl-sp-skel{display:block;height:11px;width:55%;border-radius:6px;background:linear-gradient(90deg,color-mix(in srgb,var(--text) 10%,transparent) 25%,color-mix(in srgb,var(--text) 20%,transparent) 50%,color-mix(in srgb,var(--text) 10%,transparent) 75%);background-size:200% 100%;animation:dl-shimmer 1.5s ease-in-out infinite}
-.dl-pl-sp-skel-q{width:35%;animation-delay:.4s}
-@keyframes dl-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.dl-pl-sp-pill{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center}
-.dl-pl-sp-pill-done{background:color-mix(in srgb,var(--sp-accent) 18%,transparent);color:var(--sp-accent)}
-.dl-pl-sp-pill-fail{background:color-mix(in srgb,#e05 12%,transparent);color:#e05}
-.dl-pl-sp-spin{display:block;width:16px;height:16px;border:2px solid color-mix(in srgb,var(--text) 15%,transparent);border-top-color:var(--sp-accent);border-radius:50%;animation:dlSpin .7s linear infinite}
-.dl-pl-sp-queued .dl-pl-sp-num,.dl-pl-sp-queued .dl-pl-sp-cover,.dl-pl-sp-queued .dl-pl-sp-name{opacity:.3}
-/* Edit/review screen */
-.dl-pl-edit-hint{font:400 12px/1.4 var(--font-ui);color:var(--sp-sub);margin:2px 0 10px;width:100%}
-.dl-pl-sel-row{width:100%;margin-bottom:10px}
-.dl-pl-sel-btn{padding:0 18px;height:34px;border-radius:999px;border:1px solid color-mix(in srgb,var(--text) 30%,transparent);background:none;color:var(--text);font:600 12px/1 var(--font-ui);cursor:pointer;transition:border-color .15s,transform .12s}
-.dl-pl-sel-btn:active{transform:scale(.96)}
-@media(hover:hover){.dl-pl-sel-btn:hover{border-color:var(--text)}}
-.dl-pl-edit-list{display:flex;flex-direction:column;width:100%;gap:4px;max-height:420px;overflow-y:auto;margin-bottom:16px}
-.dl-pl-edit-card{display:flex;align-items:center;gap:12px;padding:6px 4px;border-radius:8px;transition:opacity .2s,background .12s}
-.dl-pl-edit-card:hover{background:color-mix(in srgb,var(--text) 5%,transparent)}
-.dl-pl-card-skip{opacity:.32}
-.dl-pl-edit-cover{position:relative;width:44px;height:44px;flex-shrink:0;border-radius:6px;border:none;padding:0;cursor:pointer;overflow:hidden;background:color-mix(in srgb,var(--text) 8%,transparent)}
-.dl-pl-edit-cover .ico{width:20px;height:20px;opacity:.35;position:absolute;inset:0;margin:auto}
-.dl-pl-cover-crop-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);opacity:0;transition:opacity .15s;border-radius:6px;color:#fff}
-.dl-pl-edit-cover:hover .dl-pl-cover-crop-hint,.dl-pl-edit-cover:focus-visible .dl-pl-cover-crop-hint{opacity:1}
-.dl-pl-edit-right{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
-.dl-pl-edit-name{flex:1;min-width:0;height:36px;padding:0 12px;border:0;border-radius:6px;background:color-mix(in srgb,var(--text) 9%,transparent);color:var(--text);font:500 13px/1 var(--font-ui);transition:outline .1s}
-.dl-pl-edit-name:focus{outline:2px solid var(--sp-accent);outline-offset:0}
-.dl-pl-edit-name::placeholder{color:var(--sp-sub);font-weight:400}
-.dl-pl-chk-wrap{flex-shrink:0;display:flex;align-items:center;cursor:pointer;padding:4px}
-.dl-pl-chk{width:18px;height:18px;accent-color:var(--sp-accent);cursor:pointer;flex-shrink:0}
+/* Hero card — mirrors the reference playlist-hero */
+.dl-pl-hero{display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center;padding:16px;border-radius:12px;background:color-mix(in srgb,var(--text) 5%,transparent);margin-bottom:14px;width:100%}
+.dl-pl-hero-sm{padding:12px;gap:12px}
+.dl-pl-hero-sm .dl-pl-hero-cover{width:48px;height:48px}
+.dl-pl-hero-sm .dl-pl-hero-title{font-size:16px}
+.dl-pl-hero-cover{width:56px;height:56px;border-radius:8px;background:color-mix(in srgb,var(--sp-accent) 25%,transparent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.dl-pl-hero-cover .ico{width:26px;height:26px;color:var(--sp-accent);opacity:.8}
+.dl-pl-kicker{font:800 10px/1 var(--font-ui);letter-spacing:1.2px;text-transform:uppercase;color:var(--sp-sub);margin-bottom:4px}
+.dl-pl-hero-title{font:700 20px/1.2 var(--font-ui);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 0 3px}
+.dl-pl-hero-info{min-width:0}
+.dl-pl-hero-meta{font:400 12px/1 var(--font-ui);color:var(--sp-sub)}
+/* Hero action buttons */
+.dl-pl-hero-actions{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:4px}
+.dl-pl-cf-hint{font:400 13px/1.5 var(--font-ui);color:var(--sp-sub);margin:0 0 16px;width:100%}
+.dl-pl-cf-btn{width:100%}
+/* Progress card — reference .progress-card */
+.dl-pl-progress-card{padding:16px;background:color-mix(in srgb,var(--text) 5%,transparent);border:1px solid color-mix(in srgb,var(--text) 10%,transparent);border-radius:12px;margin-bottom:14px;width:100%}
+.dl-pl-progress-head{display:flex;justify-content:space-between;gap:12px;font:750 13px/1 var(--font-ui);color:var(--text);margin-bottom:6px}
+.dl-pl-progress-pct{color:var(--sp-sub)}
+.dl-pl-bar-wrap{width:100%;height:5px;background:color-mix(in srgb,var(--text) 12%,transparent);border-radius:99px;overflow:hidden;margin:10px 0 14px}
+.dl-pl-bar-fill{height:100%;background:var(--sp-accent);border-radius:99px;transition:width .25s ease}
+/* Per-song queue items inside the card — reference .queue-item */
+.dl-pl-queue{display:flex;flex-direction:column;gap:7px;max-height:240px;overflow-y:auto}
+.dl-pl-queue-item{display:flex;align-items:center;justify-content:space-between;gap:10px;font:400 12px/1 var(--font-ui);color:var(--sp-sub)}
+.dl-pl-queue-item b{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.dl-pl-queue-state{white-space:nowrap;flex-shrink:0}
+.dl-qs-done{color:var(--sp-accent)}
+.dl-qs-fail{color:#e05}
+.dl-qs-q{opacity:.45}
+/* Toolbar — reference .toolbar */
+.dl-pl-edit-hint{font:400 12px/1.4 var(--font-ui);color:var(--sp-sub);margin:0 0 10px;width:100%}
+.dl-pl-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;width:100%}
+.dl-pl-tb-actions{display:flex;gap:6px;flex-wrap:wrap}
+.dl-pl-tb-btn{background:transparent;color:var(--sp-sub);padding:7px 10px;border-radius:7px;font:600 12px/1 var(--font-ui);transition:color .15s,background .15s}
+.dl-pl-tb-btn:hover{color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent)}
+.dl-pl-tb-count{font:400 12px/1 var(--font-ui);color:var(--sp-sub);flex-shrink:0}
+/* Song list — reference .song grid */
+.dl-pl-edit-list{display:flex;flex-direction:column;gap:3px;width:100%;margin-bottom:18px}
+.dl-pl-edit-card{display:grid;grid-template-columns:24px 46px minmax(0,1fr) 30px;align-items:center;gap:11px;min-height:64px;padding:8px 6px;border-radius:8px;transition:background .15s,opacity .2s}
+.dl-pl-edit-card:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
+.dl-pl-card-skip{opacity:.3}
+.dl-pl-song-num{color:var(--sp-sub);text-align:center;font:400 12px/1 var(--font-ui);font-variant-numeric:tabular-nums}
+/* Cover — tappable, shows crop hint on hover */
+.dl-pl-edit-cover{position:relative;width:46px;height:46px;border-radius:5px;border:0;padding:0;cursor:pointer;overflow:hidden;background:color-mix(in srgb,var(--text) 10%,transparent);background-size:cover;background-position:center;display:grid;place-items:center}
+.dl-pl-edit-cover .ico{width:20px;height:20px;opacity:.35}
+.dl-pl-cover-crop-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);opacity:0;transition:opacity .15s;color:#fff}
+.dl-pl-edit-cover:hover .dl-pl-cover-crop-hint{opacity:1}
+/* Name input — reference .song-name */
+.dl-pl-song-main{min-width:0}
+.dl-pl-song-name{width:100%;border:1px solid transparent;background:transparent;color:var(--text);border-radius:5px;padding:5px 7px;margin-left:-7px;font:650 13.5px/1 var(--font-ui);transition:border-color .15s,background .15s;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.dl-pl-song-name:focus{border-color:color-mix(in srgb,var(--text) 30%,transparent);background:color-mix(in srgb,var(--text) 5%,transparent);outline:none;text-overflow:clip;white-space:normal}
+.dl-pl-song-artist{font:400 11px/1 var(--font-ui);color:var(--sp-sub);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Checkbox */
+.dl-pl-chk-wrap{display:flex;align-items:center;justify-content:center;cursor:pointer;padding:4px}
+.dl-pl-chk{width:19px;height:19px;accent-color:var(--sp-accent);cursor:pointer;flex-shrink:0}
+/* Save button */
+.dl-pl-save-btn{width:100%}
 .dl-pl-warn{color:#e05}
 </style>
 <script src="version.js"></script>

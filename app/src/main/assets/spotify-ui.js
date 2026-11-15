@@ -381,7 +381,7 @@
 
     // Forwarded playback buttons
     if (target.closest('#sp-album-play')) return playPlaylist();
-    if (target.closest('#sp-album-shuffle')) return clickIfPresent(el.shuffle);
+    // sp-album-shuffle has its own click handler (see audio-player.js) — no forwarding needed.
 
     // The mini player's play button must be checked BEFORE the mini player
     // itself, otherwise tapping play would also open the track view.
