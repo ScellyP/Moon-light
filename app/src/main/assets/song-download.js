@@ -1065,34 +1065,50 @@
     return box;
   }
 
+  /** Shared Spotify-style playlist page hero (cover + title + meta + action bar). */
+  function buildPlHero(opts) {
+    // opts: { title, meta, coverArt, actions: [{label, cls, fn}] }
+    const wrap = el('div', 'dl-sp-page');
+
+    // Full-width cover art square
+    const coverArea = el('div', 'dl-sp-cover-area');
+    const cover = el('div', 'dl-sp-cover');
+    if (opts.coverArt) {
+      cover.style.backgroundImage = 'url("' + opts.coverArt + '")';
+    } else {
+      cover.appendChild(icon('i-moon-music'));
+    }
+    coverArea.appendChild(cover);
+    wrap.appendChild(coverArea);
+
+    // Title + meta below cover
+    const meta = el('div', 'dl-sp-meta');
+    meta.appendChild(el('h2', 'dl-sp-title', opts.title || ''));
+    if (opts.meta) meta.appendChild(el('div', 'dl-sp-subtitle', opts.meta));
+    wrap.appendChild(meta);
+
+    // Action bar (Download all / Cancel etc.)
+    if (opts.actions && opts.actions.length) {
+      const bar = el('div', 'dl-sp-action-bar');
+      opts.actions.forEach((a) => {
+        bar.appendChild(button(a.label, a.cls || 'dl-secondary dl-sp-act-btn', a.fn));
+      });
+      wrap.appendChild(bar);
+    }
+    return wrap;
+  }
+
   function buildPlConfirm() {
-    const box = el('div', 'dl-step dl-wide dl-pl-step');
     const n = pl.tracks.length;
-
-    // Hero card — mirrors the reference playlist-hero layout
-    const hero = el('div', 'dl-pl-hero');
-    // Cover
-    const coverWrap = el('div', 'dl-pl-hero-cover');
-    coverWrap.appendChild(icon('i-moon-music'));
-    hero.appendChild(coverWrap);
-    // Info
-    const info = el('div', 'dl-pl-hero-info');
-    info.appendChild(el('div', 'dl-pl-kicker', 'Playlist'));
-    info.appendChild(el('h2', 'dl-pl-hero-title', pl.title));
-    info.appendChild(el('div', 'dl-pl-hero-meta', n + '\u2009song' + (n === 1 ? '' : 's')));
-    hero.appendChild(info);
-    box.appendChild(hero);
-
-    // Helper text
-    box.appendChild(el('p', 'dl-pl-cf-hint',
-      'Songs download in the background. You can rename and re-crop covers once they\u2019re done.'));
-
-    // Action buttons
-    const acts = el('div', 'dl-pl-hero-actions');
-    acts.appendChild(button('Download all', 'dl-primary dl-pl-cf-btn', startPlaylistDownloads));
-    acts.appendChild(button('Cancel', 'dl-secondary dl-pl-cf-btn', () => { pl = null; render(); }));
-    box.appendChild(acts);
-    return box;
+    const page = buildPlHero({
+      title: pl.title,
+      meta: n + '\u2009song' + (n === 1 ? '' : 's') + '\u2009\u00b7\u2009YouTube playlist',
+      actions: [
+        { label: 'Download all', cls: 'dl-primary dl-sp-act-btn', fn: startPlaylistDownloads },
+        { label: 'Cancel',       cls: 'dl-secondary dl-sp-act-btn', fn: () => { pl = null; render(); } },
+      ],
+    });
+    return page;
   }
 
   function buildPlDownloading() {
@@ -1100,169 +1116,202 @@
     const total = pl.items.length;
     const pct   = total ? Math.round(done / total * 100) : 0;
 
-    const box = el('div', 'dl-step dl-wide dl-pl-step');
-
-    // Hero (same as confirm, smaller variant)
-    const hero = el('div', 'dl-pl-hero dl-pl-hero-sm');
-    const coverWrap = el('div', 'dl-pl-hero-cover');
-    coverWrap.appendChild(icon('i-moon-music'));
-    hero.appendChild(coverWrap);
-    const info = el('div', 'dl-pl-hero-info');
-    info.appendChild(el('h2', 'dl-pl-hero-title', pl.title));
-    info.appendChild(el('div', 'dl-pl-hero-meta', done + '\u2009/\u2009' + total + ' downloaded'));
-    hero.appendChild(info);
-    box.appendChild(hero);
-
-    // Inline progress card (reference: .progress-card)
-    const card = el('div', 'dl-pl-progress-card');
-    const ph = el('div', 'dl-pl-progress-head');
-    ph.appendChild(el('span', '', done === total ? 'All done' : 'Downloading\u2026'));
-    ph.appendChild(el('span', 'dl-pl-progress-pct', pct + '%'));
-    card.appendChild(ph);
-    const bar = el('div', 'dl-pl-bar-wrap');
-    const fill = el('div', 'dl-pl-bar-fill'); fill.style.width = pct + '%';
-    bar.appendChild(fill); card.appendChild(bar);
-
-    // Per-song queue items inside the card
-    const queueEl = el('div', 'dl-pl-queue');
-    pl.items.forEach((item, i) => {
-      const qi = el('div', 'dl-pl-queue-item');
-      const left = el('span', '');
-      left.appendChild(el('b', '', item.name || ('Track\u2009' + (i + 1))));
-      qi.appendChild(left);
-      const st = el('span', 'dl-pl-queue-state');
-      if (item.status === 'done')   { st.textContent = '\u2713\u2009Done'; st.classList.add('dl-qs-done'); }
-      else if (item.status === 'failed') { st.textContent = '\u2717\u2009Failed'; st.classList.add('dl-qs-fail'); }
-      else if (item.status === 'dl')    { st.textContent = '\u2026\u2009Loading'; }
-      else                               { st.textContent = 'Queued'; st.classList.add('dl-qs-q'); }
-      qi.appendChild(st);
-      queueEl.appendChild(qi);
+    const page = buildPlHero({
+      title: pl.title,
+      meta: done + '\u2009/\u2009' + total + ' downloaded',
     });
-    card.appendChild(queueEl);
-    box.appendChild(card);
-    return box;
+
+    // Progress bar beneath the meta
+    const barWrap = el('div', 'dl-sp-bar-wrap');
+    const barFill = el('div', 'dl-sp-bar-fill');
+    barFill.style.width = pct + '%';
+    barWrap.appendChild(barFill);
+    page.appendChild(barWrap);
+
+    // Song rows — Spotify list style
+    const list = el('div', 'dl-sp-song-list');
+    pl.items.forEach((item, i) => {
+      const row = el('div', 'dl-sp-song-row');
+
+      // Cover
+      const thumb = el('div', 'dl-sp-thumb');
+      if (item.art) thumb.style.backgroundImage = 'url("' + item.art + '")';
+      else thumb.appendChild(icon('i-moon-music'));
+      row.appendChild(thumb);
+
+      // Name + status
+      const text = el('div', 'dl-sp-song-text');
+      const nameEl = el('div', 'dl-sp-song-name');
+      if (item.name) {
+        nameEl.textContent = item.name;
+      } else {
+        nameEl.appendChild(el('span', 'dl-sp-skel'));
+      }
+      text.appendChild(nameEl);
+      if (item.status === 'failed' && item.error) {
+        text.appendChild(el('div', 'dl-sp-song-err', item.error.split('\n')[0].slice(0, 55)));
+      }
+      row.appendChild(text);
+
+      // Right status icon — SVG not emoji
+      const statusWrap = el('span', 'dl-sp-status');
+      if (item.status === 'done') {
+        statusWrap.classList.add('dl-sp-st-done');
+        statusWrap.innerHTML = '<svg class="ico dl-sp-st-ico"><use href="#i-check"/></svg>';
+      } else if (item.status === 'failed') {
+        statusWrap.classList.add('dl-sp-st-fail');
+        statusWrap.innerHTML = '<svg class="ico dl-sp-st-ico"><use href="#i-close"/></svg>';
+      } else if (item.status === 'dl') {
+        statusWrap.classList.add('dl-sp-st-loading');
+        statusWrap.appendChild(el('span', 'dl-sp-spin'));
+      } else {
+        statusWrap.classList.add('dl-sp-st-queued');
+        statusWrap.innerHTML = '<svg class="ico dl-sp-st-ico" style="opacity:.3"><use href="#i-hourglass"/></svg>';
+      }
+      row.appendChild(statusWrap);
+      list.appendChild(row);
+    });
+    page.appendChild(list);
+    return page;
   }
 
   function buildPlEdit() {
     const successItems = pl.items.filter((it) => it.status === 'done');
     successItems.forEach((item) => { if (item.keep === undefined) item.keep = true; });
 
-    const box = el('div', 'dl-step dl-wide dl-pl-step');
+    const keptCount = () => successItems.filter((it) => it.keep).length;
 
-    // Hero — same as confirm but with kept-count in meta
-    const hero = el('div', 'dl-pl-hero dl-pl-hero-sm');
-    const coverWrap = el('div', 'dl-pl-hero-cover');
-    coverWrap.appendChild(icon('i-moon-music'));
-    hero.appendChild(coverWrap);
-    const info = el('div', 'dl-pl-hero-info');
-    info.appendChild(el('h2', 'dl-pl-hero-title', pl.title));
-    const metaEl = el('div', 'dl-pl-hero-meta',
-      successItems.length + '\u2009song' + (successItems.length === 1 ? '' : 's') +
-      (pl.failed ? '\u2009\u00b7\u2009' + pl.failed + '\u2009failed' : ''));
-    info.appendChild(metaEl);
-    hero.appendChild(info);
-    box.appendChild(hero);
+    const page = buildPlHero({
+      title: pl.title,
+      meta: successItems.length + '\u2009song' + (successItems.length === 1 ? '' : 's') +
+            (pl.failed ? '\u2009\u00b7\u2009' + pl.failed + '\u2009failed' : ''),
+    });
 
-    // Toolbar — mirrors reference .toolbar
-    const toolbar = el('div', 'dl-pl-toolbar');
-    const tbActions = el('div', 'dl-pl-tb-actions');
+    // Action bar: Select all | Deselect all  +  Save button on the right
+    const bar = el('div', 'dl-sp-action-bar dl-sp-edit-bar');
+    const selAll   = el('button', 'dl-secondary dl-sp-act-btn');
+    selAll.type = 'button'; selAll.textContent = 'Select all';
+    const deselAll = el('button', 'dl-secondary dl-sp-act-btn');
+    deselAll.type = 'button'; deselAll.textContent = 'Deselect all';
 
-    const allChecked = () => successItems.every((it) => it.keep);
-    const countSpan = el('span', 'dl-pl-tb-count',
-      successItems.filter((it) => it.keep).length + '\u2009/\u2009' + successItems.length + ' selected');
+    // Save button — updated label whenever keep changes
+    const saveBtn = el('button', 'dl-primary dl-sp-save-btn');
+    saveBtn.type = 'button';
+    const updateSaveBtn = () => {
+      const k = keptCount();
+      saveBtn.textContent = 'Save\u2002' + k + '\u2009song' + (k === 1 ? '' : 's');
+      saveBtn.disabled = k === 0;
+    };
+    updateSaveBtn();
+    saveBtn.addEventListener('click', savePlSongs);
 
-    const updateCount = () => {
-      countSpan.textContent =
-        successItems.filter((it) => it.keep).length + '\u2009/\u2009' + successItems.length + ' selected';
-      selAll.textContent   = 'Select all';
-      deselAll.textContent = 'Deselect all';
+    const updateAll = () => {
+      list.querySelectorAll('.dl-sp-edit-row').forEach((row, ri) => {
+        const item = successItems[ri];
+        if (!item) return;
+        row.classList.toggle('dl-sp-row-skip', !item.keep);
+        const overlay = row.querySelector('.dl-sp-keep-overlay');
+        if (overlay) overlay.classList.toggle('dl-sp-overlay-off', !item.keep);
+      });
+      updateSaveBtn();
     };
 
-    const selAll = el('button', 'dl-pl-tb-btn');
-    selAll.type = 'button'; selAll.textContent = 'Select all';
     selAll.addEventListener('click', () => {
       successItems.forEach((it) => { it.keep = true; });
-      list.querySelectorAll('.dl-pl-edit-card').forEach((c) => {
-        c.classList.remove('dl-pl-card-skip');
-        const chk = c.querySelector('.dl-pl-chk'); if (chk) chk.checked = true;
-      }); updateCount();
+      updateAll();
     });
-
-    const deselAll = el('button', 'dl-pl-tb-btn');
-    deselAll.type = 'button'; deselAll.textContent = 'Deselect all';
     deselAll.addEventListener('click', () => {
       successItems.forEach((it) => { it.keep = false; });
-      list.querySelectorAll('.dl-pl-edit-card').forEach((c) => {
-        c.classList.add('dl-pl-card-skip');
-        const chk = c.querySelector('.dl-pl-chk'); if (chk) chk.checked = false;
-      }); updateCount();
+      updateAll();
     });
 
-    tbActions.appendChild(selAll); tbActions.appendChild(deselAll);
-    toolbar.appendChild(tbActions); toolbar.appendChild(countSpan);
-    box.appendChild(el('p', 'dl-pl-edit-hint', 'Tap a cover to re-crop. Edit song names. Uncheck to skip.'));
-    box.appendChild(toolbar);
+    bar.appendChild(selAll); bar.appendChild(deselAll); bar.appendChild(saveBtn);
+    page.appendChild(bar);
 
-    // Song list — reference grid: num | art | name+artist | checkbox
-    const list = el('div', 'dl-pl-edit-list');
-    let rowIdx = 0;
-    pl.items.forEach((item, i) => {
-      if (item.status !== 'done') return;
-      rowIdx++;
-      const card = el('div', 'dl-pl-edit-card' + (item.keep !== false ? '' : ' dl-pl-card-skip'));
+    // Song list
+    const list = el('div', 'dl-sp-song-list');
+    successItems.forEach((item, si) => {
+      const row = el('div', 'dl-sp-song-row dl-sp-edit-row' + (item.keep !== false ? '' : ' dl-sp-row-skip'));
 
-      // Track number
-      card.appendChild(el('span', 'dl-pl-song-num', rowIdx + ''));
+      // Cover — tappable = re-crop; has a toggle keep overlay
+      const thumb = el('button', 'dl-sp-thumb dl-sp-thumb-btn');
+      thumb.type = 'button';
+      thumb.setAttribute('aria-label', 'Re-crop cover');
+      if (item.art) thumb.style.backgroundImage = 'url("' + item.art + '")';
+      else thumb.appendChild(icon('i-moon-music'));
+      // Keep/skip overlay — white arrow down = keep, white × = skip
+      const overlay = el('span', 'dl-sp-keep-overlay' + (item.keep !== false ? '' : ' dl-sp-overlay-off'));
+      overlay.innerHTML = '<svg class="ico dl-sp-ov-ico"><use href="#i-download"/></svg>';   // ↓ keep
+      overlay.setAttribute('data-off-icon', '#i-close');
+      thumb.appendChild(overlay);
+      thumb.addEventListener('click', () => {
+        // Single tap on cover → open crop editor
+        openCrop(item);
+      });
+      row.appendChild(thumb);
 
-      // Cover — tappable to re-crop
-      const coverBtn = el('button', 'dl-pl-edit-cover');
-      coverBtn.type = 'button';
-      coverBtn.setAttribute('aria-label', 'Re-crop cover');
-      if (item.art) coverBtn.style.backgroundImage = 'url("' + item.art + '")';
-      const coverIcon = icon('i-moon-music');
-      coverBtn.appendChild(coverIcon);
-      const cropHint = el('span', 'dl-pl-cover-crop-hint');
-      cropHint.innerHTML = '<svg class="ico" style="width:13px;height:13px"><use href="#i-image"/></svg>';
-      coverBtn.appendChild(cropHint);
-      coverBtn.addEventListener('click', () => openCrop(item));
-      card.appendChild(coverBtn);
-
-      // Song name input + artist row (reference: .song-main)
-      const main = el('div', 'dl-pl-song-main');
+      // Name + inline edit (tapping pencil reveals the input)
+      const textWrap = el('div', 'dl-sp-song-text');
+      const nameDisp = el('div', 'dl-sp-song-name', item.name);
       const nameInput = el('input');
       nameInput.type = 'text';
-      nameInput.className = 'dl-pl-song-name';
+      nameInput.className = 'dl-sp-name-input hidden';
       nameInput.value = item.name;
       nameInput.setAttribute('aria-label', 'Song name');
-      nameInput.setAttribute('data-keep', 'pl-name-' + i);
-      nameInput.addEventListener('input', () => { item.name = cleanSongName(nameInput.value); });
-      main.appendChild(nameInput);
-      if (item.artist) main.appendChild(el('div', 'dl-pl-song-artist', item.artist));
-      card.appendChild(main);
-
-      // Checkbox (reference: .select)
-      const chkLabel = el('label', 'dl-pl-chk-wrap');
-      chkLabel.setAttribute('aria-label', 'Keep this song');
-      const chk = el('input');
-      chk.type = 'checkbox'; chk.className = 'dl-pl-chk'; chk.checked = item.keep !== false;
-      chk.addEventListener('change', () => {
-        item.keep = chk.checked;
-        card.classList.toggle('dl-pl-card-skip', !item.keep);
-        updateCount();
+      nameInput.addEventListener('input', () => {
+        item.name = cleanSongName(nameInput.value);
+        nameDisp.textContent = item.name;
       });
-      chkLabel.appendChild(chk);
-      card.appendChild(chkLabel);
-      list.appendChild(card);
-    });
-    box.appendChild(list);
+      nameInput.addEventListener('blur', () => {
+        nameInput.classList.add('hidden');
+        nameDisp.classList.remove('hidden');
+      });
+      textWrap.appendChild(nameDisp);
+      textWrap.appendChild(nameInput);
+      row.appendChild(textWrap);
 
-    const keptCount = successItems.filter((it) => it.keep).length;
-    const saveBtn = button(
-      '\u2193\u2002Save ' + keptCount + ' song' + (keptCount === 1 ? '' : 's'),
-      'dl-primary dl-pl-save-btn', savePlSongs
-    );
-    box.appendChild(saveBtn);
-    return box;
+      // Right side: pencil (edit name) + keep/skip toggle
+      const actions = el('div', 'dl-sp-row-actions');
+
+      // Pencil — tap to edit name inline
+      const pencilBtn = el('button', 'dl-sp-icon-action');
+      pencilBtn.type = 'button';
+      pencilBtn.setAttribute('aria-label', 'Edit song name');
+      pencilBtn.innerHTML = '<svg class="ico dl-sp-act-ico"><use href="#i-pencil"/></svg>';
+      pencilBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        nameDisp.classList.add('hidden');
+        nameInput.classList.remove('hidden');
+        nameInput.focus();
+        nameInput.select();
+      });
+      actions.appendChild(pencilBtn);
+
+      // Keep/skip toggle — white ↓ when kept, white × when skipped
+      const toggleBtn = el('button', 'dl-sp-icon-action dl-sp-toggle-btn');
+      toggleBtn.type = 'button';
+      const updateToggle = () => {
+        toggleBtn.setAttribute('aria-label', item.keep !== false ? 'Remove from save' : 'Add to save');
+        toggleBtn.innerHTML = item.keep !== false
+          ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
+          : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
+        overlay.className = 'dl-sp-keep-overlay' + (item.keep !== false ? '' : ' dl-sp-overlay-off');
+      };
+      updateToggle();
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        item.keep = !(item.keep !== false);
+        row.classList.toggle('dl-sp-row-skip', !item.keep);
+        updateToggle();
+        updateSaveBtn();
+      });
+      actions.appendChild(toggleBtn);
+
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+    page.appendChild(list);
+    return page;
   }
 
   function buildPlSaving() {
