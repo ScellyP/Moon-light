@@ -794,19 +794,21 @@
     if (!found.length) return;
     const exact = found.find((f) => f.exact);
     if (exact) {
-      const where = exact.source === 'log'
-        ? 'was downloaded before' + (exact.playlist ? ' into ' + exact.playlist : '') + ' (the file is gone)'
-        : exact.playlist ? 'is already in ' + exact.playlist : 'is already on your phone';
+      // File was downloaded before but no longer on device — not a duplicate, no warning.
+      if (exact.source === 'log') return;
+      const where = exact.playlist ? 'is already in ' + exact.playlist : 'is already on your phone';
       host.appendChild(el('p', 'dl-warn', '“' + (exact.title || name) + '” ' + where + '. Saving adds another copy.'));
     } else {
       host.appendChild(el('p', 'dl-similar-title', 'Similar songs already here'));
     }
     const list = el('div', 'dl-similar-list');
     found.forEach((f) => {
+      // Skip entries whose file no longer exists — they're not really duplicates.
+      if (f.source === 'log') return;
       const r = el('div', 'dl-similar-row');
       const text = el('span', 'dl-similar-text');
       text.appendChild(el('span', 'dl-similar-name', f.title));
-      const sub = [f.artist, f.playlist, f.source === 'log' ? 'file gone' : ''].filter(Boolean).join(' • ');
+      const sub = [f.artist, f.playlist].filter(Boolean).join(' \u2022 ');
       if (sub) text.appendChild(el('span', 'dl-similar-sub', sub));
       r.appendChild(text);
       r.appendChild(el('span', 'dl-badge' + (f.exact ? ' same' : ''), f.exact ? 'Same song' : 'Similar'));
