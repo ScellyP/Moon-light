@@ -2414,8 +2414,29 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #audio-panel[data-view="search"] #sp-view-search,
 #audio-panel[data-view="album"] #sp-view-album,
 #audio-panel[data-view="download"] #sp-view-download,
-#audio-panel[data-view="track"] #sp-view-track { display: flex; animation: spIn .22s var(--ease) both; }
-@keyframes spIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#audio-panel[data-view="track"] #sp-view-track { display: flex; animation: spIn .26s var(--ease) both; }
+
+/* Default: subtle fade + rise (no swipe direction) */
+@keyframes spIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Slide right: new tab is to the RIGHT of the old one → enter from right edge */
+#audio-panel[data-slide="right"][data-view="library"] #sp-view-library,
+#audio-panel[data-slide="right"][data-view="search"] #sp-view-search,
+#audio-panel[data-slide="right"][data-view="album"] #sp-view-album,
+#audio-panel[data-slide="right"][data-view="download"] #sp-view-download,
+#audio-panel[data-slide="right"][data-view="track"] #sp-view-track { animation: spSlideInRight .28s var(--ease) both; }
+@keyframes spSlideInRight { from { opacity: 0; transform: translateX(48px); } to { opacity: 1; transform: none; } }
+
+/* Slide left: new tab is to the LEFT of the old one → enter from left edge */
+#audio-panel[data-slide="left"][data-view="library"] #sp-view-library,
+#audio-panel[data-slide="left"][data-view="search"] #sp-view-search,
+#audio-panel[data-slide="left"][data-view="album"] #sp-view-album,
+#audio-panel[data-slide="left"][data-view="download"] #sp-view-download,
+#audio-panel[data-slide="left"][data-view="track"] #sp-view-track { animation: spSlideInLeft .28s var(--ease) both; }
+@keyframes spSlideInLeft { from { opacity: 0; transform: translateX(-48px); } to { opacity: 1; transform: none; } }
+
+/* Clip overflow during slide so the incoming view doesn't peek outside the panel */
+#audio-panel[data-slide] #sp-views { overflow-x: hidden; }
 
 .sp-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; min-height: 52px; }
 .sp-icon-btn {

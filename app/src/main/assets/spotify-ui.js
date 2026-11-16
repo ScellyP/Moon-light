@@ -161,9 +161,32 @@
      ======================================================================= */
 
   let enterTimer = 0;
+  let slideCleanTimer = 0;
 
-  function setView(name) {
+  function setView(name, opts) {
     if (VIEWS.indexOf(name) < 0) return;
+
+    const prev = panel.getAttribute('data-view');
+    const prevIdx = VIEWS.indexOf(prev);
+    const nextIdx = VIEWS.indexOf(name);
+
+    // ── Slide direction ───────────────────────────────────────────────────
+    // "right" = new tab is to the right of current in VIEWS order → slide in from right.
+    // "left"  = new tab is to the left → slide in from left.
+    // No direction (first load, or same view) = use the old fade-in only.
+    let dir = null;
+    if (opts && opts.dir) {
+      dir = opts.dir;
+    } else if (prevIdx >= 0 && nextIdx >= 0 && prevIdx !== nextIdx) {
+      dir = nextIdx > prevIdx ? 'right' : 'left';
+    }
+
+    // Stamp direction so CSS @keyframes can read it.
+    if (dir) {
+      panel.setAttribute('data-slide', dir);
+    } else {
+      panel.removeAttribute('data-slide');
+    }
 
     panel.setAttribute('data-view', name);
 
@@ -171,6 +194,13 @@
     panel.classList.add('sp-enter');
     clearTimeout(enterTimer);
     enterTimer = setTimeout(() => panel.classList.remove('sp-enter'), ENTER_ANIMATION_MS);
+
+    // Remove slide attribute after animation completes so it doesn't
+    // interfere with subsequent no-direction transitions (e.g. track→library).
+    clearTimeout(slideCleanTimer);
+    if (dir) {
+      slideCleanTimer = setTimeout(() => panel.removeAttribute('data-slide'), 320);
+    }
 
     document.querySelectorAll('#sp-nav [data-sp-view]').forEach((button) => {
       button.classList.toggle('active', button.getAttribute('data-sp-view') === name);
