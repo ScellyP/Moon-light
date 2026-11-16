@@ -586,8 +586,13 @@
       const entry = memory.findDownloaded(url);
       if (!entry) { fresh.push(url); return; }
       const present = memory.isPresent(entry);
-      // The file is gone (deleted since): downloading it again is probably what is wanted.
-      known.push({ url, entry, present, again: !present });
+      if (!present) {
+        // File has been deleted — treat as a brand-new download, no dupe warning.
+        fresh.push(url);
+        return;
+      }
+      // File still exists — ask the user whether to download again.
+      known.push({ url, entry, present: true, again: false });
     });
     if (!known.length) { wizard.start(fresh); return; }
     dupes = { fresh, known };
@@ -652,7 +657,7 @@
       if (k.entry.playlist) bits.push(k.entry.playlist);
       if (k.entry.t && root.SongMemoryPure) bits.push(root.SongMemoryPure.formatDate(k.entry.t).slice(0, 10));
       text.appendChild(el('span', 'dl-dupe-sub', bits.join(' • ')));
-      text.appendChild(el('span', 'dl-dupe-state' + (k.present ? '' : ' gone'), k.present ? 'Still on your phone' : 'No longer on your phone'));
+      text.appendChild(el('span', 'dl-dupe-state', 'Already on your phone'));
       item.appendChild(text);
       const label = el('label', 'dl-again');
       const box2 = el('input');
@@ -946,6 +951,7 @@
   function startPlaylistDownloads() {
     pl.step       = 'pl-downloading';
     pl.queueIndex = 0;      // next item in pl.items to kick off
+    pl.skipped    = 0;      // songs skipped because a copy already exists on device
     pl.items = pl.tracks.map((url) => ({
       url, jobId: '', name: '', path: '', fullArt: '', art: '', crop: null,
       status: 'queued', error: '',
@@ -964,6 +970,29 @@
     if (idx >= pl.items.length) return;
     pl.queueIndex++;
     const item = pl.items[idx];
+
+    // ── Duplicate check ──────────────────────────────────────────────────
+    // Before downloading, see if SongMemory knows this URL and the file still exists.
+    const memory = root.SongMemory;
+    if (memory) {
+      const entry = memory.findDownloaded(item.url);
+      if (entry) {
+        const present = memory.isPresent(entry);
+        if (present) {
+          // File is on the device — skip the download, mark as skipped-dupe.
+          item.status   = 'skipped';
+          item.name     = entry.name || item.name;
+          item.dupeName = entry.name || '';
+          pl.skipped++;
+          plCheckDone();      // counts as "settled" so the queue keeps moving
+          plStartNext();      // immediately pull the next item into the freed slot
+          return;
+        }
+        // File is gone (deleted) — download it again silently.
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     const jobId = 'pl-dl-' + idx + '-' + Date.now().toString(36);
     item.jobId = jobId;
     const b = bridge();
@@ -978,7 +1007,8 @@
   function plCheckDone() {
     if (!pl || pl.step !== 'pl-downloading') return;
     plNotify(); render();
-    if (pl.done + pl.failed >= pl.items.length) { pl.step = 'pl-edit'; plNotify(); render(); }
+    const skipped = pl.skipped || 0;
+    if (pl.done + pl.failed + skipped >= pl.items.length) { pl.step = 'pl-edit'; plNotify(); render(); }
   }
 
   function onPlSongStatus(jobId, status, message) {
@@ -1022,10 +1052,8 @@
   }
 
   function savePlSongs() {
-    // Items the user deselected (keep=false): discard their staged files via placeSong with empty
-    // folder AND empty name, which the bridge treats as "just delete the staged file".
-    // For simplicity we cancel them on the JS side — the staged files stay in .staging (they will
-    // be cleaned up on the next app start, same as an interrupted single-song download).
+    // Only place items that were newly downloaded AND the user chose to keep.
+    // Skipped-dupe items (status === 'skipped') already exist on device — never place them again.
     const toPlace = pl.items.filter((it) => it.status === 'done' && it.keep !== false);
     if (!toPlace.length) { pl = null; render(); return; }
     pl.saving    = toPlace;
@@ -1116,15 +1144,21 @@
     const total = pl.items.length;
     const pct   = total ? Math.round(done / total * 100) : 0;
 
+    const skipped = pl.skipped || 0;
+    const metaParts = [done + '\u2009/\u2009' + total + ' downloaded'];
+    if (skipped) metaParts.push(skipped + '\u2009already on device');
+
     const page = buildPlHero({
       title: pl.title,
-      meta: done + '\u2009/\u2009' + total + ' downloaded',
+      meta: metaParts.join('\u2009\u00b7\u2009'),
     });
 
-    // Progress bar beneath the meta
+    // Progress bar beneath the meta — counts skipped as "settled"
+    const settled = done + skipped;
+    const realPct = total ? Math.round(settled / total * 100) : 0;
     const barWrap = el('div', 'dl-sp-bar-wrap');
     const barFill = el('div', 'dl-sp-bar-fill');
-    barFill.style.width = pct + '%';
+    barFill.style.width = realPct + '%';
     barWrap.appendChild(barFill);
     page.appendChild(barWrap);
 
@@ -1158,6 +1192,13 @@
       if (item.status === 'done') {
         statusWrap.classList.add('dl-sp-st-done');
         statusWrap.innerHTML = '<svg class="ico dl-sp-st-ico"><use href="#i-check"/></svg>';
+      } else if (item.status === 'skipped') {
+        // Already on device — show a faint bookmark icon + small label
+        statusWrap.classList.add('dl-sp-st-skip');
+        const skipWrap = el('span', 'dl-sp-st-skip-wrap');
+        skipWrap.innerHTML = '<svg class="ico dl-sp-st-ico"><use href="#i-bookmark"/></svg>';
+        skipWrap.appendChild(el('span', 'dl-sp-st-skip-lbl', 'Saved'));
+        statusWrap.appendChild(skipWrap);
       } else if (item.status === 'failed') {
         statusWrap.classList.add('dl-sp-st-fail');
         statusWrap.innerHTML = '<svg class="ico dl-sp-st-ico"><use href="#i-close"/></svg>';
@@ -1180,11 +1221,15 @@
     successItems.forEach((item) => { if (item.keep === undefined) item.keep = true; });
 
     const keptCount = () => successItems.filter((it) => it.keep).length;
+    const skipped = pl.skipped || 0;
+
+    const metaParts = [successItems.length + '\u2009new song' + (successItems.length === 1 ? '' : 's')];
+    if (skipped) metaParts.push(skipped + '\u2009already on device \u2014 skipped');
+    if (pl.failed) metaParts.push(pl.failed + '\u2009failed');
 
     const page = buildPlHero({
       title: pl.title,
-      meta: successItems.length + '\u2009song' + (successItems.length === 1 ? '' : 's') +
-            (pl.failed ? '\u2009\u00b7\u2009' + pl.failed + '\u2009failed' : ''),
+      meta: metaParts.join('\u2009\u00b7\u2009'),
     });
 
     // Action bar: Select all | Deselect all  +  Save button on the right
