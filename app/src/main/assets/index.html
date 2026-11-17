@@ -2706,6 +2706,11 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 
 /* Buttons: Spotify's pill, bold; bigger and a little brighter on hover, pressed in on tap. */
 .dl-primary, .dl-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
   min-width: 112px; height: 48px; padding: 0 28px; border-radius: 999px; font: 700 15px/1 var(--font-ui); letter-spacing: .2px; cursor: pointer;
   transition: transform .12s var(--ease), background .15s ease, border-color .15s ease, opacity .15s ease;
 }
@@ -2717,9 +2722,22 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   .dl-primary:hover:not(:disabled) { transform: scale(1.04); background: var(--sp-accent-hi); }
   .dl-secondary:hover { transform: scale(1.04); border-color: var(--text); }
 }
-.dl-big { width: min(100%, 320px); height: 56px; font-size: 16px; }
-.dl-row { display: flex; gap: 12px; justify-content: center; margin-top: 22px; }
-.dl-row-end { justify-content: flex-end; align-self: stretch; }
+.dl-big { width: min(100%, 320px); height: 56px; font-size: 16px; margin-left: auto; margin-right: auto; }
+.dl-row { display: flex; gap: 12px; justify-content: center; align-items: center; margin-top: 22px; width: 100%; }
+.dl-row-end { justify-content: center; align-self: center; }
+
+#sp-view-download button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+#sp-view-download .dl-step > button,
+#sp-view-download .dl-sp-page > button {
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 /* Messages and titles */
 .dl-title { margin: 18px 0 0; font: 700 22px/1.25 var(--font-ui); color: var(--text); }
@@ -2755,16 +2773,16 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 
 /* Step 4: the playlist tiles, two to a row like Spotify's library grid */
 .dl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.dl-tile { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border: 0; border-radius: 8px; background: none;
-  color: var(--text); text-align: left; cursor: pointer; transition: transform .12s var(--ease), background .15s ease; }
+.dl-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; padding: 10px; border: 0; border-radius: 8px; background: none;
+  color: var(--text); text-align: center; cursor: pointer; transition: transform .12s var(--ease), background .15s ease; }
 .dl-tile:active { transform: scale(.97); }
 @media (hover: hover) { .dl-tile:hover { background: color-mix(in srgb, var(--text) 8%, transparent); } }
 .dl-tile .sp-cover { width: 100%; aspect-ratio: 1 / 1; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 .dl-tile .sp-cover .ico { width: 34%; height: 34%; }
 .dl-tile .sp-cover.dl-new { background: none; border: 1.5px dashed color-mix(in srgb, var(--text) 40%, transparent); box-shadow: none; box-sizing: border-box; }
 .dl-tile .sp-cover.dl-new .ico { width: 30%; height: 30%; }
-.dl-tile-name { font: 700 14px/1.25 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dl-tile-sub { margin-top: -6px; font: 400 12px/1.35 var(--font-ui); color: var(--sp-sub); }
+.dl-tile-name { width: 100%; font: 700 14px/1.25 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.dl-tile-sub { width: 100%; margin-top: -6px; font: 400 12px/1.35 var(--font-ui); color: var(--sp-sub); text-align: center; }
 @media (prefers-reduced-motion: reduce) { .dl-step { animation: none; } .dl-spinner { animation-duration: 2.4s; } .dl-bar i { animation-duration: 2.6s; } }
 
 /* ---- "..." sheet --------------------------------------------------------- */
@@ -3327,7 +3345,7 @@ html.kb-open .sm-body { padding-bottom: 8px; }
 .dl-crop-frame { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,.58); pointer-events: none; }
 .dl-crop-zoom { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--faint); }
 .dl-crop-zoom input { flex: 1; accent-color: var(--accent); }
-.dl-crop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.dl-crop-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 16px; width: 100%; }
 .sm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 20px 8px; }
 .sm-tile { aspect-ratio: 1; border: 0; border-radius: 8px; cursor: pointer; background: center / cover no-repeat var(--sm-cover); }
 .sm-tile:active { filter: brightness(.8); }
@@ -3583,7 +3601,7 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-similar-sub { font-size: 12px; color: var(--sp-sub); }
 .dl-badge { flex-shrink: 0; padding: 3px 9px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 700; color: var(--text); background: color-mix(in srgb, var(--text) 16%, transparent); }
 .dl-badge.same { color: #2a1d05; background: #e6b450; }
-.dl-drop { align-self: flex-start; margin-top: 10px; min-height: 44px; }
+.dl-drop { display: inline-flex; align-items: center; justify-content: center; text-align: center; align-self: center; margin: 10px auto 0; min-height: 44px; }
 </style>
 <style id="ml-splash-style">
 /* Launch screen: the app icon on the app background, shown from the first paint and lifted by
@@ -4034,14 +4052,14 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-sp-bar-fill{height:100%;background:var(--sp-accent);border-radius:99px;transition:width .3s ease}
 
 /* Action bar — full width, equal-width buttons */
-.dl-sp-action-bar{display:flex;gap:10px;margin-bottom:10px;width:100%}
-.dl-sp-act-btn{flex:1;border-radius:999px;padding:11px 16px;font:700 13px/1 var(--font-ui);text-align:center;white-space:nowrap}
+.dl-sp-action-bar{display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:10px;width:100%}
+.dl-sp-act-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:11px 16px;font:700 13px/1 var(--font-ui);text-align:center;white-space:nowrap}
 /* CTA row — save button + discard link below */
 .dl-sp-cta-wrap{width:100%;margin-bottom:16px;display:flex;flex-direction:column;align-items:stretch;gap:10px}
-.dl-sp-save-btn{width:100%;border-radius:999px;padding:12px 20px;font:700 14px/1 var(--font-ui)}
+.dl-sp-save-btn{width:100%;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:12px 20px;font:700 14px/1 var(--font-ui);text-align:center}
 .dl-sp-save-btn:disabled{opacity:.45;cursor:default}
 /* Discard link — always visible, plain text style */
-.dl-sp-discard-btn{background:none;border:none;color:var(--sp-sub);font:500 13px/1 var(--font-ui);text-align:center;padding:6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;transition:color .15s}
+.dl-sp-discard-btn{display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--sp-sub);font:500 13px/1 var(--font-ui);text-align:center;padding:6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;transition:color .15s}
 .dl-sp-discard-btn:hover{color:#e05}
 
 /* Song list */
