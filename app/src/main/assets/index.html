@@ -4036,12 +4036,13 @@ body.settings-open #srch-input { pointer-events: none; }
 /* Action bar — select all / deselect all row */
 .dl-sp-action-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .dl-sp-act-btn{border-radius:999px;padding:10px 20px;font:700 13px/1 var(--font-ui)}
-/* CTA row — save or cancel, full width, below the select row */
-.dl-sp-cta-wrap{width:100%;margin-bottom:16px}
+/* CTA row — save button + discard link below */
+.dl-sp-cta-wrap{width:100%;margin-bottom:16px;display:flex;flex-direction:column;align-items:stretch;gap:10px}
 .dl-sp-save-btn{width:100%;border-radius:999px;padding:12px 20px;font:700 14px/1 var(--font-ui)}
-/* Danger button (cancel all downloads) */
-.dl-danger{background:color-mix(in srgb,#e05 15%,transparent);color:#e05;border:1.5px solid color-mix(in srgb,#e05 40%,transparent)}
-.dl-danger:hover{background:color-mix(in srgb,#e05 25%,transparent)}
+.dl-sp-save-btn:disabled{opacity:.45;cursor:default}
+/* Discard link — always visible, plain text style */
+.dl-sp-discard-btn{background:none;border:none;color:var(--sp-sub);font:500 13px/1 var(--font-ui);text-align:center;padding:6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;transition:color .15s}
+.dl-sp-discard-btn:hover{color:#e05}
 
 /* Song list */
 .dl-sp-song-list{display:flex;flex-direction:column;gap:0;width:100%}

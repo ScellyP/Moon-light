@@ -1240,33 +1240,31 @@
     selRow.appendChild(selAll); selRow.appendChild(deselAll);
     page.appendChild(selRow);
 
-    // ── Row 2: Save N songs  OR  Cancel all downloads (0 selected) ───────
+    // ── Row 2: Save button + always-visible Discard link below ───────────
     const ctaWrap = el('div', 'dl-sp-cta-wrap');
-    const saveBtn   = el('button', 'dl-primary dl-sp-save-btn');
+
+    // Save button — disabled (not hidden) when 0 songs selected
+    const saveBtn = el('button', 'dl-primary dl-sp-save-btn');
     saveBtn.type = 'button';
     saveBtn.addEventListener('click', savePlSongs);
 
-    const cancelBtn = el('button', 'dl-danger dl-sp-save-btn');
-    cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel all downloads';
-    cancelBtn.addEventListener('click', () => {
-      // Discard all staged files and exit — user chose not to keep anything.
-      pl = null; render();
-    });
+    // Discard link — always visible, sits below the save button
+    const discardBtn = el('button', 'dl-sp-discard-btn');
+    discardBtn.type = 'button';
+    discardBtn.textContent = 'Discard all downloads';
+    discardBtn.addEventListener('click', () => { pl = null; render(); });
 
     const updateCta = () => {
       const k = keptCount();
-      if (k === 0) {
-        saveBtn.classList.add('hidden');
-        cancelBtn.classList.remove('hidden');
-      } else {
-        saveBtn.textContent = 'Save\u2002' + k + '\u2009song' + (k === 1 ? '' : 's');
-        saveBtn.classList.remove('hidden');
-        cancelBtn.classList.add('hidden');
-      }
+      saveBtn.disabled = k === 0;
+      saveBtn.textContent = k === 0
+        ? 'No songs selected'
+        : 'Save\u2002' + k + '\u2009song' + (k === 1 ? '' : 's');
     };
     updateCta();
-    ctaWrap.appendChild(saveBtn); ctaWrap.appendChild(cancelBtn);
+
+    ctaWrap.appendChild(saveBtn);
+    ctaWrap.appendChild(discardBtn);
     page.appendChild(ctaWrap);
 
     // ── Song list ─────────────────────────────────────────────────────────
