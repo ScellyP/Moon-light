@@ -37,7 +37,7 @@
      v1.01.07  seven small fixes after that feature
      v2.00.00  you decided it's time for a new MAJOR
    ========================================================================= */
-window.APP_VERSION = 'v1.16.16';
+window.APP_VERSION = 'v1.16.17';
 
 (function () {
   var el = document.getElementById('app-version');

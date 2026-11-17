@@ -974,24 +974,34 @@
     const item = pl.items[idx];
 
     // ── Duplicate check ──────────────────────────────────────────────────
-    // Before downloading, see if SongMemory knows this URL and the file still exists.
+    // Two-pass check: first the download log, then the live library by source URL.
+    // The log may be missing entries (e.g. the file was downloaded on another device or
+    // before the log existed), so we always cross-check against the library as well.
     const memory = root.SongMemory;
     if (memory) {
+      // Pass 1: download log
       const entry = memory.findDownloaded(item.url);
-      if (entry) {
-        const present = memory.isPresent(entry);
-        if (present) {
-          // File is on the device — skip the download, mark as skipped-dupe.
-          item.status   = 'skipped';
-          item.name     = entry.name || item.name;
-          item.dupeName = entry.name || '';
-          pl.skipped++;
-          plCheckDone();      // counts as "settled" so the queue keeps moving
-          plStartNext();      // immediately pull the next item into the freed slot
-          return;
-        }
-        // File is gone (deleted) — download it again silently.
+      if (entry && memory.isPresent(entry)) {
+        item.status = 'skipped'; item.name = entry.name || item.name; item.dupeName = entry.name || '';
+        pl.skipped++; plCheckDone(); plStartNext(); return;
       }
+
+      // Pass 2: live library tracks — check the `source` field written by yt-dlp / Id3Tag
+      const a = root.NovelAudio;
+      if (a && a.getTracks) {
+        const normUrl = memory.normalizeUrl(item.url);
+        const tracks  = a.getTracks();
+        for (let ti = 0; ti < tracks.length; ti++) {
+          const t = tracks[ti];
+          const src = t.source || '';
+          if (src && memory.normalizeUrl(src) === normUrl) {
+            // Found a live track in the library with this source URL.
+            item.status = 'skipped'; item.name = t.title || item.name; item.dupeName = t.title || '';
+            pl.skipped++; plCheckDone(); plStartNext(); return;
+          }
+        }
+      }
+      // File is gone or never recorded — download it.
     }
     // ────────────────────────────────────────────────────────────────────
 
