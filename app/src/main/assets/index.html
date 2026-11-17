@@ -4033,11 +4033,15 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-sp-bar-wrap{width:100%;height:3px;background:color-mix(in srgb,var(--text) 12%,transparent);border-radius:99px;overflow:hidden;margin:0 0 16px}
 .dl-sp-bar-fill{height:100%;background:var(--sp-accent);border-radius:99px;transition:width .3s ease}
 
-/* Action bar */
-.dl-sp-action-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+/* Action bar — select all / deselect all row */
+.dl-sp-action-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .dl-sp-act-btn{border-radius:999px;padding:10px 20px;font:700 13px/1 var(--font-ui)}
-.dl-sp-edit-bar{align-items:center}
-.dl-sp-save-btn{margin-left:auto;border-radius:999px;padding:10px 20px;font:700 13px/1 var(--font-ui)}
+/* CTA row — save or cancel, full width, below the select row */
+.dl-sp-cta-wrap{width:100%;margin-bottom:16px}
+.dl-sp-save-btn{width:100%;border-radius:999px;padding:12px 20px;font:700 14px/1 var(--font-ui)}
+/* Danger button (cancel all downloads) */
+.dl-danger{background:color-mix(in srgb,#e05 15%,transparent);color:#e05;border:1.5px solid color-mix(in srgb,#e05 40%,transparent)}
+.dl-danger:hover{background:color-mix(in srgb,#e05 25%,transparent)}
 
 /* Song list */
 .dl-sp-song-list{display:flex;flex-direction:column;gap:0;width:100%}
@@ -4050,10 +4054,7 @@ body.settings-open #srch-input { pointer-events: none; }
 .dl-sp-thumb .ico{width:22px;height:22px;opacity:.35}
 /* Tappable thumb (edit screen) */
 .dl-sp-thumb-btn{border:0;padding:0;cursor:pointer}
-/* Keep/skip overlay */
-.dl-sp-keep-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.52);opacity:0;transition:opacity .15s;border-radius:6px;color:#fff;pointer-events:none}
-.dl-sp-thumb-btn:hover .dl-sp-keep-overlay{opacity:1}
-.dl-sp-overlay-off{background:rgba(180,0,0,.55);opacity:1}
+/* Cover overlay — only used as hover hint; removed from JS (no overlay element added) */
 .dl-sp-ov-ico{width:20px;height:20px}
 
 /* Song text */
@@ -4063,9 +4064,9 @@ body.settings-open #srch-input { pointer-events: none; }
 /* Shimmer skeleton */
 .dl-sp-skel{display:block;height:12px;width:50%;border-radius:6px;background:linear-gradient(90deg,color-mix(in srgb,var(--text) 10%,transparent) 25%,color-mix(in srgb,var(--text) 20%,transparent) 50%,color-mix(in srgb,var(--text) 10%,transparent) 75%);background-size:200% 100%;animation:dl-shimmer 1.5s ease-in-out infinite}
 @keyframes dl-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-/* Inline name edit input */
-.dl-sp-name-input{width:100%;height:32px;padding:0 8px;border:1px solid color-mix(in srgb,var(--text) 25%,transparent);border-radius:5px;background:color-mix(in srgb,var(--text) 7%,transparent);color:var(--text);font:600 13px/1 var(--font-ui);transition:border-color .1s}
-.dl-sp-name-input:focus{border-color:var(--sp-accent);outline:none}
+/* Inline name edit input — hidden by style (display:none) until pencil tapped */
+.dl-sp-name-input{width:100%;height:30px;padding:0 8px;border:1.5px solid var(--sp-accent);border-radius:5px;background:color-mix(in srgb,var(--text) 7%,transparent);color:var(--text);font:600 13px/1 var(--font-ui)}
+.dl-sp-name-input:focus{outline:none}
 
 /* Status icons (downloading screen) */
 .dl-sp-status{flex-shrink:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center}

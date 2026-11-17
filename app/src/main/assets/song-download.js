@@ -1226,131 +1226,140 @@
     const skipped = pl.skipped || 0;
 
     const metaParts = [successItems.length + '\u2009new song' + (successItems.length === 1 ? '' : 's')];
-    if (skipped) metaParts.push(skipped + '\u2009already on device \u2014 skipped');
+    if (skipped) metaParts.push(skipped + '\u2009already on device');
     if (pl.failed) metaParts.push(pl.failed + '\u2009failed');
 
-    const page = buildPlHero({
-      title: pl.title,
-      meta: metaParts.join('\u2009\u00b7\u2009'),
-    });
+    const page = buildPlHero({ title: pl.title, meta: metaParts.join('\u2009\u00b7\u2009') });
 
-    // Action bar: Select all | Deselect all  +  Save button on the right
-    const bar = el('div', 'dl-sp-action-bar dl-sp-edit-bar');
-    const selAll   = el('button', 'dl-secondary dl-sp-act-btn');
+    // ── Row 1: Select all | Deselect all ─────────────────────────────────
+    const selRow = el('div', 'dl-sp-action-bar');
+    const selAll = el('button', 'dl-secondary dl-sp-act-btn');
     selAll.type = 'button'; selAll.textContent = 'Select all';
     const deselAll = el('button', 'dl-secondary dl-sp-act-btn');
     deselAll.type = 'button'; deselAll.textContent = 'Deselect all';
+    selRow.appendChild(selAll); selRow.appendChild(deselAll);
+    page.appendChild(selRow);
 
-    // Save button — updated label whenever keep changes
-    const saveBtn = el('button', 'dl-primary dl-sp-save-btn');
+    // ── Row 2: Save N songs  OR  Cancel all downloads (0 selected) ───────
+    const ctaWrap = el('div', 'dl-sp-cta-wrap');
+    const saveBtn   = el('button', 'dl-primary dl-sp-save-btn');
     saveBtn.type = 'button';
-    const updateSaveBtn = () => {
-      const k = keptCount();
-      saveBtn.textContent = 'Save\u2002' + k + '\u2009song' + (k === 1 ? '' : 's');
-      saveBtn.disabled = k === 0;
-    };
-    updateSaveBtn();
     saveBtn.addEventListener('click', savePlSongs);
 
+    const cancelBtn = el('button', 'dl-danger dl-sp-save-btn');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = 'Cancel all downloads';
+    cancelBtn.addEventListener('click', () => {
+      // Discard all staged files and exit — user chose not to keep anything.
+      pl = null; render();
+    });
+
+    const updateCta = () => {
+      const k = keptCount();
+      if (k === 0) {
+        saveBtn.classList.add('hidden');
+        cancelBtn.classList.remove('hidden');
+      } else {
+        saveBtn.textContent = 'Save\u2002' + k + '\u2009song' + (k === 1 ? '' : 's');
+        saveBtn.classList.remove('hidden');
+        cancelBtn.classList.add('hidden');
+      }
+    };
+    updateCta();
+    ctaWrap.appendChild(saveBtn); ctaWrap.appendChild(cancelBtn);
+    page.appendChild(ctaWrap);
+
+    // ── Song list ─────────────────────────────────────────────────────────
+    const list = el('div', 'dl-sp-song-list');
+
+    // updateAll: re-reads item.keep from the data, updates each row's DOM.
+    // Uses data-si attribute to map row→item safely (no index drift).
     const updateAll = () => {
-      list.querySelectorAll('.dl-sp-edit-row').forEach((row, ri) => {
-        const item = successItems[ri];
+      list.querySelectorAll('.dl-sp-edit-row').forEach((row) => {
+        const si = parseInt(row.getAttribute('data-si'), 10);
+        const item = successItems[si];
         if (!item) return;
         row.classList.toggle('dl-sp-row-skip', !item.keep);
-        const overlay = row.querySelector('.dl-sp-keep-overlay');
-        if (overlay) overlay.classList.toggle('dl-sp-overlay-off', !item.keep);
+        // Update toggle button icon
+        const tb = row.querySelector('.dl-sp-toggle-btn');
+        if (tb) tb.innerHTML = item.keep
+          ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
+          : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
       });
-      updateSaveBtn();
+      updateCta();
     };
 
     selAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = true; });
-      updateAll();
+      successItems.forEach((it) => { it.keep = true; }); updateAll();
     });
     deselAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = false; });
-      updateAll();
+      successItems.forEach((it) => { it.keep = false; }); updateAll();
     });
 
-    bar.appendChild(selAll); bar.appendChild(deselAll); bar.appendChild(saveBtn);
-    page.appendChild(bar);
-
-    // Song list
-    const list = el('div', 'dl-sp-song-list');
     successItems.forEach((item, si) => {
       const row = el('div', 'dl-sp-song-row dl-sp-edit-row' + (item.keep !== false ? '' : ' dl-sp-row-skip'));
+      row.setAttribute('data-si', si);
 
-      // Cover — tappable = re-crop; has a toggle keep overlay
+      // Cover — tap = re-crop
       const thumb = el('button', 'dl-sp-thumb dl-sp-thumb-btn');
       thumb.type = 'button';
       thumb.setAttribute('aria-label', 'Re-crop cover');
       if (item.art) thumb.style.backgroundImage = 'url("' + item.art + '")';
       else thumb.appendChild(icon('i-moon-music'));
-      // Keep/skip overlay — white arrow down = keep, white × = skip
-      const overlay = el('span', 'dl-sp-keep-overlay' + (item.keep !== false ? '' : ' dl-sp-overlay-off'));
-      overlay.innerHTML = '<svg class="ico dl-sp-ov-ico"><use href="#i-download"/></svg>';   // ↓ keep
-      overlay.setAttribute('data-off-icon', '#i-close');
-      thumb.appendChild(overlay);
-      thumb.addEventListener('click', () => {
-        // Single tap on cover → open crop editor
-        openCrop(item);
-      });
+      thumb.addEventListener('click', () => openCrop(item));
       row.appendChild(thumb);
 
-      // Name + inline edit (tapping pencil reveals the input)
+      // Name — display label only; input appears on pencil tap
       const textWrap = el('div', 'dl-sp-song-text');
-      const nameDisp = el('div', 'dl-sp-song-name', item.name);
+      const nameDisp = el('div', 'dl-sp-song-name');
+      nameDisp.textContent = item.name;
       const nameInput = el('input');
       nameInput.type = 'text';
-      nameInput.className = 'dl-sp-name-input hidden';
+      nameInput.className = 'dl-sp-name-input';
       nameInput.value = item.name;
       nameInput.setAttribute('aria-label', 'Song name');
+      nameInput.style.display = 'none';   // hidden by style, not class, to avoid specificity fights
       nameInput.addEventListener('input', () => {
         item.name = cleanSongName(nameInput.value);
         nameDisp.textContent = item.name;
       });
       nameInput.addEventListener('blur', () => {
-        nameInput.classList.add('hidden');
-        nameDisp.classList.remove('hidden');
+        nameInput.style.display = 'none';
+        nameDisp.style.display  = '';
       });
       textWrap.appendChild(nameDisp);
       textWrap.appendChild(nameInput);
       row.appendChild(textWrap);
 
-      // Right side: pencil (edit name) + keep/skip toggle
+      // Right: pencil + keep/skip toggle
       const actions = el('div', 'dl-sp-row-actions');
 
-      // Pencil — tap to edit name inline
       const pencilBtn = el('button', 'dl-sp-icon-action');
       pencilBtn.type = 'button';
       pencilBtn.setAttribute('aria-label', 'Edit song name');
       pencilBtn.innerHTML = '<svg class="ico dl-sp-act-ico"><use href="#i-pencil"/></svg>';
       pencilBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        nameDisp.classList.add('hidden');
-        nameInput.classList.remove('hidden');
-        nameInput.focus();
-        nameInput.select();
+        nameDisp.style.display  = 'none';
+        nameInput.style.display = '';
+        nameInput.focus(); nameInput.select();
       });
       actions.appendChild(pencilBtn);
 
-      // Keep/skip toggle — white ↓ when kept, white × when skipped
       const toggleBtn = el('button', 'dl-sp-icon-action dl-sp-toggle-btn');
       toggleBtn.type = 'button';
-      const updateToggle = () => {
-        toggleBtn.setAttribute('aria-label', item.keep !== false ? 'Remove from save' : 'Add to save');
-        toggleBtn.innerHTML = item.keep !== false
-          ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
-          : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
-        overlay.className = 'dl-sp-keep-overlay' + (item.keep !== false ? '' : ' dl-sp-overlay-off');
-      };
-      updateToggle();
+      toggleBtn.innerHTML = item.keep !== false
+        ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
+        : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
+      toggleBtn.setAttribute('aria-label', item.keep !== false ? 'Remove' : 'Add');
       toggleBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         item.keep = !(item.keep !== false);
         row.classList.toggle('dl-sp-row-skip', !item.keep);
-        updateToggle();
-        updateSaveBtn();
+        toggleBtn.innerHTML = item.keep
+          ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
+          : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
+        updateCta();
       });
       actions.appendChild(toggleBtn);
 
