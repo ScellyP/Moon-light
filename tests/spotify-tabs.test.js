@@ -78,4 +78,18 @@ check('text in the music player cannot be selected, but the fields you type in s
   assert.ok(/#audio-panel input, #audio-panel textarea \{ user-select: text;/.test(html));
 });
 
+check('sliding tab animations: GPU-accelerated translate3d slide-in and slide-out keyframes with traversal', () => {
+  const html = read('index.html');
+  const js = read('spotify-ui.js');
+  assert.ok(html.includes('@keyframes spSlideOutLeft'));
+  assert.ok(html.includes('@keyframes spSlideOutRight'));
+  assert.ok(html.includes('@keyframes spSlideInRight'));
+  assert.ok(html.includes('@keyframes spSlideInLeft'));
+  assert.ok(html.includes('translate3d'));
+  assert.ok(html.includes('.sp-view.sp-slide-out-left'));
+  assert.ok(html.includes('.sp-view.sp-slide-in-right'));
+  assert.ok(js.includes('sp-traversing'));
+  assert.ok(js.includes('runSlideStep'));
+});
+
 console.log(n + ' checks passed');

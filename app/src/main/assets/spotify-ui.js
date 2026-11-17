@@ -162,6 +162,77 @@
 
   let enterTimer = 0;
   let slideCleanTimer = 0;
+  let traversalTimer = 0;
+  let activeFromEl = null;
+  let activeToEl = null;
+
+  function clearSlideClasses() {
+    clearTimeout(slideCleanTimer);
+    clearTimeout(traversalTimer);
+    panel.classList.remove('sp-traversing');
+    panel.removeAttribute('data-slide');
+    if (activeFromEl && activeFromEl.classList) {
+      activeFromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
+      activeFromEl = null;
+    }
+    if (activeToEl && activeToEl.classList) {
+      activeToEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
+      activeToEl = null;
+    }
+    const allViews = document.querySelectorAll('.sp-view');
+    if (allViews && allViews.forEach) {
+      allViews.forEach((v) => {
+        if (v && v.classList) v.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
+      });
+    }
+  }
+
+  function setNavHighlight(viewName) {
+    const buttons = document.querySelectorAll('#sp-nav [data-sp-view]');
+    if (buttons && buttons.forEach) {
+      buttons.forEach((button) => {
+        if (button && button.classList && button.getAttribute) {
+          button.classList.toggle('active', button.getAttribute('data-sp-view') === viewName);
+        }
+      });
+    }
+  }
+
+  function runSlideStep(fromName, toName, dir, durationMs, onDone) {
+    const fromEl = document.getElementById('sp-view-' + fromName);
+    const toEl = document.getElementById('sp-view-' + toName);
+
+    if (!fromEl || !toEl || !fromEl.classList || !toEl.classList) {
+      if (onDone) onDone();
+      return;
+    }
+
+    if (panel.style && panel.style.setProperty) {
+      panel.style.setProperty('--slide-duration', durationMs + 'ms');
+    }
+    panel.setAttribute('data-slide', dir);
+
+    fromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
+    toEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
+
+    const outClass = dir === 'right' ? 'sp-slide-out-left' : 'sp-slide-out-right';
+    const inClass  = dir === 'right' ? 'sp-slide-in-right' : 'sp-slide-in-left';
+
+    fromEl.classList.add(outClass);
+    toEl.classList.add(inClass);
+
+    activeFromEl = fromEl;
+    activeToEl = toEl;
+
+    slideCleanTimer = setTimeout(() => {
+      if (fromEl && fromEl.classList) fromEl.classList.remove(outClass);
+      if (toEl && toEl.classList) toEl.classList.remove(inClass);
+      activeFromEl = null;
+      activeToEl = null;
+      panel.removeAttribute('data-slide');
+      if (onDone) onDone();
+    }, durationMs);
+  }
 
   function setView(name, opts) {
     if (VIEWS.indexOf(name) < 0) return;
@@ -170,41 +241,90 @@
     const prevIdx = VIEWS.indexOf(prev);
     const nextIdx = VIEWS.indexOf(name);
 
-    // ── Slide direction ───────────────────────────────────────────────────
-    // "right" = new tab is to the right of current in VIEWS order → slide in from right.
-    // "left"  = new tab is to the left → slide in from left.
-    // No direction (first load, or same view) = use the old fade-in only.
-    let dir = null;
-    if (opts && opts.dir) {
-      dir = opts.dir;
-    } else if (prevIdx >= 0 && nextIdx >= 0 && prevIdx !== nextIdx) {
-      dir = nextIdx > prevIdx ? 'right' : 'left';
+    if (prev === name) return;
+
+    // First load / same view
+    if (prevIdx < 0) {
+      panel.setAttribute('data-view', name);
+      setNavHighlight(name);
+      if (el.views) el.views.scrollTop = 0;
+      closeSheet();
+      sync();
+      return;
     }
 
-    // Stamp direction so CSS @keyframes can read it.
-    if (dir) {
-      panel.setAttribute('data-slide', dir);
-    } else {
-      panel.removeAttribute('data-slide');
-    }
+    clearSlideClasses();
 
+    const dir = (opts && opts.dir) || (nextIdx > prevIdx ? 'right' : 'left');
+    const distance = Math.abs(nextIdx - prevIdx);
+
+    const isBrowserEnv = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
+    const shouldTraverse = distance > 1 && isBrowserEnv && (!opts || !opts.direct);
+
+    // Immediate attribute update so state readers and synchronous tests remain accurate
     panel.setAttribute('data-view', name);
+    setNavHighlight(name);
 
-    // Lets index.html stagger the song rows in; removed once they've played.
+    if (shouldTraverse) {
+      panel.classList.add('sp-traversing');
+
+      const steps = [];
+      const delta = nextIdx > prevIdx ? 1 : -1;
+      for (let i = prevIdx + delta; (delta > 0 ? i <= nextIdx : i >= nextIdx); i += delta) {
+        steps.push(VIEWS[i]);
+      }
+
+      // Total sweep duration capped at ~600-750ms (well under 1s)
+      const stepDuration = Math.min(180, Math.max(110, Math.floor(650 / steps.length)));
+      let curStep = 0;
+      let curFrom = prev;
+
+      function executeNextStep() {
+        if (curStep >= steps.length) {
+          clearSlideClasses();
+          panel.setAttribute('data-view', name);
+          setNavHighlight(name);
+          if (el.views) el.views.scrollTop = 0;
+          closeSheet();
+          sync();
+          return;
+        }
+
+        const curTo = steps[curStep];
+        setNavHighlight(curTo);
+
+        runSlideStep(curFrom, curTo, dir, stepDuration, () => {
+          curFrom = curTo;
+          curStep++;
+          if (curStep === steps.length) {
+            clearSlideClasses();
+            panel.setAttribute('data-view', name);
+            setNavHighlight(name);
+            if (el.views) el.views.scrollTop = 0;
+            closeSheet();
+            sync();
+          } else {
+            traversalTimer = setTimeout(executeNextStep, 8);
+          }
+        });
+      }
+
+      executeNextStep();
+      return;
+    }
+
+    // Adjacent tab or direct jump
+    const duration = distance === 1 ? 240 : 260;
+    runSlideStep(prev, name, dir, duration, () => {
+      panel.removeAttribute('data-slide');
+      if (el.views) el.views.scrollTop = 0;
+      closeSheet();
+      sync();
+    });
+
     panel.classList.add('sp-enter');
     clearTimeout(enterTimer);
     enterTimer = setTimeout(() => panel.classList.remove('sp-enter'), ENTER_ANIMATION_MS);
-
-    // Remove slide attribute after animation completes so it doesn't
-    // interfere with subsequent no-direction transitions (e.g. track→library).
-    clearTimeout(slideCleanTimer);
-    if (dir) {
-      slideCleanTimer = setTimeout(() => panel.removeAttribute('data-slide'), 320);
-    }
-
-    document.querySelectorAll('#sp-nav [data-sp-view]').forEach((button) => {
-      button.classList.toggle('active', button.getAttribute('data-sp-view') === name);
-    });
 
     if (el.views) el.views.scrollTop = 0;
     closeSheet();

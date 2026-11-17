@@ -3305,6 +3305,7 @@ window.NovelAudio = (function () {
         });
         if (state.activePlaylist === info.name) state.activePlaylist = 'all';
       }
+      if (key.indexOf('list:') === 0 && state.activePlaylist === '@list:' + key.slice(5)) state.activePlaylist = 'all';
       try { const b = window.AndroidBridge; if (b && b.playlistCoverClear) b.playlistCoverClear(this._keyName(key)); } catch (e) { /* no cover to drop */ }
       this._playlistsChanged();
       MediaLibrary.scan();                    // a deleted playlist: "Scan the sky" runs by itself so the library is up to date

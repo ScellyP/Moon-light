@@ -163,7 +163,9 @@ check('hand-picked lists: description, rename, reorder and delete work through t
   assert.strictEqual(t.app.getPlaylistInfo(key).maxDescription, 120);
   assert.strictEqual(t.app.editPlaylist(key, { name: 'Mine 2' }).ok, true);
   assert.strictEqual(t.app.editPlaylist(key, { name: 'rock' }).error, 'taken');
+  t.state.activePlaylist = '@list:' + key.slice(5);
   assert.strictEqual(t.app.deletePlaylist(key).ok, true);
+  assert.strictEqual(t.state.activePlaylist, 'all');
   assert.strictEqual(t.app.getPlaylistInfo(key), null);
 });
 

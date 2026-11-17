@@ -2419,24 +2419,78 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 /* Default: subtle fade + rise (no swipe direction) */
 @keyframes spIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* Slide right: new tab is to the RIGHT of the old one → enter from right edge */
-#audio-panel[data-slide="right"][data-view="library"] #sp-view-library,
-#audio-panel[data-slide="right"][data-view="search"] #sp-view-search,
-#audio-panel[data-slide="right"][data-view="album"] #sp-view-album,
-#audio-panel[data-slide="right"][data-view="download"] #sp-view-download,
-#audio-panel[data-slide="right"][data-view="track"] #sp-view-track { animation: spSlideInRight .28s var(--ease) both; }
-@keyframes spSlideInRight { from { opacity: 0; transform: translateX(48px); } to { opacity: 1; transform: none; } }
+/* While traversing tabs, disable pointer events on views to prevent stray clicks */
+#audio-panel.sp-traversing #sp-views { pointer-events: none; }
 
-/* Slide left: new tab is to the LEFT of the old one → enter from left edge */
-#audio-panel[data-slide="left"][data-view="library"] #sp-view-library,
-#audio-panel[data-slide="left"][data-view="search"] #sp-view-search,
-#audio-panel[data-slide="left"][data-view="album"] #sp-view-album,
-#audio-panel[data-slide="left"][data-view="download"] #sp-view-download,
-#audio-panel[data-slide="left"][data-view="track"] #sp-view-track { animation: spSlideInLeft .28s var(--ease) both; }
-@keyframes spSlideInLeft { from { opacity: 0; transform: translateX(-48px); } to { opacity: 1; transform: none; } }
+/* Suppress all views except the ones actively sliding during multi-step traversal */
+#audio-panel.sp-traversing .sp-view:not(.sp-slide-in-right):not(.sp-slide-in-left):not(.sp-slide-out-right):not(.sp-slide-out-left) {
+  display: none !important;
+}
 
-/* Clip overflow during slide so the incoming view doesn't peek outside the panel */
-#audio-panel[data-slide] #sp-views { overflow-x: hidden; }
+/* Clip overflow during slide transitions */
+#audio-panel[data-slide] #sp-views,
+#audio-panel.sp-traversing #sp-views { overflow-x: hidden; }
+
+/* Outgoing views: position absolute so incoming view is not pushed down */
+.sp-view.sp-slide-out-left {
+  display: flex !important;
+  position: absolute !important;
+  top: var(--status-bar-height, 0); left: 0; right: 0; width: 100%;
+  pointer-events: none;
+  z-index: 2;
+  animation: spSlideOutLeft var(--slide-duration, 0.24s) var(--ease) both !important;
+}
+.sp-view.sp-slide-out-right {
+  display: flex !important;
+  position: absolute !important;
+  top: var(--status-bar-height, 0); left: 0; right: 0; width: 100%;
+  pointer-events: none;
+  z-index: 2;
+  animation: spSlideOutRight var(--slide-duration, 0.24s) var(--ease) both !important;
+}
+
+/* Incoming views */
+.sp-view.sp-slide-in-right {
+  display: flex !important;
+  position: relative !important;
+  width: 100%;
+  z-index: 3;
+  animation: spSlideInRight var(--slide-duration, 0.24s) var(--ease) both !important;
+}
+.sp-view.sp-slide-in-left {
+  display: flex !important;
+  position: relative !important;
+  width: 100%;
+  z-index: 3;
+  animation: spSlideInLeft var(--slide-duration, 0.24s) var(--ease) both !important;
+}
+
+/* Fluid hardware-accelerated horizontal sliding animations */
+@keyframes spSlideOutLeft {
+  from { transform: translate3d(0, 0, 0); opacity: 1; }
+  to   { transform: translate3d(-100%, 0, 0); opacity: 0.85; }
+}
+@keyframes spSlideOutRight {
+  from { transform: translate3d(0, 0, 0); opacity: 1; }
+  to   { transform: translate3d(100%, 0, 0); opacity: 0.85; }
+}
+@keyframes spSlideInRight {
+  from { transform: translate3d(100%, 0, 0); opacity: 0.85; }
+  to   { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+@keyframes spSlideInLeft {
+  from { transform: translate3d(-100%, 0, 0); opacity: 0.85; }
+  to   { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-view.sp-slide-out-left,
+  .sp-view.sp-slide-out-right,
+  .sp-view.sp-slide-in-right,
+  .sp-view.sp-slide-in-left {
+    animation-duration: 0.01s !important;
+  }
+}
 
 .sp-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; min-height: 52px; }
 .sp-icon-btn {
