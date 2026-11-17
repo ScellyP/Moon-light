@@ -277,6 +277,7 @@ window.NovelAudio = (function () {
       AudioUI.render();
       StartupPlayback.libraryScanned(state.tracks.length > 0);
       this._flushWaiters();
+      try { if (window.SpotifyUI && typeof window.SpotifyUI.refreshPlaylists === 'function') window.SpotifyUI.refreshPlaylists(); } catch (e) { /* non-fatal */ }
     },
 
     // O(1) look-up. (A linear search here made every render O(songs squared) with a big library.)
@@ -2703,6 +2704,7 @@ window.NovelAudio = (function () {
             li.remove();
             if (wasActive) AudioUI.selectPlaylist('all');
             AudioUI._movePlaylistIndicator(false);
+            MediaLibrary.scan();                    // a deleted playlist: "Scan the sky" runs by itself so the library is up to date
           });
           li.appendChild(del);
         }
@@ -3305,6 +3307,7 @@ window.NovelAudio = (function () {
       }
       try { const b = window.AndroidBridge; if (b && b.playlistCoverClear) b.playlistCoverClear(this._keyName(key)); } catch (e) { /* no cover to drop */ }
       this._playlistsChanged();
+      MediaLibrary.scan();                    // a deleted playlist: "Scan the sky" runs by itself so the library is up to date
       return { ok: true };
     },
 

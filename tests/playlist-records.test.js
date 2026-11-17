@@ -291,6 +291,15 @@ check('creating a playlist runs "Scan the sky" by itself; a refused name does no
   assert.strictEqual(t.log.scans, before + 1);
 });
 
+check('deleting a playlist runs "Scan the sky" by itself; locked playlist does not', () => {
+  const t = start();
+  const before = t.log.scans;
+  assert.strictEqual(t.app.deletePlaylist('name:Mix').ok, true);
+  assert.strictEqual(t.log.scans, before + 1);
+  assert.strictEqual(t.app.deletePlaylist('name:Rock').ok, false);
+  assert.strictEqual(t.log.scans, before + 1);
+});
+
 check('a name used by a playlist file with no songs yet is taken too', () => {
   const t = start([{ id: 'quiet', name: 'Quiet', source: 'folder', description: '', legacy: { folder: 'Quiet' }, songs: [] }]);
   assert.deepStrictEqual([t.app.createPlaylist('quiet', '').ok, t.app.createPlaylist('quiet', '').error], [false, 'taken']);

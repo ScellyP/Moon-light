@@ -234,6 +234,7 @@
   window.SpotifyUI = {
     setView, stepView, getCover, refreshTint: () => updateTint(),
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
+    refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
   };
 
   /* =======================================================================
