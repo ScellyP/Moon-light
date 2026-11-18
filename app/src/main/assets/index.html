@@ -3064,8 +3064,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sidebar-header, #welcome { position: relative; }
 
 /* Live moon-phase badge (filled in by moon-theme.js). */
-.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; }
-.moon-badge svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; }
+.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
 #novel-picker-head h1 .moon-badge { margin-left: 10px; width: 20px; height: 20px; opacity: .85; }
 #novel-picker-head h1 { display: flex; align-items: center; }
 #status-gap .moon-badge { position: absolute; right: 16px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; opacity: .75; pointer-events: none; }
@@ -3153,10 +3153,17 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 
 /* Library avatar: today's real moon, big, in its own night sky. */
 #sp-lib-avatar {
-  background: radial-gradient(circle at 50% 50%, rgba(243,239,224,.18), transparent 70%), linear-gradient(145deg, #1a2142, #0b0d1a);
-  color: #f3efe0; border: 1px solid rgba(243,239,224,.18);
+  background: radial-gradient(circle at 50% 50%, rgba(243,239,224,.18), transparent 70%), linear-gradient(145deg, var(--panel-2, #1a2142), var(--bg, #0b0d1a));
+  color: var(--text, #f3efe0); border: 1px solid var(--border, rgba(243,239,224,.18));
+}
+.theme-light #sp-lib-avatar {
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 70%), linear-gradient(145deg, var(--panel-2, #eceef2), var(--raised, #e1e4ea));
+  border: 1px solid var(--border, #d4d8e2);
+  color: var(--text, #14171f);
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);
 }
 .moon-badge.big { width: 62px; height: 62px; filter: drop-shadow(0 0 10px rgba(243,239,224,.45)); }
+.theme-light .moon-badge.big { filter: drop-shadow(0 0 6px rgba(0,0,0,.18)); }
 #sp-lib-phase { margin-top: -4px; font-size: 12px; letter-spacing: .06em; color: var(--sp-sub, var(--muted)); text-align: center; }
 
 /* Playing: the play button glows like the moon. */
@@ -3242,7 +3249,7 @@ button, a, li, input[type="range"], select, summary, [role="button"] { touch-act
 #sp-lib-hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 12px;
   justify-items: start; padding: 4px 20px 16px; }
 #sp-lib-avatar { grid-column: 1; grid-row: 1; width: 48px; height: 48px; }
-#sp-lib-avatar .moon-badge.big { width: 30px; height: 30px; }
+#sp-lib-avatar .moon-badge.big { width: 34px; height: 34px; }
 #sp-lib-phase { grid-column: 2; grid-row: 1; margin: 0; text-align: left; }
 #audio-scan-btn { grid-column: 3; grid-row: 1; justify-self: end; }
 #sp-lib-stats { grid-column: 1 / 3; grid-row: 2; margin: 0; gap: 22px; justify-content: flex-start; }

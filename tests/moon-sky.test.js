@@ -96,5 +96,76 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     console.log('ok - disabled comets perform zero timer or background work');
   }
 
-  console.log('\nAll 6 background visual effects tests passed cleanly!');
+  // 7. Moon icon asset verification (Item 7)
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const iconPath = path.join(__dirname, '../app/src/main/assets/moon-icon.webp');
+    assert.ok(fs.existsSync(iconPath), 'moon-icon.webp asset exists in app/src/main/assets');
+    const buf = fs.readFileSync(iconPath);
+    assert.ok(buf.length > 500, 'moon-icon.webp is non-empty');
+    assert.strictEqual(buf.slice(0, 4).toString('ascii'), 'RIFF', 'valid RIFF header');
+    assert.strictEqual(buf.slice(8, 12).toString('ascii'), 'WEBP', 'valid WEBP container');
+    console.log('ok - moon-icon.webp asset exists and is a valid WebP image');
+  }
+
+  // 8. Moon badge rendering replaces vector graphic with custom image asset
+  {
+    const elements = [];
+    const labels = [];
+    const fakeDoc = {
+      querySelectorAll: (sel) => {
+        if (sel === '[data-moon]') return elements;
+        if (sel === '[data-moon-label]') return labels;
+        return [];
+      },
+      createElement: (tag) => {
+        const attrs = {};
+        return {
+          tagName: tag.toUpperCase(),
+          setAttribute: (k, v) => { attrs[k] = v; },
+          getAttribute: (k) => attrs[k],
+          classList: { add: () => {} },
+          style: {},
+          src: '',
+          alt: '',
+          className: '',
+        };
+      },
+    };
+
+    const badgeEl = {
+      children: [],
+      appendChild: function (child) { this.children.push(child); },
+      setAttribute: function (k, v) { this[k] = v; },
+      textContent: 'old',
+    };
+    elements.push(badgeEl);
+
+    const labelEl = { textContent: '' };
+    labels.push(labelEl);
+
+    // Mock NovelMoonLock on global
+    global.NovelMoonLock = {
+      moonPhaseInfo: () => ({ name: 'Waxing Crescent', fraction: 0.15, waxing: true }),
+    };
+
+    const savedDoc = global.document;
+    global.document = fakeDoc;
+    try {
+      MoonSky.paintMoonBadges();
+      assert.strictEqual(labelEl.textContent, 'Waxing Crescent', 'sets label text');
+      assert.strictEqual(badgeEl.children.length, 1, 'adds 1 child element');
+      const img = badgeEl.children[0];
+      assert.strictEqual(img.tagName, 'IMG', 'child is an <img>, not SVG vector');
+      assert.strictEqual(img.src, 'moon-icon.webp', 'image source is moon-icon.webp');
+      assert.strictEqual(img.className, 'moon-icon-img', 'image has moon-icon-img class');
+      assert.strictEqual(badgeEl['title'], 'Waxing Crescent', 'sets title on badge container');
+    } finally {
+      global.document = savedDoc;
+    }
+    console.log('ok - paintMoonBadges renders custom moon image asset with moon phase label');
+  }
+
+  console.log('\nAll 8 background visual effects and moon icon tests passed cleanly!');
 })();
