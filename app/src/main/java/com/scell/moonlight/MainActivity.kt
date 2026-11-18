@@ -1778,15 +1778,51 @@ class MainActivity : ComponentActivity() {
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
                 val share = PlaylistShare(playerRoot, shareDir)
-                val pkgRes = share.createPackage(playlistKey, password.takeIf { it.isNotBlank() })
+                var lastNotifTime = 0L
+
+                runOnUiThread {
+                    updateSharePackagingNotification(playlistKey, 0, 0)
+                }
+
+                val pkgRes = share.createPackage(playlistKey, password.takeIf { it.isNotBlank() }) { current, total, _ ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastNotifTime > 300 || current == total) {
+                        lastNotifTime = now
+                        runOnUiThread {
+                            updateSharePackagingNotification(playlistKey, current, total)
+                        }
+                    }
+                }
+
                 if (!pkgRes.success) {
-                    runOnUiThread { callPage("onPlaylistShareComplete", pkgRes.toJson()) }
+                    runOnUiThread {
+                        updateShareErrorNotification(playlistKey, pkgRes.error ?: "Failed to package playlist")
+                        callPage("onPlaylistShareComplete", pkgRes.toJson())
+                    }
                     return@Thread
                 }
 
                 val f = File(pkgRes.filePath)
                 if (method.equals("filebin", ignoreCase = true)) {
-                    val (uploaded, shareUrl) = share.uploadToFilebin(f)
+                    runOnUiThread {
+                        updateShareUploadProgressNotification(playlistKey, 0L, f.length())
+                    }
+
+                    var lastUploadTime = 0L
+                    var lastPercent = -1
+
+                    val (uploaded, shareUrl) = share.uploadToFilebin(f) { uploadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastPercent && (now - lastUploadTime > 300 || percent == 100)) {
+                            lastUploadTime = now
+                            lastPercent = percent
+                            runOnUiThread {
+                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes)
+                            }
+                        }
+                    }
+
                     val res = JSONObject().apply {
                         put("success", uploaded)
                         put("method", "filebin")
@@ -1795,13 +1831,21 @@ class MainActivity : ComponentActivity() {
                         put("songCount", pkgRes.songCount)
                         if (!uploaded) put("error", shareUrl)
                     }.toString()
+
                     runOnUiThread {
-                        callPage("onPlaylistShareComplete", res)
                         if (uploaded) {
+                            updateShareCompleteNotification(playlistKey, shareUrl)
+                            callPage("onPlaylistShareComplete", res)
                             shareText(shareUrl)
+                        } else {
+                            updateShareErrorNotification(playlistKey, shareUrl)
+                            callPage("onPlaylistShareComplete", res)
                         }
                     }
                 } else {
+                    runOnUiThread {
+                        cancelShareNotification()
+                    }
                     val res = JSONObject().apply {
                         put("success", true)
                         put("method", "direct")
@@ -1844,14 +1888,37 @@ class MainActivity : ComponentActivity() {
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
                 val share = PlaylistShare(playerRoot, shareDir)
-                val targetFile: File? = if (PlaylistShare.isFilebinUrl(source)) {
-                    val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source)
+                val isFb = PlaylistShare.isFilebinUrl(source)
+                if (isFb) {
+                    runOnUiThread {
+                        updateShareDownloadProgressNotification(source, 0L, 0L)
+                    }
+                }
+
+                var lastDlTime = 0L
+                var lastDlPercent = -1
+
+                val targetFile: File? = if (isFb) {
+                    val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source) { downloadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastDlPercent && (now - lastDlTime > 300 || percent == 100)) {
+                            lastDlTime = now
+                            lastDlPercent = percent
+                            runOnUiThread {
+                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes)
+                            }
+                        }
+                    }
                     if (!dlSuccess || downloadedFile == null) {
                         val err = JSONObject().apply {
                             put("success", false)
                             put("error", "Could not download playlist package from Filebin")
                         }.toString()
-                        runOnUiThread { callPage("onPlaylistImportComplete", err) }
+                        runOnUiThread {
+                            updateShareErrorNotification("Import", "Could not download package from Filebin")
+                            callPage("onPlaylistImportComplete", err)
+                        }
                         return@Thread
                     }
                     downloadedFile
@@ -1864,12 +1931,16 @@ class MainActivity : ComponentActivity() {
                         put("success", false)
                         put("error", "Playlist package file not found")
                     }.toString()
-                    runOnUiThread { callPage("onPlaylistImportComplete", err) }
+                    runOnUiThread {
+                        updateShareErrorNotification("Import", "Playlist package file not found")
+                        callPage("onPlaylistImportComplete", err)
+                    }
                     return@Thread
                 }
 
                 val impRes = share.importPackage(targetFile, password.takeIf { it.isNotBlank() })
                 runOnUiThread {
+                    cancelShareNotification()
                     callPage("onPlaylistImportComplete", impRes.toJson())
                     if (impRes.success) {
                         runAudioScan()
@@ -2498,6 +2569,127 @@ class MainActivity : ComponentActivity() {
             .setOnlyAlertOnce(true)
             .build()
         nm.notify(PLAYLIST_NOTIF_ID, notif)
+    }
+
+    // ---- Playlist share & upload notification --------------------------------------------------
+    private val SHARE_NOTIF_ID = 2002
+    private val SHARE_CHANNEL_ID = "moonlight_playlist_share"
+
+    private fun ensureShareChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(SHARE_CHANNEL_ID) == null) {
+                val ch = android.app.NotificationChannel(
+                    SHARE_CHANNEL_ID,
+                    "Playlist Sharing",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "Packaging and upload progress for shared playlists." }
+                nm.createNotificationChannel(ch)
+            }
+        }
+    }
+
+    fun updateSharePackagingNotification(playlistName: String, done: Int, total: Int) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Packaging \"$playlistName\"")
+            .setContentText(if (total > 0) "Packing song $done of $total..." else "Preparing songs...")
+            .setProgress(if (total > 0) total else 0, done, total <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareUploadProgressNotification(playlistName: String, uploadedBytes: Long, totalBytes: Long) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+        val uploadedMb = uploadedBytes.toDouble() / (1024.0 * 1024.0)
+        val totalMb = totalBytes.toDouble() / (1024.0 * 1024.0)
+        val text = if (totalBytes > 0) {
+            String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", uploadedMb, totalMb, percent)
+        } else {
+            "Uploading to Filebin..."
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Uploading \"$playlistName\" to Filebin")
+            .setContentText(text)
+            .setProgress(100, percent, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareCompleteNotification(playlistName: String, shareUrl: String) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareUrl)
+        }
+        val chooser = Intent.createChooser(shareIntent, "Share playlist link")
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        } else {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(this, SHARE_NOTIF_ID, chooser, flags)
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Playlist uploaded to Filebin!")
+            .setContentText("Tap to share link (expires in 6 days)")
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareErrorNotification(playlistName: String, errorMsg: String) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Share failed: $playlistName")
+            .setContentText(errorMsg)
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareDownloadProgressNotification(source: String, downloadedBytes: Long, totalBytes: Long) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+        val dlMb = downloadedBytes.toDouble() / (1024.0 * 1024.0)
+        val totalMb = totalBytes.toDouble() / (1024.0 * 1024.0)
+        val text = if (totalBytes > 0) {
+            String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", dlMb, totalMb, percent)
+        } else {
+            "Downloading package from Filebin..."
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Downloading shared playlist")
+            .setContentText(text)
+            .setProgress(if (totalBytes > 0) 100 else 0, percent, totalBytes <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun cancelShareNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.cancel(SHARE_NOTIF_ID)
     }
 
     /**

@@ -74,7 +74,7 @@
 
   function startShare(playlistKey, password, method) {
     var b = root.AndroidBridge || (typeof window !== 'undefined' ? window.AndroidBridge : null);
-    showToast(method === 'filebin' ? 'Packaging and uploading to Filebin...' : 'Packaging playlist files...');
+    showToast(method === 'filebin' ? 'Packaging and uploading to Filebin (see notification for progress)...' : 'Packaging playlist files...');
 
     if (b && typeof b.sharePlaylistPackage === 'function') {
       try {
@@ -109,7 +109,7 @@
   function importFromUrl(url, password) {
     if (url) lastImportSource = url;
     var b = root.AndroidBridge || (typeof window !== 'undefined' ? window.AndroidBridge : null);
-    showToast('Downloading and importing shared playlist...');
+    showToast('Downloading and importing shared playlist (see notification for progress)...');
 
     if (b && typeof b.importSharedPlaylist === 'function') {
       try {

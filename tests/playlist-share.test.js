@@ -29,6 +29,8 @@ check('PlaylistShare.kt exists and implements packaging, AES-256 encryption, and
   assert.ok(src.includes('filebin.net'), 'interacts with filebin.net REST API');
   assert.ok(src.includes('moonlight-shared-playlist'), 'writes moonlight-shared-playlist manifest');
   assert.ok(src.includes('MAGIC_ENCRYPTED'), 'uses magic header to detect encrypted packages');
+  assert.ok(src.includes('setFixedLengthStreamingMode'), 'streams upload bytes directly without memory buffering');
+  assert.ok(src.includes('onProgress'), 'provides progress callback for packaging and upload tracking');
 });
 
 check('MainActivity exposes playlist sharing and import bridge interfaces', () => {
@@ -38,6 +40,9 @@ check('MainActivity exposes playlist sharing and import bridge interfaces', () =
   assert.ok(/@JavascriptInterface\s+fun isPlaylistShareFilebinUrl\(/.test(main), 'isPlaylistShareFilebinUrl exists');
   assert.ok(main.includes('onPlaylistShareComplete'), 'calls onPlaylistShareComplete');
   assert.ok(main.includes('onPlaylistImportComplete'), 'calls onPlaylistImportComplete');
+  assert.ok(main.includes('updateSharePackagingNotification'), 'implements packaging progress notification');
+  assert.ok(main.includes('updateShareUploadProgressNotification'), 'implements upload progress notification');
+  assert.ok(main.includes('moonlight_playlist_share'), 'uses dedicated sharing notification channel');
 });
 
 check('share_paths.xml exposes shared-playlists cache folder to FileProvider', () => {

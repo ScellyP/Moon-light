@@ -99,7 +99,8 @@ class PlaylistShare(
      */
     fun createPackage(
         playlistKey: String,
-        password: String? = null
+        password: String? = null,
+        onProgress: ((currentSong: Int, totalSongs: Int, songName: String) -> Unit)? = null
     ): SharePackageResult {
         return try {
             cacheDir.mkdirs()
@@ -172,7 +173,8 @@ class PlaylistShare(
 
                 // Songs
                 val buf = ByteArray(64 * 1024)
-                for (sFile in songFiles) {
+                for ((idx, sFile) in songFiles.withIndex()) {
+                    onProgress?.invoke(idx + 1, songFiles.size, sFile.name)
                     zos.putNextEntry(ZipEntry("songs/${sFile.name}").apply { time = sFile.lastModified() })
                     FileInputStream(sFile).use { fis ->
                         var len: Int
@@ -223,7 +225,8 @@ class PlaylistShare(
      */
     fun uploadToFilebin(
         file: File,
-        binId: String? = null
+        binId: String? = null,
+        onProgress: ((uploadedBytes: Long, totalBytes: Long) -> Unit)? = null
     ): Pair<Boolean, String> {
         return try {
             if (!file.isFile || file.length() == 0L) {
@@ -231,22 +234,28 @@ class PlaylistShare(
             }
             val bin = binId ?: generateRandomBinId()
             val uploadUrl = URL("https://filebin.net/$bin/${file.name}")
+            val totalBytes = file.length()
             val conn = (uploadUrl.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
                 setRequestProperty("Content-Type", "application/octet-stream")
                 setRequestProperty("User-Agent", "Moonlight-MusicPlayer/1.16")
-                setConnectTimeout(15000)
-                setReadTimeout(60000)
+                setConnectTimeout(20000)
+                setReadTimeout(300000) // 5 minutes for large multi-song uploads
+                setFixedLengthStreamingMode(totalBytes) // Direct socket streaming, avoid RAM buffering
             }
 
+            var uploadedBytes = 0L
             FileInputStream(file).use { fis ->
                 conn.outputStream.use { os ->
                     val buf = ByteArray(32 * 1024)
                     var len: Int
                     while (fis.read(buf).also { len = it } > 0) {
                         os.write(buf, 0, len)
+                        uploadedBytes += len
+                        onProgress?.invoke(uploadedBytes, totalBytes)
                     }
+                    os.flush()
                 }
             }
 
@@ -268,7 +277,8 @@ class PlaylistShare(
      * Downloads a playlist package from a Filebin link into cacheDir.
      */
     fun downloadFromFilebin(
-        filebinUrl: String
+        filebinUrl: String,
+        onProgress: ((downloadedBytes: Long, totalBytes: Long) -> Unit)? = null
     ): Pair<Boolean, File?> {
         return try {
             val parsed = parseFilebinUrl(filebinUrl) ?: return false to null
@@ -283,8 +293,8 @@ class PlaylistShare(
                 val metaUrl = URL("https://filebin.net/$bin")
                 val metaConn = (metaUrl.openConnection() as HttpURLConnection).apply {
                     setRequestProperty("Accept", "application/json")
-                    connectTimeout = 10000
-                    readTimeout = 15000
+                    connectTimeout = 15000
+                    readTimeout = 30000
                 }
                 if (metaConn.responseCode != 200) return false to null
                 val metaStr = metaConn.inputStream.bufferedReader().use { it.readText() }
@@ -307,10 +317,13 @@ class PlaylistShare(
 
             val targetFile = File(cacheDir, "downloaded-${bin}.moonlight")
             val conn = (downloadUrl.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15000
-                readTimeout = 60000
+                connectTimeout = 20000
+                readTimeout = 300000
             }
             if (conn.responseCode != 200) return false to null
+
+            val totalBytes = conn.contentLengthLong
+            var downloadedBytes = 0L
 
             conn.inputStream.use { ins ->
                 FileOutputStream(targetFile).use { fos ->
@@ -318,7 +331,10 @@ class PlaylistShare(
                     var len: Int
                     while (ins.read(buf).also { len = it } > 0) {
                         fos.write(buf, 0, len)
+                        downloadedBytes += len
+                        onProgress?.invoke(downloadedBytes, totalBytes)
                     }
+                    fos.flush()
                 }
             }
             true to targetFile
