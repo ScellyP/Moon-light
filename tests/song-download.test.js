@@ -362,12 +362,17 @@ check('every element the page looks up exists in index.html, and Download is a t
 check('download screen buttons and layouts are horizontally centred', () => {
   const assets = path.join(__dirname, '../app/src/main/assets');
   const html = fs.readFileSync(path.join(assets, 'index.html'), 'utf8');
+  const js = fs.readFileSync(path.join(assets, 'song-download.js'), 'utf8');
   assert.ok(/\.dl-primary,\s*\.dl-secondary\s*\{[\s\S]*?justify-content:\s*center/.test(html));
   assert.ok(/\.dl-primary,\s*\.dl-secondary\s*\{[\s\S]*?text-align:\s*center/.test(html));
   assert.ok(/\.dl-row-end\s*\{[\s\S]*?justify-content:\s*center/.test(html));
   assert.ok(/\.dl-crop-actions\s*\{[\s\S]*?justify-content:\s*center/.test(html));
   assert.ok(/\.dl-sp-action-bar\{[\s\S]*?justify-content:\s*center/.test(html));
   assert.ok(/\.dl-sp-save-btn\{[\s\S]*?justify-content:\s*center/.test(html));
+  assert.ok(/\.dl-sp-page\{[\s\S]*?margin:\s*0 auto/.test(html));
+  assert.ok(/\.dl-sp-song-list\{[\s\S]*?margin:\s*0 auto/.test(html));
+  assert.ok(/\.dl-pl-step\s*\{[\s\S]*?align-items:\s*center/.test(html));
+  assert.ok(js.includes('buildPlResolving') && js.includes('dl-spinner') && js.includes('dl-bar'));
 });
 
 console.log(n + ' checks passed');

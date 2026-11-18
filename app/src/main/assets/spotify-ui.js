@@ -51,9 +51,244 @@
     return songs + (songs === 1 ? ' song' : ' songs');
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { greetingForHour, planHome, captionFor };
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
 
-  const $ = (id) => document.getElementById(id);
+  /* ---------- colour maths ---------- */
+
+  /** Relative luminance (WCAG) of an sRGB colour, 0..1. */
+  function luminance(r, g, b) {
+    const linear = (channel) => {
+      const c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  }
+
+  /** RGB (0..255) -> [h, s, l], each 0..1. */
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+    const l = (max + min) / 2;
+
+    let h = 0;
+    let s = 0;
+
+    if (delta) {
+      s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+
+      if (max === r) h = (g - b) / delta + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / delta + 2;
+      else h = (r - g) / delta + 4;
+
+      h /= 6;
+    }
+    return [h, s, l];
+  }
+
+  /** [h, s, l] (each 0..1) -> [r, g, b] (0..255, rounded). */
+  function hslToRgb(h, s, l) {
+    const channel = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+
+    return [
+      Math.round(channel(p, q, h + 1 / 3) * 255),
+      Math.round(channel(p, q, h) * 255),
+      Math.round(channel(p, q, h - 1 / 3) * 255),
+    ];
+  }
+
+  const toCssRgb = (c) => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+  const toCssRgba = (c, alpha) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
+
+  /* ---------- reading the cover ---------- */
+
+  /**
+   * Weighted extraction of the dominant colour from a tiny copy of the cover art.
+   * Prioritises chromatic tones when available, but properly handles light colours,
+   * pastels, and grey / monochrome shades rather than discarding them.
+   */
+  function dominantRgb(image, customDocument) {
+    const SIZE = 32;
+    const doc = customDocument || (typeof document !== 'undefined' ? document : null);
+    if (!doc || !doc.createElement) return null;
+
+    const canvas = doc.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext ? canvas.getContext('2d', { willReadFrequently: true }) : null;
+    if (!ctx || !ctx.getImageData) return null;
+    try {
+      ctx.drawImage(image, 0, 0, SIZE, SIZE);
+    } catch (e) {
+      return null;
+    }
+
+    const imgData = ctx.getImageData(0, 0, SIZE, SIZE);
+    if (!imgData || !imgData.data) return null;
+    const pixels = imgData.data;
+
+    let chromSumR = 0, chromSumG = 0, chromSumB = 0, chromWeight = 0;
+    let genSumR = 0, genSumG = 0, genSumB = 0, genCount = 0;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      const alpha = pixels[i + 3];
+      if (alpha < 128) continue; // skip transparent pixels
+
+      const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+      const [, saturation, lightness] = rgbToHsl(r, g, b);
+
+      genSumR += r;
+      genSumG += g;
+      genSumB += b;
+      genCount++;
+
+      // Chromatic candidate: visible colour (not extreme pitch black, not blown-out white)
+      if (saturation >= 0.10 && lightness >= 0.05 && lightness <= 0.98) {
+        // Taper gently at extreme borders so light colours & pastels keep strong presence
+        const lightFactor = Math.max(0, 1 - Math.pow(Math.abs(lightness - 0.5) * 1.85, 4));
+        const satFactor = Math.sqrt(saturation);
+        const weight = lightFactor * satFactor;
+        if (weight > 0) {
+          chromSumR += r * weight;
+          chromSumG += g * weight;
+          chromSumB += b * weight;
+          chromWeight += weight;
+        }
+      }
+    }
+
+    if (genCount === 0) return null; // completely transparent
+
+    // If chromatic pixels are present, use the weighted chromatic colour:
+    if (chromWeight >= 0.4) {
+      return [chromSumR / chromWeight, chromSumG / chromWeight, chromSumB / chromWeight];
+    }
+
+    // Otherwise, represent the cover's actual neutral / grey / monochrome shade:
+    return [genSumR / genCount, genSumG / genCount, genSumB / genCount];
+  }
+
+  /**
+   * Generates a complete, balanced theme palette from the dominant RGB colour.
+   * Converts overly bright colours into darker, usable shades in dark theme,
+   * handles neutral / grey shades with a refined slate/silver palette, and
+   * maintains strict WCAG contrast and visual consistency across all UI variables.
+   */
+  function computeTintVars(rgb, isDark) {
+    if (!rgb || rgb.length < 3) return null;
+    const [hue, rawSaturation, lightness] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+    const dark = isDark !== undefined ? isDark : true;
+
+    let background, text, muted, accent, accentStrong, accentInk;
+
+    // Check if the colour is a neutral / grey / monochrome shade:
+    const isGrey = rawSaturation < 0.12;
+
+    if (isGrey) {
+      // Greyscale / monochrome: create a sleek slate / silver / platinum theme
+      if (dark) {
+        // Deep slate/charcoal background
+        background = hslToRgb(215 / 360, 0.06, 0.085);
+        // Clean high-contrast off-white text (13:1 contrast)
+        text = hslToRgb(215 / 360, 0.03, 0.94);
+        muted = hslToRgb(215 / 360, 0.05, 0.68);
+
+        // Elegant platinum/silver accent
+        const accLight = lightness < 0.35 ? 0.76 : 0.82;
+        accent = hslToRgb(215 / 360, 0.06, accLight);
+        accentStrong = hslToRgb(215 / 360, 0.06, clamp(accLight + 0.08, 0.1, 0.95));
+        accentInk = hslToRgb(215 / 360, 0.06, 0.085);
+      } else {
+        // Light theme: crisp light surface with charcoal accent
+        background = hslToRgb(215 / 360, 0.04, 0.95);
+        text = hslToRgb(215 / 360, 0.06, 0.12);
+        muted = hslToRgb(215 / 360, 0.06, 0.40);
+        accent = hslToRgb(215 / 360, 0.10, 0.32);
+        accentStrong = hslToRgb(215 / 360, 0.10, 0.22);
+        accentInk = [255, 255, 255];
+      }
+    } else {
+      // Chromatic colour:
+      if (dark) {
+        // Convert overly bright colours into darker, usable shades when generating a dark theme.
+        // Hues around yellow/green (40deg to 150deg) have high perceived luminance.
+        const isWarmHighLum = hue >= 0.10 && hue <= 0.42;
+
+        let accentLight;
+        if (lightness > 0.60) {
+          // Overly bright / pastel / light colour: tone down into a rich, darker usable shade
+          const excess = lightness - 0.60;
+          accentLight = 0.54 + excess * 0.14; // maps 0.60..1.0 -> 0.54..0.596
+          if (isWarmHighLum) accentLight -= 0.05; // deeper amber/gold or rich forest/jade
+        } else {
+          accentLight = clamp(lightness, 0.50, 0.65);
+          if (isWarmHighLum && accentLight > 0.56) accentLight = 0.54;
+        }
+
+        // Boost saturation so the toned-down darker shade is rich and vivid rather than muddy
+        const accentSat = clamp(rawSaturation * 1.35, 0.55, 0.92);
+        accent = hslToRgb(hue, accentSat, accentLight);
+        accentStrong = hslToRgb(hue, accentSat, clamp(accentLight + 0.08, 0.1, 0.78));
+
+        // Background: deep atmospheric shade derived from the hue
+        const bgSat = clamp(rawSaturation * 0.45, 0.12, 0.40);
+        background = hslToRgb(hue, bgSat, 0.085);
+
+        // Text & muted: legible with high contrast on the dark background
+        text = hslToRgb(hue, clamp(rawSaturation * 0.15, 0.03, 0.12), 0.94);
+        muted = hslToRgb(hue, clamp(rawSaturation * 0.15, 0.03, 0.12), 0.68);
+
+        // Accent ink: contrast check against accent luminance
+        const accLum = luminance(accent[0], accent[1], accent[2]);
+        accentInk = accLum >= 0.28 ? background : [255, 255, 255];
+      } else {
+        // Light theme:
+        const accentSat = clamp(rawSaturation, 0.45, 0.85);
+        const accentLight = clamp(lightness, 0.30, 0.44);
+        accent = hslToRgb(hue, accentSat, accentLight);
+        accentStrong = hslToRgb(hue, accentSat, clamp(accentLight - 0.08, 0.18, 0.40));
+
+        background = hslToRgb(hue, clamp(rawSaturation * 0.2, 0.04, 0.22), 0.95);
+        text = hslToRgb(hue, clamp(rawSaturation * 0.25, 0.08, 0.28), 0.12);
+        muted = hslToRgb(hue, clamp(rawSaturation * 0.20, 0.06, 0.22), 0.38);
+        accentInk = [255, 255, 255];
+      }
+    }
+
+    return {
+      '--bg': toCssRgb(background),
+      '--text': toCssRgb(text),
+      '--muted': toCssRgb(muted),
+      '--accent': toCssRgb(accent),
+      '--accent-strong': toCssRgb(accentStrong),
+      '--accent-ink': toCssRgb(accentInk),
+      '--accent-soft': toCssRgba(accent, 0.13),
+      '--accent-line': toCssRgba(accent, 0.42),
+    };
+  }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      greetingForHour, planHome, captionFor, clamp, luminance, rgbToHsl, hslToRgb,
+      toCssRgb, toCssRgba, dominantRgb, computeTintVars
+    };
+  }
+
+  const $ = (id) => (typeof document !== 'undefined' && document.getElementById ? document.getElementById(id) : null);
 
   const panel = $('audio-panel');
   if (!panel) return;
@@ -70,6 +305,7 @@
   const el = {
     // kit: layout
     views: $('sp-views'),
+    viewsTrack: $('sp-views-track'),
     sheet: $('sp-sheet'),
     sleepOptions: $('sp-sleep-opts'),
 
@@ -132,10 +368,6 @@
     node.classList.add('sp-swap');
   }
 
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
   function textOf(node) {
     return ((node && node.textContent) || '').trim();
   }
@@ -161,31 +393,6 @@
      ======================================================================= */
 
   let enterTimer = 0;
-  let slideCleanTimer = 0;
-  let traversalTimer = 0;
-  let activeFromEl = null;
-  let activeToEl = null;
-
-  function clearSlideClasses() {
-    clearTimeout(slideCleanTimer);
-    clearTimeout(traversalTimer);
-    panel.classList.remove('sp-traversing');
-    panel.removeAttribute('data-slide');
-    if (activeFromEl && activeFromEl.classList) {
-      activeFromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      activeFromEl = null;
-    }
-    if (activeToEl && activeToEl.classList) {
-      activeToEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      activeToEl = null;
-    }
-    const allViews = document.querySelectorAll('.sp-view');
-    if (allViews && allViews.forEach) {
-      allViews.forEach((v) => {
-        if (v && v.classList) v.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      });
-    }
-  }
 
   function setNavHighlight(viewName) {
     const buttons = document.querySelectorAll('#sp-nav [data-sp-view]');
@@ -198,42 +405,6 @@
     }
   }
 
-  function runSlideStep(fromName, toName, dir, durationMs, onDone) {
-    const fromEl = document.getElementById('sp-view-' + fromName);
-    const toEl = document.getElementById('sp-view-' + toName);
-
-    if (!fromEl || !toEl || !fromEl.classList || !toEl.classList) {
-      if (onDone) onDone();
-      return;
-    }
-
-    if (panel.style && panel.style.setProperty) {
-      panel.style.setProperty('--slide-duration', durationMs + 'ms');
-    }
-    panel.setAttribute('data-slide', dir);
-
-    fromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-    toEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-
-    const outClass = dir === 'right' ? 'sp-slide-out-left' : 'sp-slide-out-right';
-    const inClass  = dir === 'right' ? 'sp-slide-in-right' : 'sp-slide-in-left';
-
-    fromEl.classList.add(outClass);
-    toEl.classList.add(inClass);
-
-    activeFromEl = fromEl;
-    activeToEl = toEl;
-
-    slideCleanTimer = setTimeout(() => {
-      if (fromEl && fromEl.classList) fromEl.classList.remove(outClass);
-      if (toEl && toEl.classList) toEl.classList.remove(inClass);
-      activeFromEl = null;
-      activeToEl = null;
-      panel.removeAttribute('data-slide');
-      if (onDone) onDone();
-    }, durationMs);
-  }
-
   function setView(name, opts) {
     if (VIEWS.indexOf(name) < 0) return;
 
@@ -243,90 +414,51 @@
 
     if (prev === name) return;
 
-    // First load / same view
-    if (prevIdx < 0) {
-      panel.setAttribute('data-view', name);
-      setNavHighlight(name);
-      if (el.views) el.views.scrollTop = 0;
-      closeSheet();
-      sync();
-      return;
-    }
-
-    clearSlideClasses();
-
-    const dir = (opts && opts.dir) || (nextIdx > prevIdx ? 'right' : 'left');
-    const distance = Math.abs(nextIdx - prevIdx);
-
-    const isBrowserEnv = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
-    const shouldTraverse = distance > 1 && isBrowserEnv && (!opts || !opts.direct);
-
     // Immediate attribute update so state readers and synchronous tests remain accurate
     panel.setAttribute('data-view', name);
-    setNavHighlight(name);
+    setNavHighlight(name, !!(opts && opts.immediate));
 
-    if (shouldTraverse) {
-      panel.classList.add('sp-traversing');
-
-      const steps = [];
-      const delta = nextIdx > prevIdx ? 1 : -1;
-      for (let i = prevIdx + delta; (delta > 0 ? i <= nextIdx : i >= nextIdx); i += delta) {
-        steps.push(VIEWS[i]);
-      }
-
-      // Total sweep duration capped at ~600-750ms (well under 1s)
-      const stepDuration = Math.min(180, Math.max(110, Math.floor(650 / steps.length)));
-      let curStep = 0;
-      let curFrom = prev;
-
-      function executeNextStep() {
-        if (curStep >= steps.length) {
-          clearSlideClasses();
-          panel.setAttribute('data-view', name);
-          setNavHighlight(name);
-          if (el.views) el.views.scrollTop = 0;
-          closeSheet();
-          sync();
-          return;
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    const transformVal = 'translate3d(-' + (nextIdx * 100) + '%, 0, 0)';
+    if (panel.style && panel.style.setProperty) {
+      panel.style.setProperty('--sp-active-index', nextIdx);
+    }
+    if (track && track.style) {
+      if (opts && opts.immediate) {
+        track.style.transition = 'none';
+        track.style.transform = transformVal;
+        if (track.style.setProperty) {
+          track.style.setProperty('transition', 'none');
+          track.style.setProperty('transform', transformVal);
         }
-
-        const curTo = steps[curStep];
-        setNavHighlight(curTo);
-
-        runSlideStep(curFrom, curTo, dir, stepDuration, () => {
-          curFrom = curTo;
-          curStep++;
-          if (curStep === steps.length) {
-            clearSlideClasses();
-            panel.setAttribute('data-view', name);
-            setNavHighlight(name);
-            if (el.views) el.views.scrollTop = 0;
-            closeSheet();
-            sync();
-          } else {
-            traversalTimer = setTimeout(executeNextStep, 8);
-          }
-        });
+        void track.offsetWidth;
+        track.style.transition = '';
+        if (track.style.removeProperty) track.style.removeProperty('transition');
+      } else {
+        track.style.transform = transformVal;
+        if (track.style.setProperty) track.style.setProperty('transform', transformVal);
       }
-
-      executeNextStep();
-      return;
     }
 
-    // Adjacent tab or direct jump
-    const duration = distance === 1 ? 240 : 260;
-    runSlideStep(prev, name, dir, duration, () => {
-      panel.removeAttribute('data-slide');
-      if (el.views) el.views.scrollTop = 0;
-      closeSheet();
-      sync();
-    });
+    // Active tab management: the target tab gets .is-active immediately so it is interactive and visible
+    const allViews = document.querySelectorAll('.sp-view');
+    if (allViews && allViews.forEach) {
+      allViews.forEach((v) => {
+        if (v && v.classList) {
+          if (v.id === 'sp-view-' + name) {
+            v.classList.add('is-active');
+          } else {
+            v.classList.remove('is-active');
+          }
+        }
+      });
+    }
 
-    panel.classList.add('sp-enter');
     clearTimeout(enterTimer);
-    enterTimer = setTimeout(() => panel.classList.remove('sp-enter'), ENTER_ANIMATION_MS);
+    if (opts && opts.immediate) {
+      if (el.views) el.views.scrollTop = 0;
+    }
 
-    if (el.views) el.views.scrollTop = 0;
     closeSheet();
     sync();
   }
@@ -355,6 +487,7 @@
     setView, stepView, getCover, refreshTint: () => updateTint(),
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
+    dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
   };
 
   /* =======================================================================
@@ -409,6 +542,16 @@
       case 'sharelinks': {
         closeSheet();
         shareLinks();
+        break;
+      }
+
+      case 'shareplaylist': {
+        closeSheet();
+        const a = window.NovelAudio;
+        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
+        if (window.PlaylistShare && window.PlaylistShare.shareCurrentPlaylist) {
+          window.PlaylistShare.shareCurrentPlaylist(key, getPlaylistTitle());
+        }
         break;
       }
 
@@ -511,8 +654,15 @@
       return;
     }
 
-    // The share icon is only a place-holder for now: it does nothing (the source-links text file is in the ... menu).
-    if (target.closest('#sp-album-share')) return;
+    // Share playlist archive package (Item 3)
+    if (target.closest('#sp-album-share')) {
+      const audio = window.NovelAudio;
+      const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
+      if (window.PlaylistShare && window.PlaylistShare.shareCurrentPlaylist) {
+        window.PlaylistShare.shareCurrentPlaylist(key, getPlaylistTitle());
+      }
+      return;
+    }
 
     // "Edit" chip: the drag-to-reorder screen.
     if (target.closest('#sp-album-reorder')) {
@@ -586,102 +736,7 @@
   let tintKey = null; // src of the cover the tint was computed from ('' = none)
   let tintRgb = null; // the dominant colour of that cover, or null
 
-  /* ---------- colour maths ---------- */
-
-  /** Relative luminance (WCAG) of an sRGB colour, 0..1. */
-  function luminance(r, g, b) {
-    const linear = (channel) => {
-      const c = channel / 255;
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    };
-    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-  }
-
-  /** RGB (0..255) -> [h, s, l], each 0..1. */
-  function rgbToHsl(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const delta = max - min;
-    const l = (max + min) / 2;
-
-    let h = 0;
-    let s = 0;
-
-    if (delta) {
-      s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-
-      if (max === r) h = (g - b) / delta + (g < b ? 6 : 0);
-      else if (max === g) h = (b - r) / delta + 2;
-      else h = (r - g) / delta + 4;
-
-      h /= 6;
-    }
-    return [h, s, l];
-  }
-
-  /** [h, s, l] (each 0..1) -> [r, g, b] (0..255, rounded). */
-  function hslToRgb(h, s, l) {
-    const channel = (p, q, t) => {
-      if (t < 0) t += 1;
-      if (t > 1) t -= 1;
-      if (t < 1 / 6) return p + (q - p) * 6 * t;
-      if (t < 1 / 2) return q;
-      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-      return p;
-    };
-
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-    const p = 2 * l - q;
-
-    return [
-      Math.round(channel(p, q, h + 1 / 3) * 255),
-      Math.round(channel(p, q, h) * 255),
-      Math.round(channel(p, q, h - 1 / 3) * 255),
-    ];
-  }
-
-  const toCssRgb = (c) => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
-  const toCssRgba = (c, alpha) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
-
-  /* ---------- reading the cover ---------- */
-
-  /**
-   * Weighted average of a tiny copy of the cover, favouring saturated,
-   * mid-brightness pixels so the result is a colour rather than mud.
-   * Returns null for (near) greyscale covers.
-   */
-  function dominantRgb(image) {
-    const SIZE = 32;
-    const MIN_TOTAL_WEIGHT = 0.5;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = SIZE;
-    canvas.height = SIZE;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(image, 0, 0, SIZE, SIZE);
-
-    const pixels = ctx.getImageData(0, 0, SIZE, SIZE).data;
-    let sumR = 0, sumG = 0, sumB = 0, totalWeight = 0;
-
-    for (let i = 0; i < pixels.length; i += 4) {
-      const alpha = pixels[i + 3];
-      if (alpha < 128) continue; // skip transparent pixels
-
-      const [, saturation, lightness] = rgbToHsl(pixels[i], pixels[i + 1], pixels[i + 2]);
-      const weight = saturation * saturation * (1 - Math.abs(lightness - 0.5) * 1.6);
-      if (weight <= 0) continue;
-
-      sumR += pixels[i] * weight;
-      sumG += pixels[i + 1] * weight;
-      sumB += pixels[i + 2] * weight;
-      totalWeight += weight;
-    }
-
-    if (totalWeight < MIN_TOTAL_WEIGHT) return null; // greyscale / colourless
-    return [sumR / totalWeight, sumG / totalWeight, sumB / totalWeight];
-  }
+  /* ---------- applying / clearing ---------- */
 
   /**
    * Is the APP theme dark? Read from <html>, not from the panel, because the
@@ -706,8 +761,6 @@
 
     return rgb ? luminance(rgb[0], rgb[1], rgb[2]) < 0.4 : true;
   }
-
-  /* ---------- applying / clearing ---------- */
 
   // The song colours live on the music panel AND on every other screen that carries the class `dyn-colours` (the
   // song / playlist sheets, the add-songs picker, the edit screen, settings), so nothing in the app falls back to
@@ -734,38 +787,7 @@
   }
 
   function applyTint(rgb) {
-    const [hue, rawSaturation] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
-    const lightness = rgbToHsl(rgb[0], rgb[1], rgb[2])[2];
-    const dark = isThemeDark();
-
-    // Accent: keep it vivid, and at a readable lightness for the theme.
-    const accentSat = clamp(rawSaturation, 0.45, 0.9);
-    const accentLight = dark ? clamp(lightness, 0.55, 0.7) : clamp(lightness, 0.3, 0.45);
-    const accent = hslToRgb(hue, accentSat, accentLight);
-    const accentStrong = hslToRgb(
-      hue, accentSat,
-      clamp(accentLight + (dark ? 0.08 : -0.08), 0.1, 0.9)
-    );
-
-    // Background and text come from the same hue, so the whole panel reads
-    // as one theme: a deep tint of the cover with light text on a dark app
-    // theme, a pale tint with dark text on a light one.
-    const tintSat = clamp(rawSaturation, 0.3, 0.8);
-    const background = hslToRgb(hue, tintSat * (dark ? 0.55 : 0.6), dark ? 0.09 : 0.94);
-    const text = hslToRgb(hue, dark ? 0.25 : 0.4, dark ? 0.94 : 0.12);
-    const muted = hslToRgb(hue, dark ? 0.15 : 0.2, dark ? 0.68 : 0.36);
-
-    // (--sp-tint is left out on purpose: index.html keeps its own mix of accent + bg)
-    tintVars = {
-      '--bg': toCssRgb(background),
-      '--text': toCssRgb(text),
-      '--muted': toCssRgb(muted),
-      '--accent': toCssRgb(accent),
-      '--accent-strong': toCssRgb(accentStrong),
-      '--accent-ink': toCssRgb(background),
-      '--accent-soft': toCssRgba(accent, 0.13),
-      '--accent-line': toCssRgba(accent, 0.42),
-    };
+    tintVars = computeTintVars(rgb, isThemeDark());
     pushTint();
   }
 
@@ -1778,6 +1800,20 @@
   setInterval(updateMiniProgress, PROGRESS_INTERVAL_MS);
 
   initFind();
-  setView('library');
+  setView('library', { immediate: true });
   scheduleSync();
+
+  // Startup transition cleanup: remove .no-transition after initial layout settles
+  const appWrapper = $('app') || panel;
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (appWrapper && appWrapper.classList) appWrapper.classList.remove('no-transition');
+        if (panel && panel.classList) panel.classList.remove('no-transition');
+      });
+    });
+  } else {
+    if (appWrapper && appWrapper.classList) appWrapper.classList.remove('no-transition');
+    if (panel && panel.classList) panel.classList.remove('no-transition');
+  }
 })();

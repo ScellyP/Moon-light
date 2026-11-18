@@ -158,8 +158,7 @@ class SongLibrary(
     }
 
     /**
-     * The playlists as JSON for the page. Each song gets `available` (the file exists right now),
-     * so a missing file is shown as unavailable rather than dropped.
+     * The playlists as JSON for the page. Missing songs whose files no longer exist are excluded.
      */
     @Synchronized
     fun listJson(): String {
@@ -167,11 +166,16 @@ class SongLibrary(
         for (m in readAll()) {
             val copy = JSONObject(m.toString())
             val songs = copy.optJSONArray("songs") ?: JSONArray().also { copy.put("songs", it) }
+            val cleanSongs = JSONArray()
             for (i in 0 until songs.length()) {
                 val s = songs.optJSONObject(i) ?: continue
                 val f = fileFor(s.optString("ref"))
-                s.put("available", f != null && f.isFile)
+                if (f != null && f.isFile) {
+                    s.put("available", true)
+                    cleanSongs.put(s)
+                }
             }
+            copy.put("songs", cleanSongs)
             out.put(copy)
         }
         return out.toString()
@@ -587,8 +591,23 @@ class SongLibrary(
                         relinked++
                     }
                 }
+                if (ref !in present) {
+                    val f = fileFor(ref)
+                    if (f == null || !f.exists()) {
+                        changed = true
+                        continue
+                    }
+                }
                 if (!seen.add(ref)) { changed = true; continue }
                 kept.put(s)
+            }
+            val art = m.optString("artwork")
+            if (art.isNotBlank() && isSafeRef(art) && art !in present) {
+                val f = fileFor(art)
+                if (f == null || !f.exists()) {
+                    m.put("artwork", JSONObject.NULL)
+                    changed = true
+                }
             }
             if (changed) {
                 m.put("songs", kept)

@@ -77,7 +77,7 @@ check('the package, the manifest and the build agree on the new name', () => {
   assert.ok(manifest.includes('Theme.Moonlight') && !manifest.includes('NovelReader'));
   const wf = read(__dirname, '../.github/workflows/build-apk.yml');
   assert.ok(wf.includes('moonlight-$TAG.apk') && !wf.includes('novel-reader'));
-  assert.ok(read(KT, 'AppUpdater.kt').includes('FILE_PREFIX = "moonlight-"'));
+  assert.ok(/FILE_PREFIX\s*=.*"moonlight-"/.test(read(KT, 'AppUpdater.kt')));
 });
 
 check('the resources the manifest needs exist and are not empty (an emptied strings.xml once slipped through)', () => {

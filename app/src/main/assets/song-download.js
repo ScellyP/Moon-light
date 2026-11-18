@@ -337,7 +337,18 @@
     };
   }
 
-  const api = { parseLinks, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf };
+  function handleSharedPlaylistLink(url) {
+    const ps = (typeof window !== 'undefined' ? window.PlaylistShare : null) || (typeof global !== 'undefined' ? global.PlaylistShare : null) || root.PlaylistShare;
+    if (ps && typeof ps.isFilebinUrl === 'function' && ps.isFilebinUrl(url)) {
+      if (typeof ps.importFromUrl === 'function') {
+        ps.importFromUrl(url);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const api = { parseLinks, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink };
   // The square frame: `size` is its side as a fraction of the picture's SHORTER side (0.3..1); (cx, cy) is where
   // its centre is wanted, in picture pixels. The frame is kept inside the picture. x, y, size go to the app.
   function cropRect(iw, ih, size, cx, cy) {
@@ -574,6 +585,16 @@
   let dupes = null;
 
   function reviewLinks(links) {
+    // 3.4 Automatic playlist detection: detect when the user provides a Filebin link
+    const filebinLink = links.find((u) => /filebin\.net/i.test(u));
+    if (filebinLink) {
+      if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
+        root.PlaylistShare.importFromUrl(filebinLink);
+        wizard.setMessage('Detected Moonlight playlist from Filebin! Downloading...');
+        return;
+      }
+    }
+
     const memory = root.SongMemory;
     if (!memory) { wizard.start(links); return; }
     const seen = new Set();
@@ -610,6 +631,13 @@
     if (!parsed.links.length) {
       wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
       return;
+    }
+    if (parsed.links.length === 1 && /filebin\.net/i.test(parsed.links[0])) {
+      if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
+        root.PlaylistShare.importFromUrl(parsed.links[0]);
+        wizard.setMessage('Detected Moonlight playlist from Filebin! Downloading...');
+        return;
+      }
     }
     if (parsed.links.length === 1 && isPlaylistUrl(parsed.links[0])) {
       startPlaylistFlow(parsed.links[0]);
@@ -1090,9 +1118,12 @@
 
   function buildPlResolving() {
     const box = el('div', 'dl-step dl-pl-step');
-    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon')); box.appendChild(mark);
+    box.appendChild(el('span', 'dl-spinner'));
     box.appendChild(el('h2', 'dl-title', 'Reading playlist\u2026'));
-    box.appendChild(el('p', 'dl-hint', 'Fetching the track list. This takes a moment.'));
+    const bar = el('span', 'dl-bar');
+    bar.appendChild(el('i'));
+    box.appendChild(bar);
+    box.appendChild(el('p', 'dl-sub', 'Fetching the track list. This takes a moment.'));
     return box;
   }
 

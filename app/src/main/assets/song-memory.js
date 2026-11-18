@@ -499,6 +499,28 @@
     schedule();     // makes the files exist from the first launch on
   }
 
+  // Remove missing songs from download listings (downloads.txt) and prune their memory
+  function cleanMissing(validTrackIds) {
+    if (!validTrackIds || typeof validTrackIds.has !== 'function' || !validTrackIds.size) return;
+    const list = ensureLog();
+    if (!list) return;
+    const initialLen = list.length;
+    const kept = list.filter((e) => e.path && validTrackIds.has(e.path));
+    if (kept.length !== initialLen) {
+      log = kept;
+      writeLog();
+    }
+    let timesChanged = false;
+    Object.keys(times.liked).forEach((p) => {
+      if (!validTrackIds.has(p)) { delete times.liked[p]; timesChanged = true; }
+    });
+    Object.keys(times.played).forEach((p) => {
+      if (!validTrackIds.has(p)) { delete times.played[p]; timesChanged = true; }
+    });
+    if (timesChanged) saveTimes();
+    writeLists();
+  }
+
   if (root.document && root.document.addEventListener) {
     root.document.addEventListener('visibilitychange', () => { if (root.document.hidden) flush(); });
     if (root.addEventListener) root.addEventListener('pagehide', flush);
@@ -508,6 +530,7 @@
   root.SongMemory = {
     findDownloaded: findDownloaded, recordDownload: recordDownload, downloadLog: downloadLog,
     isPresent: isPresent, similarTo: similarTo, normalizeUrl: normalizeUrl,
+    cleanMissing: cleanMissing,
     changed: changed, restore: restore, flush: flush,
     _isRestored: () => restored,
   };

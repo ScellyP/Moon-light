@@ -278,6 +278,9 @@ class MainActivity : ComponentActivity() {
 
     // Covers you chose for playlists: small JPEGs in Moonlight/playlist-covers (see PlaylistCovers.kt).
     private val playlistCovers = PlaylistCovers(File(playerRoot, "playlist-covers"))
+
+    // Public Downloads folder for portable ZIP backups (see SongBackup.kt).
+    private val downloadDir = File("/storage/emulated/0/Download")
     private var pendingCoverKey: String? = null
     private val pickPlaylistCover = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val key = pendingCoverKey
@@ -1681,6 +1684,276 @@ class MainActivity : ComponentActivity() {
                 PlaybackService.effects?.setBoostDb(db.toFloat())
             }
         }
+
+        // ---- Backup & Restore (Item 4) --------------------------------------------------------------------
+        // Creates a portable ZIP archive containing songs, playlists, covers and metadata in /storage/emulated/0/Download/
+        @JavascriptInterface
+        fun createBackup(): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onBackupComplete", err)
+                return err
+            }
+            Thread {
+                val backup = SongBackup(playerRoot, downloadDir)
+                val res = backup.createBackup(onProgress = { pct, item, tot ->
+                    val p = JSONObject().apply {
+                        put("percent", pct)
+                        put("item", item)
+                        put("total", tot)
+                    }.toString()
+                    runOnUiThread { callPage("onBackupProgress", p) }
+                })
+                runOnUiThread { callPage("onBackupComplete", res.toJson()) }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun restoreBackup(filePath: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onRestoreComplete", err)
+                return err
+            }
+            Thread {
+                val target = if (filePath.isNotBlank()) File(filePath) else {
+                    val backups = downloadDir.listFiles()?.filter {
+                        it.isFile && it.name.startsWith("moonlight-backup-") && it.name.endsWith(".zip")
+                    }?.sortedByDescending { it.lastModified() }
+                    backups?.firstOrNull()
+                }
+
+                if (target == null || !target.exists()) {
+                    val err = JSONObject().apply {
+                        put("success", false)
+                        put("error", "No backup file found")
+                    }.toString()
+                    runOnUiThread { callPage("onRestoreComplete", err) }
+                    return@Thread
+                }
+
+                val backup = SongBackup(playerRoot, downloadDir)
+                val res = backup.restoreBackup(target, onProgress = { pct, item, tot ->
+                    val p = JSONObject().apply {
+                        put("percent", pct)
+                        put("item", item)
+                        put("total", tot)
+                    }.toString()
+                    runOnUiThread { callPage("onRestoreProgress", p) }
+                })
+                runOnUiThread {
+                    callPage("onRestoreComplete", res.toJson())
+                    if (res.success) {
+                        runAudioScan()
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun listBackups(): String {
+            if (!hasStoragePermission()) return "[]"
+            return SongBackup(playerRoot, downloadDir).listBackups()
+        }
+
+        // ---- Playlist Sharing & Filebin Integration (Item 3) ----------------------------------------------
+        @JavascriptInterface
+        fun sharePlaylistPackage(playlistKey: String, password: String, method: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onPlaylistShareComplete", err)
+                return err
+            }
+            Thread {
+                val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
+                val share = PlaylistShare(playerRoot, shareDir)
+                var lastNotifTime = 0L
+
+                runOnUiThread {
+                    updateSharePackagingNotification(playlistKey, 0, 0)
+                }
+
+                val pkgRes = share.createPackage(playlistKey, password.takeIf { it.isNotBlank() }) { current, total, _ ->
+                    val now = System.currentTimeMillis()
+                    if (now - lastNotifTime > 300 || current == total) {
+                        lastNotifTime = now
+                        runOnUiThread {
+                            updateSharePackagingNotification(playlistKey, current, total)
+                        }
+                    }
+                }
+
+                if (!pkgRes.success) {
+                    runOnUiThread {
+                        updateShareErrorNotification(playlistKey, pkgRes.error ?: "Failed to package playlist")
+                        callPage("onPlaylistShareComplete", pkgRes.toJson())
+                    }
+                    return@Thread
+                }
+
+                val f = File(pkgRes.filePath)
+                if (method.equals("filebin", ignoreCase = true)) {
+                    runOnUiThread {
+                        updateShareUploadProgressNotification(playlistKey, 0L, f.length())
+                    }
+
+                    var lastUploadTime = 0L
+                    var lastPercent = -1
+
+                    val (uploaded, shareUrl) = share.uploadToFilebin(f) { uploadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastPercent && (now - lastUploadTime > 300 || percent == 100)) {
+                            lastUploadTime = now
+                            lastPercent = percent
+                            runOnUiThread {
+                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes)
+                            }
+                        }
+                    }
+
+                    val res = JSONObject().apply {
+                        put("success", uploaded)
+                        put("method", "filebin")
+                        put("shareUrl", shareUrl)
+                        put("isEncrypted", pkgRes.isEncrypted)
+                        put("songCount", pkgRes.songCount)
+                        if (!uploaded) put("error", shareUrl)
+                    }.toString()
+
+                    runOnUiThread {
+                        if (uploaded) {
+                            updateShareCompleteNotification(playlistKey, shareUrl)
+                            callPage("onPlaylistShareComplete", res)
+                            shareText(shareUrl)
+                        } else {
+                            updateShareErrorNotification(playlistKey, shareUrl)
+                            callPage("onPlaylistShareComplete", res)
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        cancelShareNotification()
+                    }
+                    val res = JSONObject().apply {
+                        put("success", true)
+                        put("method", "direct")
+                        put("filePath", pkgRes.filePath)
+                        put("fileName", pkgRes.fileName)
+                        put("isEncrypted", pkgRes.isEncrypted)
+                        put("songCount", pkgRes.songCount)
+                    }.toString()
+                    runOnUiThread {
+                        callPage("onPlaylistShareComplete", res)
+                        try {
+                            val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                putExtra(Intent.EXTRA_TITLE, f.name)
+                                clipData = ClipData.newRawUri(f.name, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(send, "Share playlist package"))
+                        } catch (e: Exception) {
+                            // chooser error
+                        }
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun importSharedPlaylist(source: String, password: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onPlaylistImportComplete", err)
+                return err
+            }
+            Thread {
+                val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
+                val share = PlaylistShare(playerRoot, shareDir)
+                val isFb = PlaylistShare.isFilebinUrl(source)
+                if (isFb) {
+                    runOnUiThread {
+                        updateShareDownloadProgressNotification(source, 0L, 0L)
+                    }
+                }
+
+                var lastDlTime = 0L
+                var lastDlPercent = -1
+
+                val targetFile: File? = if (isFb) {
+                    val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source) { downloadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastDlPercent && (now - lastDlTime > 300 || percent == 100)) {
+                            lastDlTime = now
+                            lastDlPercent = percent
+                            runOnUiThread {
+                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes)
+                            }
+                        }
+                    }
+                    if (!dlSuccess || downloadedFile == null) {
+                        val err = JSONObject().apply {
+                            put("success", false)
+                            put("error", "Could not download playlist package from Filebin")
+                        }.toString()
+                        runOnUiThread {
+                            updateShareErrorNotification("Import", "Could not download package from Filebin")
+                            callPage("onPlaylistImportComplete", err)
+                        }
+                        return@Thread
+                    }
+                    downloadedFile
+                } else {
+                    File(source).takeIf { it.isFile }
+                }
+
+                if (targetFile == null || !targetFile.exists()) {
+                    val err = JSONObject().apply {
+                        put("success", false)
+                        put("error", "Playlist package file not found")
+                    }.toString()
+                    runOnUiThread {
+                        updateShareErrorNotification("Import", "Playlist package file not found")
+                        callPage("onPlaylistImportComplete", err)
+                    }
+                    return@Thread
+                }
+
+                val impRes = share.importPackage(targetFile, password.takeIf { it.isNotBlank() })
+                runOnUiThread {
+                    cancelShareNotification()
+                    callPage("onPlaylistImportComplete", impRes.toJson())
+                    if (impRes.success) {
+                        runAudioScan()
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun isPlaylistShareFilebinUrl(url: String): Boolean {
+            return PlaylistShare.isFilebinUrl(url)
+        }
     }
 
     private fun hasStoragePermission(): Boolean {
@@ -2296,6 +2569,127 @@ class MainActivity : ComponentActivity() {
             .setOnlyAlertOnce(true)
             .build()
         nm.notify(PLAYLIST_NOTIF_ID, notif)
+    }
+
+    // ---- Playlist share & upload notification --------------------------------------------------
+    private val SHARE_NOTIF_ID = 2002
+    private val SHARE_CHANNEL_ID = "moonlight_playlist_share"
+
+    private fun ensureShareChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(SHARE_CHANNEL_ID) == null) {
+                val ch = android.app.NotificationChannel(
+                    SHARE_CHANNEL_ID,
+                    "Playlist Sharing",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "Packaging and upload progress for shared playlists." }
+                nm.createNotificationChannel(ch)
+            }
+        }
+    }
+
+    fun updateSharePackagingNotification(playlistName: String, done: Int, total: Int) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Packaging \"$playlistName\"")
+            .setContentText(if (total > 0) "Packing song $done of $total..." else "Preparing songs...")
+            .setProgress(if (total > 0) total else 0, done, total <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareUploadProgressNotification(playlistName: String, uploadedBytes: Long, totalBytes: Long) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+        val uploadedMb = uploadedBytes.toDouble() / (1024.0 * 1024.0)
+        val totalMb = totalBytes.toDouble() / (1024.0 * 1024.0)
+        val text = if (totalBytes > 0) {
+            String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", uploadedMb, totalMb, percent)
+        } else {
+            "Uploading to Filebin..."
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Uploading \"$playlistName\" to Filebin")
+            .setContentText(text)
+            .setProgress(100, percent, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareCompleteNotification(playlistName: String, shareUrl: String) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareUrl)
+        }
+        val chooser = Intent.createChooser(shareIntent, "Share playlist link")
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        } else {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(this, SHARE_NOTIF_ID, chooser, flags)
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Playlist uploaded to Filebin!")
+            .setContentText("Tap to share link (expires in 6 days)")
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareErrorNotification(playlistName: String, errorMsg: String) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Share failed: $playlistName")
+            .setContentText(errorMsg)
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun updateShareDownloadProgressNotification(source: String, downloadedBytes: Long, totalBytes: Long) {
+        ensureShareChannel()
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+        val dlMb = downloadedBytes.toDouble() / (1024.0 * 1024.0)
+        val totalMb = totalBytes.toDouble() / (1024.0 * 1024.0)
+        val text = if (totalBytes > 0) {
+            String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", dlMb, totalMb, percent)
+        } else {
+            "Downloading package from Filebin..."
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle("Downloading shared playlist")
+            .setContentText(text)
+            .setProgress(if (totalBytes > 0) 100 else 0, percent, totalBytes <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(SHARE_NOTIF_ID, notif)
+    }
+
+    fun cancelShareNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.cancel(SHARE_NOTIF_ID)
     }
 
     /**

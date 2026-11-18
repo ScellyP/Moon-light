@@ -245,12 +245,13 @@
 
   /* ---- the switches ---- */
   function audio() { return root.NovelAudio || null; }
-  function bindSwitch(id, name, apply) {
+  function bindSwitch(id, name, apply, defaultVal) {
     var box = document.getElementById(id);
     if (!box) return;
     var a = audio();
     var value = a && a.getSetting ? a.getSetting(name) : undefined;
-    box.checked = value === undefined ? true : !!value;
+    var def = defaultVal !== undefined ? defaultVal : true;
+    box.checked = value === undefined ? def : !!value;
     if (apply) apply(box.checked);
     box.addEventListener('change', function () {
       var b = audio();
@@ -258,14 +259,29 @@
       if (apply) apply(!!box.checked);
     });
   }
+  bindSwitch('set-light-mode', 'lightMode', function (on) {
+    var docEl = root.document && root.document.documentElement;
+    if (docEl && docEl.classList) docEl.classList.toggle('theme-light', !!on);
+    if (root.SpotifyUI && root.SpotifyUI.refreshTint) root.SpotifyUI.refreshTint();
+  }, false);
   bindSwitch('set-bt', 'btAutoStart', null);
   bindSwitch('set-dupes', 'removeDuplicates', null);
+  bindSwitch('set-playlist-share', 'playlistSharing', null);
+  bindSwitch('set-filebin', 'filebinSharing', null);
   bindSwitch('set-bg-dl', 'backgroundDownloads', function (on) {
     // Tell the native side immediately so SongDownloader can honour it mid-download.
     var b = root.AndroidBridge || null;
     if (b && b.setBackgroundDownloads) b.setBackgroundDownloads(on);
   });
+  bindSwitch('set-stars', 'starPattern', function (on) {
+    if (root.document && root.document.body) root.document.body.classList.toggle('no-stars', !on);
+    if (root.MoonSky && root.MoonSky.updateStars) root.MoonSky.updateStars(on);
+  });
   bindSwitch('set-sky', 'animatedSky', function (on) { document.body.classList.toggle('no-sky-motion', !on); });
+  bindSwitch('set-comets', 'randomComets', function (on) {
+    if (root.document && root.document.body) root.document.body.classList.toggle('no-comets', !on);
+    if (root.MoonSky && root.MoonSky.updateComets) root.MoonSky.updateComets(on);
+  });
   bindSwitch('set-tint', 'coverTint', function () {
     if (root.SpotifyUI && root.SpotifyUI.refreshTint) root.SpotifyUI.refreshTint();
   });
