@@ -2121,13 +2121,15 @@ window.NovelAudio = (function () {
      normalisation have their own modules above). Read and written through NovelAudio.getSetting /
      setSetting; settings-menu.js applies them to the page.
        btAutoStart  start playing on its own when the app opens with Bluetooth audio connected
+       starPattern  randomized starfield pattern in the background
        animatedSky  the twinkling stars behind the screens (off = still stars, calmer, easier on battery)
+       randomComets randomly spawning comets moving across the sky background
        coverTint    colour the screens from the current cover art
        removeDuplicates  after a scan, move copies of the same song (same title and artist, or the same source link) out of the library
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, animatedSky: true, coverTint: true, removeDuplicates: true, lightMode: false },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false },
   });
 
   /* ---- Remember the last song ---------------------------------------------------

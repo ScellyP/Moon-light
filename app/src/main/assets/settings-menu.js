@@ -271,7 +271,15 @@
     var b = root.AndroidBridge || null;
     if (b && b.setBackgroundDownloads) b.setBackgroundDownloads(on);
   });
+  bindSwitch('set-stars', 'starPattern', function (on) {
+    if (root.document && root.document.body) root.document.body.classList.toggle('no-stars', !on);
+    if (root.MoonSky && root.MoonSky.updateStars) root.MoonSky.updateStars(on);
+  });
   bindSwitch('set-sky', 'animatedSky', function (on) { document.body.classList.toggle('no-sky-motion', !on); });
+  bindSwitch('set-comets', 'randomComets', function (on) {
+    if (root.document && root.document.body) root.document.body.classList.toggle('no-comets', !on);
+    if (root.MoonSky && root.MoonSky.updateComets) root.MoonSky.updateComets(on);
+  });
   bindSwitch('set-tint', 'coverTint', function () {
     if (root.SpotifyUI && root.SpotifyUI.refreshTint) root.SpotifyUI.refreshTint();
   });

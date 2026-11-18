@@ -69,16 +69,17 @@ function makePage(extra) {
     return e;
   }
   const ids = ['settings-layer', 'settings-drawer', 'settings-scrim', 'settings-btn', 'settings-close', 'audio-panel',
-    'sp-view-library', 'set-light-mode', 'set-bt', 'set-sky', 'set-tint', 'yt-account-row', 'yt-account-status', 'yt-account-btn'];
+    'sp-view-library', 'set-light-mode', 'set-stars', 'set-bt', 'set-sky', 'set-comets', 'set-tint', 'yt-account-row', 'yt-account-status', 'yt-account-btn'];
   const els = {}; ids.forEach(i => { els[i] = el(i); });
   els['audio-panel'].attrs['data-view'] = 'library';
   els['settings-drawer'].attrs.inert = '';
   els['set-bt'].checked = els['set-sky'].checked = els['set-tint'].checked = true;
+  els['set-stars'].checked = els['set-comets'].checked = true;
   els['set-light-mode'].checked = false;
   const docListeners = {};
   const body = el('body');
   const documentElement = el('html');
-  const stored = { btAutoStart: true, animatedSky: true, coverTint: true, lightMode: false };
+  const stored = { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, lightMode: false };
   const calls = [];
   const sandbox = {
     document: {
@@ -271,6 +272,12 @@ check('the switches read the stored value, store changes, and apply them', () =>
   assert.ok(!p.body.classes.has('no-sky-motion'));
   p.els['set-bt'].checked = false; p.els['set-bt'].listeners.change[0]();
   assert.strictEqual(p.stored.btAutoStart, false);
+  p.els['set-stars'].checked = false; p.els['set-stars'].listeners.change[0]();
+  assert.strictEqual(p.stored.starPattern, false);
+  assert.ok(p.body.classes.has('no-stars'));
+  p.els['set-comets'].checked = false; p.els['set-comets'].listeners.change[0]();
+  assert.strictEqual(p.stored.randomComets, false);
+  assert.ok(p.body.classes.has('no-comets'));
   p.els['set-light-mode'].checked = true; p.els['set-light-mode'].listeners.change[0]();
   assert.strictEqual(p.stored.lightMode, true);
   assert.ok(p.sandbox.document.documentElement.classes.has('theme-light'));
@@ -349,7 +356,9 @@ check('settings default to on, only accept known names and the right type, and a
   const t = launch({ saved: null, bluetooth: false });
   const api = t.app;
   assert.strictEqual(api.getSetting('btAutoStart'), true);
+  assert.strictEqual(api.getSetting('starPattern'), true);
   assert.strictEqual(api.getSetting('animatedSky'), true);
+  assert.strictEqual(api.getSetting('randomComets'), true);
   assert.strictEqual(api.getSetting('coverTint'), true);
   assert.strictEqual(api.getSetting('lightMode'), false);
   assert.strictEqual(api.getSetting('nope'), undefined);
