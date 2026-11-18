@@ -460,6 +460,8 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.16.31 (2026-11-18) — Redesigned moon SVG icons.** Updated `<symbol id="i-moon-music">` and `<symbol id="i-moon">` in `index.html` with the clean, bold, tilted crescent moon path matching the target artwork, replacing the vertical crescent and music note across all playlists, album artwork fallbacks, search results, and download tiles.
+
 - **v1.00.00 (2026-10-27) — Named Moonlight (before the first install).** The app was first called "Moon Player"; the owner chose
   **Moonlight**. Display name, package/`applicationId` `com.scell.moonlight` (can't be changed after release without becoming a different
   app, so it was changed now), data folder `/storage/emulated/0/Moonlight/`, repo name, APK/artifact names (`moonlight-vX.Y.Z.apk`) all follow.

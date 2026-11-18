@@ -170,15 +170,18 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     console.log('ok - paintMoonBadges renders vector SVG moon with disc and lit crescent');
   }
 
-  // 10. index.html symbols have fatter middle crescent paths
+  // 10. index.html symbols have tilted bold crescent paths matching target design
   {
     const fs = require('fs');
     const path = require('path');
     const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
     assert.ok(html.includes('id="i-moon"'), 'defines i-moon symbol');
     assert.ok(html.includes('id="i-moon-music"'), 'defines i-moon-music symbol');
+    assert.ok(html.includes('<symbol id="i-moon-music" viewBox="0 0 24 24"><path d="M20 14.6A8 8 0 0 1 9.4 4a8 8 0 1 0 10.6 10.6Z"/></symbol>'), 'i-moon-music uses tilted bold crescent');
+    assert.ok(html.includes('<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.6A8 8 0 0 1 9.4 4a8 8 0 1 0 10.6 10.6Z"/></symbol>'), 'i-moon uses tilted bold crescent');
+    assert.strictEqual(html.includes('d="M17 5.5v8.2"'), false, 'music note path removed from moon symbols');
     assert.strictEqual(html.includes('moon-corner-badge'), false, 'moon-corner-badge is removed');
-    console.log('ok - index.html defines bold SVG symbols with fatter crescent');
+    console.log('ok - index.html defines bold SVG symbols with tilted crescent');
   }
 
   console.log('\nAll 10 background visual effects and moon icon tests passed cleanly!');
