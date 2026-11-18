@@ -82,7 +82,11 @@
       const job = artQueue.shift();
       if (job.tile.isConnected === false) continue;       // the list was redrawn meanwhile
       const uri = artFor(job.track);
-      if (uri) { job.tile.style.setProperty('--pp-cover', 'url("' + uri + '")'); job.tile.setAttribute('data-pp-cover', '1'); }
+      if (uri) {
+        job.tile.style.setProperty('--pp-cover', 'url("' + uri + '")');
+        job.tile.setAttribute('data-pp-cover', '1');
+        job.tile.classList.add('has-art');
+      }
       break;
     }
     if (artQueue.length) scheduleArt();
@@ -246,10 +250,24 @@
     btn.setAttribute('aria-pressed', 'false');
   }
 
+  function createMoonBadge() {
+    const badge = el('span', 'moon-corner-badge');
+    badge.setAttribute('aria-hidden', 'true');
+    const img = el('img', 'moon-icon-img');
+    img.src = 'moon-icon.webp';
+    img.alt = '';
+    badge.appendChild(img);
+    return badge;
+  }
+
   function makeRow(track) {
     const row = el('div', 'pp-row');
     const tile = el('div', 'pp-art');
-    tile.appendChild(icon('i-moon-music'));
+    const img = el('img', 'moon-icon-img sp-cover-moon');
+    img.src = 'moon-icon.webp';
+    img.alt = '';
+    tile.appendChild(img);
+    tile.appendChild(createMoonBadge());
     row.appendChild(tile);
     const text = el('div', 'pp-text');
     text.appendChild(el('div', 'pp-name', track.title || 'Unknown song'));

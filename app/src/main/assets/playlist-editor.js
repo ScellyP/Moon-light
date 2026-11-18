@@ -74,7 +74,11 @@
       const job = artQueue.shift();
       if (job.tile.isConnected === false) continue;
       const uri = artFor(job.track);
-      if (uri) { job.tile.style.setProperty('--pe-cover', 'url("' + uri + '")'); job.tile.setAttribute('data-pe-cover', '1'); }
+      if (uri) {
+        job.tile.style.setProperty('--pe-cover', 'url("' + uri + '")');
+        job.tile.setAttribute('data-pe-cover', '1');
+        job.tile.classList.add('has-art');
+      }
       break;
     }
     if (artQueue.length) scheduleArt();
@@ -192,6 +196,16 @@
     if (!list.children.length && ctx.pending.length) drawMore();
   }
 
+  function createMoonBadge() {
+    const badge = el('span', 'moon-corner-badge');
+    badge.setAttribute('aria-hidden', 'true');
+    const img = el('img', 'moon-icon-img');
+    img.src = 'moon-icon.webp';
+    img.alt = '';
+    badge.appendChild(img);
+    return badge;
+  }
+
   function makeRow(track) {
     const row = el('div', 'pe-row');
     row.setAttribute('data-id', track.id);
@@ -205,7 +219,11 @@
     });
     row.appendChild(minus);
     const tile = el('div', 'pe-art');
-    tile.appendChild(icon('i-moon-music'));
+    const img = el('img', 'moon-icon-img sp-cover-moon');
+    img.src = 'moon-icon.webp';
+    img.alt = '';
+    tile.appendChild(img);
+    tile.appendChild(createMoonBadge());
     row.appendChild(tile);
     const text = el('div', 'pe-text');
     text.appendChild(el('div', 'pe-name', track.title || 'Unknown song'));

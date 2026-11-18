@@ -167,5 +167,26 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     console.log('ok - paintMoonBadges renders custom moon image asset with moon phase label');
   }
 
-  console.log('\nAll 8 background visual effects and moon icon tests passed cleanly!');
+  // 9. Playlist covers and thumbnail corner badges in index.html (Item 7 update)
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
+    assert.ok(html.includes('.sp-cover-moon'), 'defines .sp-cover-moon for playlist covers');
+    assert.ok(html.includes('.moon-corner-badge'), 'defines .moon-corner-badge for thumbnails');
+    assert.ok(html.includes('image href="moon-icon.webp"'), 'i-moon-music symbol points to moon-icon.webp');
+    console.log('ok - index.html defines sp-cover-moon and moon-corner-badge notification styling');
+  }
+
+  // 10. spotify-ui.js makeCover uses sp-cover-moon and creates moon-corner-badge
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/spotify-ui.js'), 'utf8');
+    assert.ok(js.includes('moon-corner-badge'), 'spotify-ui.js generates moon-corner-badge');
+    assert.ok(js.includes('sp-cover-moon'), 'spotify-ui.js replaces moon SVG with sp-cover-moon');
+    console.log('ok - spotify-ui.js renders moon-icon in covers and attaches corner badges');
+  }
+
+  console.log('\nAll 10 background visual effects, moon icon, and thumbnail badge tests passed cleanly!');
 })();

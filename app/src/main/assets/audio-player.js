@@ -2277,8 +2277,8 @@ window.NovelAudio = (function () {
       uri = artCache[id];
     }
     els.artwork.innerHTML = uri
-      ? '<img alt="" src="' + uri + '">'
-      : '<svg class="ico"><use href="#i-moon-music"/></svg>';
+      ? '<img alt="" src="' + uri + '"><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span>'
+      : '<img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt="">';
     els.artwork.classList.toggle('has-art', !!uri);
   }
 

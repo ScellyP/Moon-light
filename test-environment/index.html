@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moonlight — PC Virtual Test Environment</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #131b2e;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #1db954;
+      --accent-hover: #1ed760;
+      --accent-glow: rgba(29, 185, 84, 0.25);
+      --purple: #8b5cf6;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid var(--card-border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #6366f1, #a855f7);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-success { background: rgba(29, 185, 84, 0.2); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
+    .badge-purple { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3); }
+
+    .quick-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    button, .btn {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    button:hover, .btn:hover { background: #334155; border-color: rgba(255,255,255,0.2); }
+    button.primary, .btn.primary {
+      background: var(--accent);
+      color: #000;
+      border: none;
+    }
+    button.primary:hover, .btn.primary:hover { background: var(--accent-hover); }
+    button.danger { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+    button.danger:hover { background: rgba(239, 68, 68, 0.3); }
+
+    /* Main Layout */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(360px, auto) 480px;
+      overflow: hidden;
+    }
+
+    /* Device Simulator Stage */
+    .simulator-stage {
+      background: radial-gradient(circle at center, #172138 0%, #0b0f19 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: hidden;
+      position: relative;
+    }
+    .device-controls-bar {
+      margin-bottom: 12px;
+      display: flex;
+      gap: 8px;
+    }
+    .device-preset-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .device-preset-btn.active {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Phone Bezel */
+    .phone-bezel {
+      width: 390px;
+      height: 780px;
+      background: #000;
+      border-radius: 44px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 10px #1e293b, 0 0 0 12px #334155;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
+    }
+    .phone-bezel.pixel { width: 412px; height: 820px; border-radius: 36px; }
+    .phone-bezel.tablet { width: 680px; height: 860px; border-radius: 24px; }
+    .phone-bezel.fullscreen { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+
+    /* Phone Notch / Dynamic Island */
+    .phone-notch {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 110px;
+      height: 24px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* App Frame */
+    .phone-screen {
+      flex: 1;
+      width: 100%;
+      background: #000;
+      border: none;
+      display: block;
+    }
+
+    /* Android Navigation Bar (Hardware Buttons) */
+    .android-nav-bar {
+      height: 40px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 40px;
+      z-index: 10;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+    .android-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.6);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px 16px;
+      border-radius: 8px;
+    }
+    .android-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+    /* Dashboard Sidebar */
+    .dashboard-panel {
+      background: var(--card-bg);
+      border-left: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-nav {
+      display: flex;
+      border-bottom: 1px solid var(--card-border);
+      background: #0f172a;
+    }
+    .tab-nav button {
+      flex: 1;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 12px 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      justify-content: center;
+    }
+    .tab-nav button.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: rgba(29, 185, 84, 0.05);
+    }
+
+    .tab-content {
+      flex: 1;
+      padding: 18px;
+      overflow-y: auto;
+      display: none;
+    }
+    .tab-content.active { display: block; }
+
+    /* Controls Styling */
+    .control-card {
+      background: #1a233a;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .control-card h3 {
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .control-card p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .control-row label {
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    select, input[type="text"] {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+
+    /* Logs view */
+    .logs-console {
+      background: #090d16;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      height: 380px;
+      overflow-y: auto;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+    .log-item {
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      word-break: break-all;
+    }
+    .log-time { color: #64748b; margin-right: 6px; }
+    .log-method { color: #38bdf8; font-weight: 600; margin-right: 6px; }
+    .log-args { color: #94a3b8; }
+    .log-res { color: #4ade80; margin-left: 4px; }
+
+    /* Test Results */
+    .test-result-item {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-left: 4px solid var(--card-border);
+      font-size: 12px;
+    }
+    .test-result-item.pass { border-left-color: #22c55e; }
+    .test-result-item.fail { border-left-color: #ef4444; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-group">
+      <div class="logo-icon">&#127769;</div>
+      <div>
+        <h1>Moonlight PC Test Environment</h1>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
+          <span id="app-ver-badge" class="badge badge-purple">Loading version...</span>
+          <span class="badge badge-success">&#9679; Virtual Android Active</span>
+        </div>
+      </div>
+    </div>
+    <div class="quick-actions">
+      <button id="btn-scan-sky" class="primary" title="Trigger MediaLibrary.scan()">&#8635; Scan the Sky</button>
+      <button id="btn-reload-app" title="Reload App Frame">&#10227; Reload UI</button>
+      <a href="/app/" target="_blank" class="btn" title="Open App in dedicated browser tab">&#8599; Standalone Tab</a>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main>
+    <!-- Left: Device Simulator -->
+    <section class="simulator-stage">
+      <div class="device-controls-bar">
+        <button class="device-preset-btn active" data-preset="iphone">iPhone (390&times;844)</button>
+        <button class="device-preset-btn" data-preset="pixel">Pixel (412&times;820)</button>
+        <button class="device-preset-btn" data-preset="tablet">Tablet (680&times;860)</button>
+        <button class="device-preset-btn" data-preset="fullscreen">Full Page</button>
+      </div>
+
+      <div id="phone-bezel" class="phone-bezel">
+        <div class="phone-notch"></div>
+        <iframe id="app-frame" class="phone-screen" src="/app/index.html"></iframe>
+        
+        <!-- Virtual Hardware Navigation Bar -->
+        <div class="android-nav-bar">
+          <button id="btn-hw-back" class="android-btn" title="Hardware Back Button">&#9664;</button>
+          <button id="btn-hw-home" class="android-btn" title="Hardware Home Button">&#9675;</button>
+          <button id="btn-hw-recents" class="android-btn" title="Volume Toggle">&#9645;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Dev / Test Dashboard -->
+    <aside class="dashboard-panel">
+      <nav class="tab-nav">
+        <button class="active" data-tab="tab-quick">Virtual App</button>
+        <button data-tab="tab-download">Downloader</button>
+        <button data-tab="tab-system">Hardware</button>
+        <button data-tab="tab-logs">Bridge Logs</button>
+        <button data-tab="tab-tests">Tests</button>
+      </nav>
+
+      <!-- Tab 1: Virtual App Controls -->
+      <div id="tab-quick" class="tab-content active">
+        <div class="control-card">
+          <h3>&#127926; Virtual Music Library</h3>
+          <p>Inspect and manipulate the simulated Android media store and playlists.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button id="btn-trigger-scan" class="primary">&#8635; Run Scan the Sky</button>
+            <button id="btn-add-track">+ Add Sample Song</button>
+            <button id="btn-reset-data" class="danger">&#128465; Reset Virtual Store</button>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>&#128266; Web Audio Synthesizer</h3>
+          <p>Real sound generated directly in your browser so seek bars, timers, and playback states work realistically.</p>
+          <div class="control-row">
+            <label>Master Volume:</label>
+            <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="0.8">
+            <span id="vol-label" style="font-size:12px; min-width:32px;">80%</span>
+          </div>
+          <div class="control-row" style="margin-top:12px;">
+            <label>Bluetooth Output Connected:</label>
+            <input type="checkbox" id="bt-toggle">
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>&#128065; Quick Navigation Shortcuts</h3>
+          <p>Quickly jump to specific screens in the app:</p>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn-jump-view" data-view="library">Home</button>
+            <button class="btn-jump-view" data-view="search">Search</button>
+            <button class="btn-jump-view" data-view="album">Songs</button>
+            <button class="btn-jump-view" data-view="track">Now Playing</button>
+            <button class="btn-jump-view" data-view="download">Download</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Downloader & Chapters Simulator -->
+      <div id="tab-download" class="tab-content">
+        <div class="control-card">
+          <h3>&#128229; Simulate Video / Chapter Downloads</h3>
+          <p>Test Feature C (Automatic Chapter Detection) and Feature D (Manual Cropping) by simulating YouTube downloads with chapter metadata.</p>
+
+          <label style="font-size:12px; color:#cbd5e1;">Preset Test URLs:</label>
+          <select id="preset-download-url">
+            <option value="https://www.youtube.com/playlist?list=PL_cyberpunk_odyssey_01">YouTube Playlist (Staged Batch Download & Selection)</option>
+            <option value="https://www.youtube.com/watch?v=odyssey_story_chapters">Single Video with Chapters (Feature C/D)</option>
+            <option value="https://www.youtube.com/watch?v=moonlight_single_track">Single Track (With 16:9 Thumbnail Cropping)</option>
+            <option value="https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M">Spotify Playlist URL</option>
+          </select>
+
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button id="btn-paste-download" class="primary">&#128203; Paste to App & Download</button>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>&#128247; Thumbnail Cropping Test</h3>
+          <p>Test smart cropping and center-fill processing on song and playlist covers.</p>
+          <button id="btn-test-crop">Open Sample Cover Crop Modal</button>
+        </div>
+      </div>
+
+      <!-- Tab 3: Hardware & Insets -->
+      <div id="tab-system" class="tab-content">
+        <div class="control-card">
+          <h3>&#9000; System Insets (Status & Navigation Bars)</h3>
+          <p>Adjust system bar paddings to test safe-area handling and styling.</p>
+          <div class="control-row">
+            <label>Status Bar Height:</label>
+            <input type="range" id="status-bar-slider" min="0" max="48" value="24">
+            <span id="status-bar-val" style="font-size:12px; min-width:32px;">24px</span>
+          </div>
+          <div class="control-row" style="margin-top:12px;">
+            <label>Nav Bar Height:</label>
+            <input type="range" id="nav-bar-slider" min="0" max="48" value="16">
+            <span id="nav-bar-val" style="font-size:12px; min-width:32px;">16px</span>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <h3>&#9000; On-Screen Keyboard (IME)</h3>
+          <p>Test bottom sheet offsets and input visibility when the virtual keyboard opens.</p>
+          <div class="control-row">
+            <label>Simulate Keyboard Open:</label>
+            <input type="checkbox" id="ime-toggle">
+          </div>
+          <div class="control-row" style="margin-top:12px;">
+            <label>Keyboard Height:</label>
+            <input type="range" id="ime-slider" min="150" max="360" value="280">
+            <span id="ime-val" style="font-size:12px; min-width:32px;">280px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 4: Live Bridge Logs -->
+      <div id="tab-logs" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="font-size:13px; color:#cbd5e1;">Live AndroidBridge Traffic</h3>
+          <button id="btn-clear-logs" style="padding:3px 8px; font-size:11px;">Clear</button>
+        </div>
+        <div id="logs-container" class="logs-console"></div>
+      </div>
+
+      <!-- Tab 5: Automated Tests -->
+      <div id="tab-tests" class="tab-content">
+        <div class="control-card">
+          <h3>&#9989; Test Suite Execution</h3>
+          <p>Run all backend and integration tests against the current code.</p>
+          <button id="btn-run-tests" class="primary">&#9654; Run All Tests</button>
+        </div>
+        <div id="test-results-container"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    (function () {
+      const frame = document.getElementById('app-frame');
+      const bezel = document.getElementById('phone-bezel');
+      const logsContainer = document.getElementById('logs-container');
+
+      // Helper to access iframe window
+      function getAppWindow() {
+        return frame && frame.contentWindow;
+      }
+
+      // Initialize App Version Badge
+      fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+          if (data.version) {
+            document.getElementById('app-ver-badge').textContent = data.version;
+          }
+        })
+        .catch(() => {});
+
+      // Preset Switcher
+      document.querySelectorAll('.device-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.device-preset-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const preset = btn.getAttribute('data-preset');
+          bezel.className = 'phone-bezel ' + (preset === 'iphone' ? '' : preset);
+        });
+      });
+
+      // Tab Navigation
+      document.querySelectorAll('.tab-nav button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          const tabId = btn.getAttribute('data-tab');
+          document.getElementById(tabId).classList.add('active');
+        });
+      });
+
+      // Reload Frame
+      document.getElementById('btn-reload-app').addEventListener('click', () => {
+        frame.src = frame.src;
+      });
+
+      // Quick Nav Buttons
+      document.querySelectorAll('.btn-jump-view').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const view = btn.getAttribute('data-view');
+          const win = getAppWindow();
+          if (win && win.SpotifyUI && win.SpotifyUI.setView) {
+            win.SpotifyUI.setView(view);
+          }
+        });
+      });
+
+      // Scan the Sky Buttons
+      function triggerScan() {
+        const win = getAppWindow();
+        if (win && win.AndroidBridge && win.AndroidBridge.scanAudio) {
+          win.AndroidBridge.scanAudio();
+        } else if (win && win.MediaLibrary && win.MediaLibrary.scan) {
+          win.MediaLibrary.scan();
+        }
+      }
+      document.getElementById('btn-scan-sky').addEventListener('click', triggerScan);
+      document.getElementById('btn-trigger-scan').addEventListener('click', triggerScan);
+
+      // Hardware Buttons
+      document.getElementById('btn-hw-back').addEventListener('click', () => {
+        const win = getAppWindow();
+        if (win && typeof win.handleBack === 'function') {
+          const handled = win.handleBack();
+          if (!handled) alert('[Virtual Android] Back at root — would exit application.');
+        }
+      });
+      document.getElementById('btn-hw-home').addEventListener('click', () => {
+        const win = getAppWindow();
+        if (win && win.SpotifyUI && win.SpotifyUI.setView) {
+          win.SpotifyUI.setView('library');
+        }
+      });
+
+      // Master Volume Slider
+      const volSlider = document.getElementById('vol-slider');
+      const volLabel = document.getElementById('vol-label');
+      volSlider.addEventListener('input', () => {
+        const val = parseFloat(volSlider.value);
+        volLabel.textContent = Math.round(val * 100) + '%';
+        const win = getAppWindow();
+        if (win && win.AndroidBridge && win.AndroidBridge.setSystemVolume) {
+          win.AndroidBridge.setSystemVolume(val);
+        }
+      });
+
+      // Bluetooth Toggle
+      document.getElementById('bt-toggle').addEventListener('change', (e) => {
+        const win = getAppWindow();
+        if (win && win.AndroidBridge && win.AndroidBridge.setMockBluetooth) {
+          win.AndroidBridge.setMockBluetooth(e.target.checked);
+        }
+      });
+
+      // Insets: Status & Nav Bar
+      const statusBarSlider = document.getElementById('status-bar-slider');
+      const statusBarVal = document.getElementById('status-bar-val');
+      statusBarSlider.addEventListener('input', () => {
+        const px = parseInt(statusBarSlider.value, 10);
+        statusBarVal.textContent = px + 'px';
+        const win = getAppWindow();
+        if (win && typeof win.onStatusBarInset === 'function') win.onStatusBarInset(px);
+      });
+
+      const navBarSlider = document.getElementById('nav-bar-slider');
+      const navBarVal = document.getElementById('nav-bar-val');
+      navBarSlider.addEventListener('input', () => {
+        const px = parseInt(navBarSlider.value, 10);
+        navBarVal.textContent = px + 'px';
+        const win = getAppWindow();
+        if (win && typeof win.onNavBarInset === 'function') win.onNavBarInset(px);
+      });
+
+      // IME Keyboard
+      const imeToggle = document.getElementById('ime-toggle');
+      const imeSlider = document.getElementById('ime-slider');
+      const imeVal = document.getElementById('ime-val');
+
+      function updateIme() {
+        const px = imeToggle.checked ? parseInt(imeSlider.value, 10) : 0;
+        imeVal.textContent = imeSlider.value + 'px';
+        const win = getAppWindow();
+        if (win && typeof win.onImeInset === 'function') win.onImeInset(px);
+      }
+      imeToggle.addEventListener('change', updateIme);
+      imeSlider.addEventListener('input', updateIme);
+
+      // Downloader Simulation
+      document.getElementById('btn-paste-download').addEventListener('click', () => {
+        const url = document.getElementById('preset-download-url').value;
+        const win = getAppWindow();
+        if (win) {
+          if (win.AndroidBridge && win.AndroidBridge.setMockClipboard) {
+            win.AndroidBridge.setMockClipboard(url);
+          }
+          if (win.SpotifyUI && win.SpotifyUI.setView) {
+            win.SpotifyUI.setView('download');
+          }
+        }
+      });
+
+      document.getElementById('btn-test-crop').addEventListener('click', () => {
+        const win = getAppWindow();
+        if (win) {
+          // Paste a single track URL and open download tab to test the crop step
+          if (win.AndroidBridge && win.AndroidBridge.setMockClipboard) {
+            win.AndroidBridge.setMockClipboard('https://www.youtube.com/watch?v=moonlight_single_track');
+          }
+          if (win.SpotifyUI && win.SpotifyUI.setView) {
+            win.SpotifyUI.setView('download');
+          }
+        }
+      });
+
+      // Reset Virtual Data
+      document.getElementById('btn-reset-data').addEventListener('click', () => {
+        if (confirm('Reset all virtual tracks, playlists and settings to defaults?')) {
+          const win = getAppWindow();
+          if (win && win.AndroidBridge && win.AndroidBridge._resetData) {
+            win.AndroidBridge._resetData();
+          }
+          frame.src = frame.src;
+        }
+      });
+
+      // Add Random Track
+      document.getElementById('btn-add-track').addEventListener('click', () => {
+        const win = getAppWindow();
+        if (win && win.AndroidBridge) {
+          const num = Math.floor(Math.random() * 900) + 100;
+          const trk = {
+            id: '/Novel/Audio/Track_' + num + '.mp3',
+            path: '/Novel/Audio/Track_' + num + '.mp3',
+            title: 'Virtual Synth ' + num,
+            artist: 'Antigravity Sound',
+            album: 'PC Test Sessions',
+            durationSec: 180 + (num % 60),
+            folder: '',
+            playlist: null
+          };
+          const tracks = JSON.parse(localStorage.getItem('moonlight_mock_tracks') || '[]');
+          tracks.push(trk);
+          localStorage.setItem('moonlight_mock_tracks', JSON.stringify(tracks));
+          triggerScan();
+        }
+      });
+
+      // Clear Logs
+      document.getElementById('btn-clear-logs').addEventListener('click', () => {
+        logsContainer.innerHTML = '';
+      });
+
+      // Hook Bridge Logs from Frame
+      frame.addEventListener('load', () => {
+        const win = getAppWindow();
+        if (win && win.AndroidBridge && win.AndroidBridge._setEventListener) {
+          win.AndroidBridge._setEventListener((entry) => {
+            const row = document.createElement('div');
+            row.className = 'log-item';
+            row.innerHTML = '<span class="log-time">' + entry.timestamp + '</span>' +
+                            '<span class="log-method">' + entry.name + '</span>' +
+                            '<span class="log-args">' + JSON.stringify(entry.args).slice(0, 80) + '</span>' +
+                            (entry.result !== undefined ? '<span class="log-res">&rarr; ' + JSON.stringify(entry.result).slice(0, 40) + '</span>' : '');
+            logsContainer.appendChild(row);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+          });
+        }
+      });
+
+      // Run Automated Tests
+      document.getElementById('btn-run-tests').addEventListener('click', () => {
+        const container = document.getElementById('test-results-container');
+        container.innerHTML = '<p style="font-size:12px; color:#94a3b8;">Running tests...</p>';
+        fetch('/api/run-tests')
+          .then(r => r.json())
+          .then(data => {
+            container.innerHTML = '';
+            data.results.forEach(res => {
+              const el = document.createElement('div');
+              el.className = 'test-result-item ' + (res.ok ? 'pass' : 'fail');
+              el.innerHTML = '<b>' + (res.ok ? '&#10004;' : '&#10008;') + ' ' + res.file + '</b>' +
+                             '<pre style="margin-top:4px; font-size:11px; color:#cbd5e1;">' + res.output + '</pre>';
+              container.appendChild(el);
+            });
+          })
+          .catch(err => {
+            container.innerHTML = '<p style="color:#ef4444; font-size:12px;">Error executing tests: ' + err.message + '</p>';
+          });
+      });
+
+    })();
+  </script>
+</body>
+</html>
