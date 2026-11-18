@@ -4051,6 +4051,7 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" class="sp-pl-only hidden" data-sp-act="addsongs"><svg class="ico"><use href="#i-plus"/></svg><span>Add songs</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="editsongs"><svg class="ico"><use href="#i-menu"/></svg><span>Edit songs</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Name and details</span></button>
+            <button type="button" class="sp-pl-only" data-sp-act="shareplaylist"><svg class="ico"><use href="#i-share"/></svg><span>Share playlist</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="sharelinks"><svg class="ico"><use href="#i-share"/></svg><span>Share source links</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="cover"><svg class="ico"><use href="#i-image"/></svg><span>Change cover</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="deletepl"><svg class="ico"><use href="#i-trash"/></svg><span>Delete playlist</span></button>
@@ -4161,6 +4162,18 @@ body.settings-open #srch-input { pointer-events: none; }
           <span class="sd-switch-text">Restore library<small id="restore-status-text">Import songs and playlists from a Moonlight backup ZIP archive.</small></span>
           <button type="button" id="backup-restore-btn" class="sd-btn">Restore</button>
         </div>
+      </section>
+
+      <section class="sd-group" aria-labelledby="sd-sharing">
+        <h3 class="sd-title" id="sd-sharing">Playlist Sharing</h3>
+        <label class="sd-switch" for="set-playlist-share">
+          <span class="sd-switch-text">Playlist sharing<small>Allow packaging and sharing playlists with other Moonlight devices.</small></span>
+          <input type="checkbox" id="set-playlist-share" checked>
+        </label>
+        <label class="sd-switch" for="set-filebin">
+          <span class="sd-switch-text">Filebin cloud links<small>Generate fast temporary share links via Filebin (links expire after 6 days).</small></span>
+          <input type="checkbox" id="set-filebin" checked>
+        </label>
       </section>
     </div>
 
@@ -4281,6 +4294,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="player-app.js"></script>
 <script src="settings-menu.js"></script>
 <script src="song-backup.js"></script>
+<script src="playlist-share.js"></script>
 <script src="app-update.js"></script>
 </body>
 </html>

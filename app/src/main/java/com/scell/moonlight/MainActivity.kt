@@ -1763,6 +1763,126 @@ class MainActivity : ComponentActivity() {
             if (!hasStoragePermission()) return "[]"
             return SongBackup(playerRoot, downloadDir).listBackups()
         }
+
+        // ---- Playlist Sharing & Filebin Integration (Item 3) ----------------------------------------------
+        @JavascriptInterface
+        fun sharePlaylistPackage(playlistKey: String, password: String, method: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onPlaylistShareComplete", err)
+                return err
+            }
+            Thread {
+                val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
+                val share = PlaylistShare(playerRoot, shareDir)
+                val pkgRes = share.createPackage(playlistKey, password.takeIf { it.isNotBlank() })
+                if (!pkgRes.success) {
+                    runOnUiThread { callPage("onPlaylistShareComplete", pkgRes.toJson()) }
+                    return@Thread
+                }
+
+                val f = File(pkgRes.filePath)
+                if (method.equals("filebin", ignoreCase = true)) {
+                    val (uploaded, shareUrl) = share.uploadToFilebin(f)
+                    val res = JSONObject().apply {
+                        put("success", uploaded)
+                        put("method", "filebin")
+                        put("shareUrl", shareUrl)
+                        put("isEncrypted", pkgRes.isEncrypted)
+                        put("songCount", pkgRes.songCount)
+                        if (!uploaded) put("error", shareUrl)
+                    }.toString()
+                    runOnUiThread {
+                        callPage("onPlaylistShareComplete", res)
+                        if (uploaded) {
+                            shareText(shareUrl)
+                        }
+                    }
+                } else {
+                    val res = JSONObject().apply {
+                        put("success", true)
+                        put("method", "direct")
+                        put("filePath", pkgRes.filePath)
+                        put("fileName", pkgRes.fileName)
+                        put("isEncrypted", pkgRes.isEncrypted)
+                        put("songCount", pkgRes.songCount)
+                    }.toString()
+                    runOnUiThread {
+                        callPage("onPlaylistShareComplete", res)
+                        try {
+                            val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                putExtra(Intent.EXTRA_TITLE, f.name)
+                                clipData = ClipData.newRawUri(f.name, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(send, "Share playlist package"))
+                        } catch (e: Exception) {
+                            // chooser error
+                        }
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun importSharedPlaylist(source: String, password: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onPlaylistImportComplete", err)
+                return err
+            }
+            Thread {
+                val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
+                val share = PlaylistShare(playerRoot, shareDir)
+                val targetFile: File? = if (PlaylistShare.isFilebinUrl(source)) {
+                    val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source)
+                    if (!dlSuccess || downloadedFile == null) {
+                        val err = JSONObject().apply {
+                            put("success", false)
+                            put("error", "Could not download playlist package from Filebin")
+                        }.toString()
+                        runOnUiThread { callPage("onPlaylistImportComplete", err) }
+                        return@Thread
+                    }
+                    downloadedFile
+                } else {
+                    File(source).takeIf { it.isFile }
+                }
+
+                if (targetFile == null || !targetFile.exists()) {
+                    val err = JSONObject().apply {
+                        put("success", false)
+                        put("error", "Playlist package file not found")
+                    }.toString()
+                    runOnUiThread { callPage("onPlaylistImportComplete", err) }
+                    return@Thread
+                }
+
+                val impRes = share.importPackage(targetFile, password.takeIf { it.isNotBlank() })
+                runOnUiThread {
+                    callPage("onPlaylistImportComplete", impRes.toJson())
+                    if (impRes.success) {
+                        runAudioScan()
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun isPlaylistShareFilebinUrl(url: String): Boolean {
+            return PlaylistShare.isFilebinUrl(url)
+        }
     }
 
     private fun hasStoragePermission(): Boolean {

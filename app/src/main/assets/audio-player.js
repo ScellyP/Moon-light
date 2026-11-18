@@ -2129,7 +2129,7 @@ window.NovelAudio = (function () {
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, playlistSharing: true, filebinSharing: true },
   });
 
   /* ---- Remember the last song ---------------------------------------------------
