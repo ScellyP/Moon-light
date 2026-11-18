@@ -1090,9 +1090,12 @@
 
   function buildPlResolving() {
     const box = el('div', 'dl-step dl-pl-step');
-    const mark = el('span', 'dl-mark'); mark.appendChild(icon('i-moon')); box.appendChild(mark);
+    box.appendChild(el('span', 'dl-spinner'));
     box.appendChild(el('h2', 'dl-title', 'Reading playlist\u2026'));
-    box.appendChild(el('p', 'dl-hint', 'Fetching the track list. This takes a moment.'));
+    const bar = el('span', 'dl-bar');
+    bar.appendChild(el('i'));
+    box.appendChild(bar);
+    box.appendChild(el('p', 'dl-sub', 'Fetching the track list. This takes a moment.'));
     return box;
   }
 

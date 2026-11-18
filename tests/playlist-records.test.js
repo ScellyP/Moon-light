@@ -320,4 +320,14 @@ check('hand-picked list: a move swaps with the neighbour that is shown, not with
   assert.strictEqual(t.app.movePlaylistSong(key, A.id, 1), false);               // last one cannot go down
 });
 
+check('scan automatically purges missing songs from liked, recent and playlists when files exist', () => {
+  const t = start();
+  const valid = [A, B];
+  t.state.features.likes.ids = [A.id, C.id];
+  t.state.features.history.ids = [C.id, B.id];
+  t.scanFinished(valid);
+  assert.deepStrictEqual(t.state.features.likes.ids, [A.id]);
+  assert.deepStrictEqual(t.state.features.history.ids, [B.id]);
+});
+
 finish();

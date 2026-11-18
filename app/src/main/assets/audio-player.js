@@ -230,6 +230,61 @@ window.NovelAudio = (function () {
       state.tracks = Array.isArray(tracks) ? tracks : [];
       state.scanning = false;
 
+      // When storage is verified and tracks are returned, purge missing songs from all in-app state & storage
+      if (state.tracks.length > 0) {
+        const validTrackIds = new Set(state.tracks.map((t) => t.id));
+        let prefsChanged = false;
+
+        // Clean missing songs from current and remembered track
+        if (state.currentTrackId && !validTrackIds.has(state.currentTrackId)) {
+          state.currentTrackId = null;
+          state.durationSec = 0;
+          state.positionSec = 0;
+        }
+        if (state.lastTrackId && !validTrackIds.has(state.lastTrackId)) {
+          state.lastTrackId = null;
+        }
+
+        // Clean missing songs from Liked tracks
+        if (state.features && state.features.likes && Array.isArray(state.features.likes.ids)) {
+          const prevLen = state.features.likes.ids.length;
+          state.features.likes.ids = state.features.likes.ids.filter((id) => validTrackIds.has(id));
+          if (state.features.likes.ids.length !== prevLen) prefsChanged = true;
+        }
+
+        // Clean missing songs from Recently Played
+        if (state.features && state.features.history && Array.isArray(state.features.history.ids)) {
+          const prevLen = state.features.history.ids.length;
+          state.features.history.ids = state.features.history.ids.filter((id) => validTrackIds.has(id));
+          if (state.features.history.ids.length !== prevLen) prefsChanged = true;
+        }
+
+        // Clean missing songs from curated playlists
+        if (state.features && state.features.customPlaylists && Array.isArray(state.features.customPlaylists.lists)) {
+          state.features.customPlaylists.lists.forEach((pl) => {
+            if (Array.isArray(pl.ids)) {
+              const prevLen = pl.ids.length;
+              pl.ids = pl.ids.filter((id) => validTrackIds.has(id));
+              if (pl.ids.length !== prevLen) prefsChanged = true;
+            }
+          });
+        }
+
+        if (prefsChanged) Prefs.save();
+
+        // Invalidate cached playlist files so they are re-read cleanly
+        this.playlistFilesChanged();
+        delete this._pf;
+        this.infoRev++;
+
+        // Clean stale entries from download listings (downloads.txt / SongMemory)
+        try {
+          if (window.SongMemory && typeof window.SongMemory.cleanMissing === 'function') {
+            window.SongMemory.cleanMissing(validTrackIds);
+          }
+        } catch (e) { /* non-fatal */ }
+      }
+
       // First scan after launch: bring back the song that was playing when the app was last
       // closed. It becomes the current song (shown in the player, and what Play starts) but is
       // not started here, and like every track it starts from the beginning, not where it was

@@ -292,4 +292,26 @@ check('in a plain browser the same text is kept in localStorage', () => {
   assert.ok(/youtu\.be\/ls/.test(p.ls['moonlight_file_downloads.txt']));
 });
 
+check('cleanMissing: automatically removes missing songs from download listings and favorites/recents', () => {
+  const files = {
+    'downloads.txt': M.formatDownloadLog([
+      { t: 1, name: 'Active Song', playlist: 'Pop', url: 'https://youtu.be/a1', path: '/a/Active Song.mp3' },
+      { t: 2, name: 'Missing Song', playlist: 'Pop', url: 'https://youtu.be/m1', path: '/a/Missing Song.mp3' },
+    ]),
+  };
+  const p = makePage({ files, liked: ['/a/Active Song.mp3', '/a/Missing Song.mp3'], history: ['/a/Missing Song.mp3'] });
+  p.sm.restore();
+  assert.strictEqual(p.sm.downloadLog().length, 2);
+
+  // Storage failure guard: empty or invalid set does nothing
+  p.sm.cleanMissing(new Set());
+  assert.strictEqual(p.sm.downloadLog().length, 2);
+
+  // Active scan with only Active Song existing
+  p.sm.cleanMissing(new Set(['/a/Active Song.mp3']));
+  assert.strictEqual(p.sm.downloadLog().length, 1);
+  assert.strictEqual(p.sm.downloadLog()[0].name, 'Active Song');
+  assert.ok(!files['downloads.txt'].includes('Missing Song'));
+});
+
 console.log(n + ' checks passed');
