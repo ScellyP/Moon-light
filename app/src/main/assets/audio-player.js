@@ -2123,10 +2123,11 @@ window.NovelAudio = (function () {
        btAutoStart  start playing on its own when the app opens with Bluetooth audio connected
        animatedSky  the twinkling stars behind the screens (off = still stars, calmer, easier on battery)
        coverTint    colour the screens from the current cover art
-       removeDuplicates  after a scan, move copies of the same song (same title and artist, or the same source link) out of the library */
+       removeDuplicates  after a scan, move copies of the same song (same title and artist, or the same source link) out of the library
+       lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, animatedSky: true, coverTint: true, removeDuplicates: true },
+    defaults: { btAutoStart: true, animatedSky: true, coverTint: true, removeDuplicates: true, lightMode: false },
   });
 
   /* ---- Remember the last song ---------------------------------------------------

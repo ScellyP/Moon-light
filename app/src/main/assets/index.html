@@ -94,6 +94,83 @@
   --nav-bar-height: 24px;
 }
 
+/* Light mode overrides: clean light surfaces, deep readable text, and balanced accents. */
+html.theme-light {
+  --bg: #f5f6f9;
+  --panel: #ffffff;
+  --panel-2: #eceef2;
+  --raised: #e1e4ea;
+  --border: #d4d8e2;
+  --border-strong: #b2b9c7;
+
+  --text: #14171f;
+  --muted: #525866;
+  --faint: #7b8292;
+
+  --accent: #992bb8;
+  --accent-strong: #83229e;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(153, 43, 184, 0.12);
+  --accent-line: rgba(153, 43, 184, 0.35);
+  --danger: #d93829;
+
+  --sp-elevated: rgba(0, 0, 0, 0.05);
+}
+
+html.theme-light .sky {
+  opacity: 0.15;
+}
+
+html.theme-light #srch-bar {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  color: var(--muted);
+}
+html.theme-light #srch-input {
+  color: var(--text);
+}
+html.theme-light #srch-input::placeholder {
+  color: var(--muted);
+}
+html.theme-light #srch-clear {
+  color: var(--muted);
+}
+
+html.theme-light #sp-mini {
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border);
+}
+
+html.theme-light #sp-nav {
+  border-top: 1px solid var(--border);
+}
+
+html.theme-light #sp-nav-pill {
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
+}
+
+html.theme-light #settings-drawer {
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.12);
+}
+
+html.theme-light #settings-scrim {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+html.theme-light #sp-sheet-body {
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+}
+
+html.theme-light .sm-body {
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+}
+
+html.theme-light select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
 * { box-sizing: border-box; min-width: 0; min-height: 0; -webkit-tap-highlight-color: transparent; }
 
 html, body {
@@ -4037,6 +4114,10 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <section class="sd-group" aria-labelledby="sd-look">
         <h3 class="sd-title" id="sd-look">Appearance</h3>
+        <label class="sd-switch" for="set-light-mode">
+          <span class="sd-switch-text">Light mode<small>Brighten the interface with clean light surfaces and dark text.</small></span>
+          <input type="checkbox" id="set-light-mode">
+        </label>
         <label class="sd-switch" for="set-sky">
           <span class="sd-switch-text">Twinkling stars<small>Turn off for still stars. Calmer, and a little easier on the battery.</small></span>
           <input type="checkbox" id="set-sky" checked>
