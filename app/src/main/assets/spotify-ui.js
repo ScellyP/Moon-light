@@ -1285,22 +1285,10 @@
     if (url) {
       node.style.setProperty('--sp-cover', 'url("' + url + '")');
       node.setAttribute('data-sp-cover', '1');
-      node.classList.add('has-art');
     } else {
       node.style.removeProperty('--sp-cover');
       node.removeAttribute('data-sp-cover');
-      node.classList.remove('has-art');
     }
-  }
-
-  function createMoonBadge() {
-    const badge = makeElement('span', 'moon-corner-badge');
-    badge.setAttribute('aria-hidden', 'true');
-    const img = makeElement('img', 'moon-icon-img');
-    img.src = 'moon-icon.webp';
-    img.alt = '';
-    badge.appendChild(img);
-    return badge;
   }
 
   /** The mosaic pass finished a row: show its new cover wherever that playlist appears. */
@@ -1333,15 +1321,7 @@
   function makeCover(tone, iconId, url) {
     const cover = makeElement('span', 'sp-cover');
     cover.setAttribute('data-tone', String(tone));
-    if (iconId === 'i-moon-music' || iconId === 'i-moon') {
-      const img = makeElement('img', 'moon-icon-img sp-cover-moon');
-      img.src = 'moon-icon.webp';
-      img.alt = '';
-      cover.appendChild(img);
-    } else {
-      cover.appendChild(makeIcon(iconId));
-    }
-    cover.appendChild(createMoonBadge());
+    cover.appendChild(makeIcon(iconId));
     setCoverUrl(cover, url);
     return cover;
   }
@@ -1551,16 +1531,14 @@
   function mirrorArtwork(target) {
     if (!target || !el.artwork) return;
 
-    const sourceImage = el.artwork.querySelector('img:not(.moon-icon-img)');
+    const sourceImage = el.artwork.querySelector('img');
     if (sourceImage) {
-      const currentImage = target.querySelector('img:not(.moon-icon-img)');
+      const currentImage = target.querySelector('img');
       if (!currentImage || currentImage.src !== sourceImage.src) {
-        target.classList.add('has-art');
-        target.innerHTML = '<img alt="" src="' + sourceImage.src + '"><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span>';
+        target.innerHTML = '<img alt="" src="' + sourceImage.src + '">';
       }
-    } else if (!target.querySelector('.sp-cover-moon')) {
-      target.classList.remove('has-art');
-      target.innerHTML = '<img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt="">';
+    } else if (!target.querySelector('svg')) {
+      target.innerHTML = '<svg class="ico"><use href="#i-moon-music"/></svg>';
     }
   }
 
@@ -1689,10 +1667,7 @@
     const signature = 'pl|' + url.length + url.slice(-16);
     if (target.getAttribute('data-sheet-sig') === signature) return;
     target.setAttribute('data-sheet-sig', signature);
-    target.classList.toggle('has-art', !!url);
-    target.innerHTML = url
-      ? '<img alt="" src="' + url + '"><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span>'
-      : '<img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt="">';
+    target.innerHTML = url ? '<img alt="" src="' + url + '">' : '<svg class="ico"><use href="#i-moon-music"/></svg>';
   }
 
   /** The Songs tab's big cover is the PLAYLIST's cover (the one you chose, else its mosaic, else a placeholder),
@@ -1707,10 +1682,7 @@
     if (target.getAttribute('data-pl-sig') === signature) return;
     target.setAttribute('data-pl-sig', signature);
     target.setAttribute('data-pl-key', key);
-    target.classList.toggle('has-art', !!url);
-    target.innerHTML = url
-      ? '<img alt="" src="' + url + '"><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span>'
-      : '<img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt="">';
+    target.innerHTML = url ? '<img alt="" src="' + url + '">' : '<svg class="ico"><use href="#i-moon-music"/></svg>';
   }
 
   function getPlaylistTitle() {

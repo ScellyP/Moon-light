@@ -363,33 +363,11 @@
     try { return u && u.getPlaylistRows ? u.getPlaylistRows() : []; } catch (e) { return []; }
   }
 
-  function createMoonBadge() {
-    const badge = el('span', 'moon-corner-badge');
-    badge.setAttribute('aria-hidden', 'true');
-    const img = el('img', 'moon-icon-img');
-    img.src = 'moon-icon.webp';
-    img.alt = '';
-    badge.appendChild(img);
-    return badge;
-  }
-
   function cover(url, tone, iconName, className) {
     const c = el('span', 'sp-cover' + (className ? ' ' + className : ''));
     c.setAttribute('data-tone', String(tone % 4));
-    if (iconName === 'i-moon-music' || !iconName || iconName === 'i-moon') {
-      const img = el('img', 'moon-icon-img sp-cover-moon');
-      img.src = 'moon-icon.webp';
-      img.alt = '';
-      c.appendChild(img);
-    } else {
-      c.appendChild(icon(iconName));
-    }
-    c.appendChild(createMoonBadge());
-    if (url) {
-      c.style.setProperty('--sp-cover', 'url("' + url + '")');
-      c.setAttribute('data-sp-cover', '1');
-      c.classList.add('has-art');
-    }
+    c.appendChild(icon(iconName || 'i-moon-music'));
+    if (url) { c.style.setProperty('--sp-cover', 'url("' + url + '")'); c.setAttribute('data-sp-cover', '1'); }
     return c;
   }
 
@@ -405,7 +383,6 @@
   function paintCover(tile, uri) {
     tile.style.setProperty('--sp-cover', 'url("' + uri + '")');
     tile.setAttribute('data-sp-cover', '1');
-    tile.classList.add('has-art');
   }
 
   function artFor(track) {

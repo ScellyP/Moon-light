@@ -18,14 +18,18 @@
     return {fraction, illumination, index, name: PHASE_NAMES[index], waxing: fraction < .5};
   }
   // Lit part of the moon for any point in the cycle (not just the 8 steps).
+  // For crescent phases, make the middle bit a bit fatter and fuller like the reference crescent image.
   function moonPhasePath(fraction, cx, cy, r) {
     const theta = 2 * Math.PI * fraction, c = Math.cos(theta), illum = (1 - c) / 2;
     if (illum < .015) return '';
     if (illum > .985) return `M ${cx-r} ${cy} A ${r} ${r} 0 1 1 ${cx+r} ${cy} A ${r} ${r} 0 1 1 ${cx-r} ${cy} Z`;
     const waxing = fraction < .5, top = `${cx} ${cy-r}`, bottom = `${cx} ${cy+r}`;
-    const limbSweep = waxing ? 1 : 0, rx = r * Math.abs(c);
-    const termSweep = waxing ? (c > 0 ? 0 : 1) : (c > 0 ? 1 : 0);
-    const term = rx < .5 ? `L ${top}` : `A ${rx} ${r} 0 0 ${termSweep} ${top}`;
+    const limbSweep = waxing ? 1 : 0;
+    // Scale crescent terminator so the middle section of the crescent is fatter
+    const factor = c > 0 ? Math.pow(c, 1.8) * 0.45 : c;
+    const rx = r * Math.abs(factor);
+    const termSweep = waxing ? (factor > 0 ? 0 : 1) : (factor > 0 ? 1 : 0);
+    const term = rx < .5 ? `L ${top}` : `A ${rx.toFixed(2)} ${r} 0 0 ${termSweep} ${top}`;
     return `M ${top} A ${r} ${r} 0 0 ${limbSweep} ${bottom} ${term} Z`;
   }
   var api = { moonPhaseInfo: moonPhaseInfo, moonPhasePath: moonPhasePath };

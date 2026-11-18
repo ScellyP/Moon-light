@@ -3492,129 +3492,15 @@ html.kb-open .sm-body { padding-bottom: 8px; }
 /* Covers: the playlist's real art when there is some, otherwise a theme-coloured mosaic */
 .sp-cover { --c1: color-mix(in srgb, var(--accent) 55%, var(--bg)); --c2: color-mix(in srgb, var(--accent) 22%, var(--bg));
   --c3: color-mix(in srgb, var(--accent) 38%, var(--bg)); --c4: color-mix(in srgb, var(--accent) 12%, var(--bg));
-  position: relative; display: flex; flex: none; align-items: center; justify-content: center; color: color-mix(in srgb, var(--text) 75%, transparent);
+  display: flex; flex: none; align-items: center; justify-content: center; color: color-mix(in srgb, var(--text) 75%, transparent);
   background: linear-gradient(var(--sp-bg), var(--sp-bg)) center / 1px 100% no-repeat, linear-gradient(var(--sp-bg), var(--sp-bg)) center / 100% 1px no-repeat,
     conic-gradient(var(--c1) 0 25%, var(--c2) 0 50%, var(--c3) 0 75%, var(--c4) 0); }
 .sp-cover[data-tone="1"] { --c1: color-mix(in srgb, var(--accent) 40%, var(--bg)); --c2: color-mix(in srgb, var(--accent) 60%, var(--bg)); --c3: color-mix(in srgb, var(--accent) 16%, var(--bg)); --c4: color-mix(in srgb, var(--accent) 30%, var(--bg)); }
 .sp-cover[data-tone="2"] { --c1: color-mix(in srgb, var(--accent) 24%, var(--bg)); --c2: color-mix(in srgb, var(--accent) 48%, var(--bg)); --c3: color-mix(in srgb, var(--accent) 64%, var(--bg)); --c4: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
 .sp-cover[data-tone="3"] { --c1: color-mix(in srgb, var(--accent) 50%, var(--bg)); --c2: color-mix(in srgb, var(--accent) 18%, var(--bg)); --c3: color-mix(in srgb, var(--accent) 34%, var(--bg)); --c4: color-mix(in srgb, var(--accent) 62%, var(--bg)); }
 .sp-cover[data-sp-cover] { background: var(--sp-cover) center / cover no-repeat; }
-.sp-cover[data-sp-cover] > .ico, .sp-cover[data-sp-cover] > .sp-cover-moon { display: none !important; }
+.sp-cover[data-sp-cover] > .ico { display: none; }
 .sp-cover .ico { width: 40%; height: 40%; }
-.sp-cover .sp-cover-moon { width: 44%; height: 44%; object-fit: contain; image-rendering: pixelated; display: block; pointer-events: none; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
-.sp-card .sp-cover .sp-cover-moon { width: 48%; height: 48%; }
-.dl-tile .sp-cover .sp-cover-moon { width: 44%; height: 44%; }
-
-/* Corner moon badge on all thumbnails (notification style) */
-.moon-corner-badge {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(14, 16, 22, 0.85);
-  box-shadow: 0 2px 5px rgba(0,0,0,.5);
-  border: 1px solid rgba(255,255,255,.22);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 3;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-.theme-light .moon-corner-badge {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(0,0,0,.15);
-  box-shadow: 0 2px 5px rgba(0,0,0,.18);
-}
-.moon-corner-badge .moon-icon-img,
-.moon-corner-badge img {
-  width: 75%;
-  height: 75%;
-  object-fit: contain;
-  image-rendering: pixelated;
-  display: block;
-}
-.sp-card .moon-corner-badge {
-  width: 24px;
-  height: 24px;
-  right: 6px;
-  bottom: 6px;
-}
-#sp-album-cover .moon-corner-badge {
-  width: 30px;
-  height: 30px;
-  right: 46px;
-  bottom: 8px;
-}
-#audio-artwork .moon-corner-badge {
-  width: 36px;
-  height: 36px;
-  right: 12px;
-  bottom: 12px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.6);
-}
-#sp-mini-art .moon-corner-badge {
-  width: 13px;
-  height: 13px;
-  right: 2px;
-  bottom: 2px;
-}
-#sp-sheet-art .moon-corner-badge {
-  width: 18px;
-  height: 18px;
-  right: 3px;
-  bottom: 3px;
-}
-.srch-thumb .moon-corner-badge,
-.pp-art .moon-corner-badge,
-.pe-art .moon-corner-badge,
-.dl-thumb .moon-corner-badge {
-  width: 13px;
-  height: 13px;
-  right: 2px;
-  bottom: 2px;
-}
-
-/* Ensure thumbnail containers are position: relative */
-#sp-album-cover,
-#audio-artwork,
-#sp-mini-art,
-#sp-sheet-art,
-.srch-thumb,
-.pp-art,
-.pe-art,
-.dl-thumb {
-  position: relative;
-}
-
-/* Only display corner badge when thumbnail has custom artwork (avoiding moon on top of moon) */
-.sp-cover:not([data-sp-cover]) > .moon-corner-badge,
-#sp-album-cover:not(.has-art) > .moon-corner-badge,
-#audio-artwork:not(.has-art) > .moon-corner-badge,
-#sp-mini-art:not(.has-art) > .moon-corner-badge,
-#sp-sheet-art:not(.has-art) > .moon-corner-badge,
-.srch-thumb:not([data-has-art]) > .moon-corner-badge,
-.pp-art:not(.has-art) > .moon-corner-badge,
-.pe-art:not(.has-art) > .moon-corner-badge,
-.dl-thumb:not([data-has-art]) > .moon-corner-badge {
-  display: none !important;
-}
-
-.pp-art[data-pp-cover] > .sp-cover-moon,
-.pe-art[data-pe-cover] > .sp-cover-moon {
-  display: none !important;
-}
-.pp-art .sp-cover-moon,
-.pe-art .sp-cover-moon {
-  width: 52%;
-  height: 52%;
-  object-fit: contain;
-  image-rendering: pixelated;
-  display: block;
-}
 
 /* Shelves: a heading, then covers that scroll sideways */
 .sp-shelf { padding: 16px 0 4px; }
@@ -3929,10 +3815,10 @@ body.settings-open #srch-input { pointer-events: none; }
   <symbol id="sp-pause-solid" viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/></symbol>
   <symbol id="sp-prev-solid" viewBox="0 0 24 24"><rect x="5" y="5" width="2.4" height="14" rx="1"/><path d="M19.2 6v12a.6.6 0 0 1-.95.5L9.9 12.5a.6.6 0 0 1 0-1l8.35-6A.6.6 0 0 1 19.2 6Z"/></symbol>
   <symbol id="sp-next-solid" viewBox="0 0 24 24"><rect x="16.6" y="5" width="2.4" height="14" rx="1"/><path d="M4.8 6v12a.6.6 0 0 0 .95.5l8.35-6a.6.6 0 0 0 0-1l-8.35-6A.6.6 0 0 0 4.8 6Z"/></symbol>
-  <symbol id="i-moon" viewBox="0 0 24 24"><image href="moon-icon.webp" x="1" y="1" width="22" height="22" preserveAspectRatio="xMidYMid meet" style="image-rendering: pixelated;"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
   <symbol id="i-moon-stars" viewBox="0 0 24 24"><path d="M19 14.2A7.2 7.2 0 0 1 9.8 5a7.2 7.2 0 1 0 9.2 9.2Z"/><path d="M17.5 3.5c.25 1.9.75 2.4 2.7 2.7-1.95.25-2.45.75-2.7 2.7-.25-1.95-.75-2.45-2.7-2.7 1.95-.3 2.45-.8 2.7-2.7Z"/></symbol>
   <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3c.6 4.6 1.9 5.9 6.5 6.5-4.6.6-5.9 1.9-6.5 6.5-.6-4.6-1.9-5.9-6.5-6.5C10.1 8.9 11.4 7.6 12 3Z"/></symbol>
-  <symbol id="i-moon-music" viewBox="0 0 24 24"><image href="moon-icon.webp" x="1" y="1" width="22" height="22" preserveAspectRatio="xMidYMid meet" style="image-rendering: pixelated;"/></symbol>
+  <symbol id="i-moon-music" viewBox="0 0 24 24"><path d="M12 2.8A9.2 9.2 0 0 0 12 21.2A6.5 8.5 0 0 1 12 2.8Z"/><path d="M17 5.5v8.2"/><circle cx="15.1" cy="14" r="1.9"/><path d="M17 5.5c1.4.2 2.4 1 2.8 2.4"/></symbol>
   <symbol id="i-planet" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.3" transform="rotate(-24 12 12)"/></symbol>
 </svg>
 
@@ -4014,7 +3900,7 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
           </div>
           <div id="sp-album-find"><svg class="ico"><use href="#i-search"/></svg><input id="sp-album-find-input" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="Find in playlist" aria-label="Find in playlist"></div>
-          <div id="sp-album-cover"><img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt=""><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span></div>
+          <div id="sp-album-cover"><svg class="ico"><use href="#i-moon-music"/></svg></div>
           <div id="sp-album-title">All songs</div>
           <div id="sp-album-meta"></div>
           <div id="sp-album-desc" class="hidden"></div>
@@ -4049,7 +3935,7 @@ body.settings-open #srch-input { pointer-events: none; }
 
           <div id="audio-now-playing">
             <div id="audio-np-top">
-              <div id="audio-artwork"><img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt=""><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span></div>
+              <div id="audio-artwork"><svg class="ico"><use href="#i-moon-music"/></svg></div>
               <div id="audio-np-text">
                 <div id="audio-np-title">The sky is quiet</div>
                 <div id="audio-np-artist">Pick a star below</div>
@@ -4132,7 +4018,7 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <!-- ============ Mini player ============ -->
       <div id="sp-mini" class="hidden" role="button" tabindex="0" aria-label="Open now playing">
-        <div id="sp-mini-art"><img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt=""><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span></div>
+        <div id="sp-mini-art"><svg class="ico"><use href="#i-moon-music"/></svg></div>
         <div id="sp-mini-text">
           <div id="sp-mini-line"><b id="sp-mini-title"></b><span id="sp-mini-artist"></span></div>
           <div id="sp-mini-sub"></div>
@@ -4158,7 +4044,7 @@ body.settings-open #srch-input { pointer-events: none; }
       <div id="sp-sheet" class="hidden" role="dialog" aria-label="Track options">
         <div id="sp-sheet-scrim" data-sp-sheet-close></div>
         <div id="sp-sheet-body">
-          <div id="sp-sheet-art"><img class="moon-icon-img sp-cover-moon" src="moon-icon.webp" alt=""><span class="moon-corner-badge" aria-hidden="true"><img src="moon-icon.webp" alt="" class="moon-icon-img"></span></div>
+          <div id="sp-sheet-art"><svg class="ico"><use href="#i-moon-music"/></svg></div>
           <div id="sp-sheet-title"></div>
           <div id="sp-sheet-artist"></div>
           <div id="sp-sheet-list">

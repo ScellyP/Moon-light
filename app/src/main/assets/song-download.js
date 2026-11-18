@@ -415,33 +415,14 @@
     catch (e) { return ''; }
   }
 
-  function createMoonBadge() {
-    const badge = el('span', 'moon-corner-badge');
-    badge.setAttribute('aria-hidden', 'true');
-    const img = el('img', 'moon-icon-img');
-    img.src = 'moon-icon.webp';
-    img.alt = '';
-    badge.appendChild(img);
-    return badge;
-  }
-
   // A cover like the ones on Home: the picture when there is one, otherwise the theme-coloured mosaic.
   function coverNode(url, tone, iconName, extraClass) {
     const cover = el('span', 'sp-cover' + (extraClass ? ' ' + extraClass : ''));
     cover.setAttribute('data-tone', String(tone % 4));
-    if (iconName === 'i-moon-music' || !iconName || iconName === 'i-moon') {
-      const img = el('img', 'moon-icon-img sp-cover-moon');
-      img.src = 'moon-icon.webp';
-      img.alt = '';
-      cover.appendChild(img);
-    } else {
-      cover.appendChild(icon(iconName));
-    }
-    cover.appendChild(createMoonBadge());
+    cover.appendChild(icon(iconName || 'i-moon-music'));
     if (url) {
       cover.style.setProperty('--sp-cover', 'url("' + url + '")');
       cover.setAttribute('data-sp-cover', '1');
-      cover.classList.add('has-art');
     }
     return cover;
   }

@@ -96,20 +96,25 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     console.log('ok - disabled comets perform zero timer or background work');
   }
 
-  // 7. Moon icon asset verification (Item 7)
+  // 7. Moon-icon asset removal
   {
     const fs = require('fs');
     const path = require('path');
     const iconPath = path.join(__dirname, '../app/src/main/assets/moon-icon.webp');
-    assert.ok(fs.existsSync(iconPath), 'moon-icon.webp asset exists in app/src/main/assets');
-    const buf = fs.readFileSync(iconPath);
-    assert.ok(buf.length > 500, 'moon-icon.webp is non-empty');
-    assert.strictEqual(buf.slice(0, 4).toString('ascii'), 'RIFF', 'valid RIFF header');
-    assert.strictEqual(buf.slice(8, 12).toString('ascii'), 'WEBP', 'valid WEBP container');
-    console.log('ok - moon-icon.webp asset exists and is a valid WebP image');
+    assert.strictEqual(fs.existsSync(iconPath), false, 'moon-icon.webp asset is removed');
+    console.log('ok - moon-icon.webp is completely removed');
   }
 
-  // 8. Moon badge rendering replaces vector graphic with custom image asset
+  // 8. Fatter crescent path generation (fuller middle section)
+  {
+    const MoonPhase = require('../app/src/main/assets/moon-phase');
+    const pathCrescent = MoonPhase.moonPhasePath(0.15, 12, 12, 10);
+    assert.ok(pathCrescent.startsWith('M 12 2 A 10 10'), 'starts at top and sweeps outer arc');
+    assert.ok(pathCrescent.includes('A 1.73 10'), 'crescent inner arc has reduced rx for a fuller, fatter middle');
+    console.log('ok - moonPhasePath generates fatter, fuller crescent in the middle');
+  }
+
+  // 9. Moon badge vector SVG rendering
   {
     const elements = [];
     const labels = [];
@@ -119,17 +124,15 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
         if (sel === '[data-moon-label]') return labels;
         return [];
       },
-      createElement: (tag) => {
+      createElementNS: (ns, tag) => {
         const attrs = {};
+        const children = [];
         return {
           tagName: tag.toUpperCase(),
           setAttribute: (k, v) => { attrs[k] = v; },
           getAttribute: (k) => attrs[k],
-          classList: { add: () => {} },
-          style: {},
-          src: '',
-          alt: '',
-          className: '',
+          appendChild: (c) => children.push(c),
+          children,
         };
       },
     };
@@ -145,9 +148,9 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     const labelEl = { textContent: '' };
     labels.push(labelEl);
 
-    // Mock NovelMoonLock on global
     global.NovelMoonLock = {
       moonPhaseInfo: () => ({ name: 'Waxing Crescent', fraction: 0.15, waxing: true }),
+      moonPhasePath: () => 'M 12 2 A 10 10 0 0 1 12 22 A 1.73 10 0 0 0 12 2 Z',
     };
 
     const savedDoc = global.document;
@@ -155,38 +158,28 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     try {
       MoonSky.paintMoonBadges();
       assert.strictEqual(labelEl.textContent, 'Waxing Crescent', 'sets label text');
-      assert.strictEqual(badgeEl.children.length, 1, 'adds 1 child element');
-      const img = badgeEl.children[0];
-      assert.strictEqual(img.tagName, 'IMG', 'child is an <img>, not SVG vector');
-      assert.strictEqual(img.src, 'moon-icon.webp', 'image source is moon-icon.webp');
-      assert.strictEqual(img.className, 'moon-icon-img', 'image has moon-icon-img class');
-      assert.strictEqual(badgeEl['title'], 'Waxing Crescent', 'sets title on badge container');
+      assert.strictEqual(badgeEl.children.length, 1, 'adds 1 SVG element');
+      const svg = badgeEl.children[0];
+      assert.strictEqual(svg.tagName, 'SVG', 'child is SVG vector');
+      assert.strictEqual(svg.children.length, 2, 'contains disc circle and lit crescent path');
+      assert.strictEqual(svg.children[0].tagName, 'CIRCLE', 'first child is circle disc');
+      assert.strictEqual(svg.children[1].tagName, 'PATH', 'second child is lit crescent path');
     } finally {
       global.document = savedDoc;
     }
-    console.log('ok - paintMoonBadges renders custom moon image asset with moon phase label');
+    console.log('ok - paintMoonBadges renders vector SVG moon with disc and lit crescent');
   }
 
-  // 9. Playlist covers and thumbnail corner badges in index.html (Item 7 update)
+  // 10. index.html symbols have fatter middle crescent paths
   {
     const fs = require('fs');
     const path = require('path');
     const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
-    assert.ok(html.includes('.sp-cover-moon'), 'defines .sp-cover-moon for playlist covers');
-    assert.ok(html.includes('.moon-corner-badge'), 'defines .moon-corner-badge for thumbnails');
-    assert.ok(html.includes('image href="moon-icon.webp"'), 'i-moon-music symbol points to moon-icon.webp');
-    console.log('ok - index.html defines sp-cover-moon and moon-corner-badge notification styling');
+    assert.ok(html.includes('id="i-moon"'), 'defines i-moon symbol');
+    assert.ok(html.includes('id="i-moon-music"'), 'defines i-moon-music symbol');
+    assert.strictEqual(html.includes('moon-corner-badge'), false, 'moon-corner-badge is removed');
+    console.log('ok - index.html defines bold SVG symbols with fatter crescent');
   }
 
-  // 10. spotify-ui.js makeCover uses sp-cover-moon and creates moon-corner-badge
-  {
-    const fs = require('fs');
-    const path = require('path');
-    const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/spotify-ui.js'), 'utf8');
-    assert.ok(js.includes('moon-corner-badge'), 'spotify-ui.js generates moon-corner-badge');
-    assert.ok(js.includes('sp-cover-moon'), 'spotify-ui.js replaces moon SVG with sp-cover-moon');
-    console.log('ok - spotify-ui.js renders moon-icon in covers and attaches corner badges');
-  }
-
-  console.log('\nAll 10 background visual effects, moon icon, and thumbnail badge tests passed cleanly!');
+  console.log('\nAll 10 background visual effects and moon icon tests passed cleanly!');
 })();
