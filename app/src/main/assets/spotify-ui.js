@@ -481,15 +481,13 @@
       }
     }
 
-    // Active tab management: only the active tab gets .is-active to run animations
+    // Active tab management: the target tab gets .is-active immediately so it is interactive and visible
     const allViews = document.querySelectorAll('.sp-view');
     if (allViews && allViews.forEach) {
       allViews.forEach((v) => {
         if (v && v.classList) {
           if (v.id === 'sp-view-' + name) {
-            if (opts && opts.immediate) {
-              v.classList.add('is-active');
-            }
+            v.classList.add('is-active');
           } else {
             v.classList.remove('is-active');
           }
@@ -499,21 +497,8 @@
 
     clearTimeout(enterTimer);
     if (opts && opts.immediate) {
-      const destView = document.getElementById('sp-view-' + name);
-      if (destView && destView.classList) destView.classList.add('is-active');
       if (el.views) el.views.scrollTop = 0;
-      closeSheet();
-      sync();
-      return;
     }
-
-    // Settle transition: add is-active and run enter animation only when settled
-    enterTimer = setTimeout(() => {
-      const destView = document.getElementById('sp-view-' + name);
-      if (destView && destView.classList) destView.classList.add('is-active');
-      panel.classList.add('sp-enter');
-      setTimeout(() => panel.classList.remove('sp-enter'), 300);
-    }, 280);
 
     closeSheet();
     sync();
