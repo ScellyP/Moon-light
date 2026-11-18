@@ -70,6 +70,8 @@
   const el = {
     // kit: layout
     views: $('sp-views'),
+    viewsTrack: $('sp-views-track'),
+    navPill: $('sp-nav-pill'),
     sheet: $('sp-sheet'),
     sleepOptions: $('sp-sleep-opts'),
 
@@ -161,77 +163,56 @@
      ======================================================================= */
 
   let enterTimer = 0;
-  let slideCleanTimer = 0;
-  let traversalTimer = 0;
-  let activeFromEl = null;
-  let activeToEl = null;
 
-  function clearSlideClasses() {
-    clearTimeout(slideCleanTimer);
-    clearTimeout(traversalTimer);
-    panel.classList.remove('sp-traversing');
-    panel.removeAttribute('data-slide');
-    if (activeFromEl && activeFromEl.classList) {
-      activeFromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      activeFromEl = null;
+  function updateNavPill(activeBtn, immediate) {
+    const pill = el.navPill || document.getElementById('sp-nav-pill');
+    if (!pill || !activeBtn) return;
+    const span = activeBtn.querySelector ? activeBtn.querySelector('span') : null;
+    const textWidth = span && span.offsetWidth ? span.offsetWidth : 0;
+    const btnWidth = activeBtn.offsetWidth || 0;
+    const btnLeft = activeBtn.offsetLeft || 0;
+
+    // Sized to fit tab text length while staying comfortably within button bounds
+    const targetWidth = textWidth ? Math.min(Math.max(48, textWidth + 24), Math.max(48, btnWidth - 8)) : (btnWidth ? btnWidth - 12 : 56);
+    const targetLeft = btnLeft + (btnWidth ? (btnWidth - targetWidth) / 2 : 0);
+
+    if (pill.style) {
+      if (immediate) {
+        pill.style.transition = 'none';
+        if (pill.style.setProperty) pill.style.setProperty('transition', 'none');
+      } else {
+        pill.style.transition = '';
+        if (pill.style.removeProperty) pill.style.removeProperty('transition');
+      }
+      pill.style.width = targetWidth + 'px';
+      pill.style.transform = 'translate3d(' + targetLeft + 'px, 0, 0)';
+      if (pill.style.setProperty) {
+        pill.style.setProperty('width', targetWidth + 'px');
+        pill.style.setProperty('transform', 'translate3d(' + targetLeft + 'px, 0, 0)');
+      }
     }
-    if (activeToEl && activeToEl.classList) {
-      activeToEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      activeToEl = null;
-    }
-    const allViews = document.querySelectorAll('.sp-view');
-    if (allViews && allViews.forEach) {
-      allViews.forEach((v) => {
-        if (v && v.classList) v.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-      });
+    if (pill.classList) pill.classList.add('is-visible');
+
+    if (immediate && pill.style) {
+      void pill.offsetWidth;
+      pill.style.transition = '';
+      if (pill.style.removeProperty) pill.style.removeProperty('transition');
     }
   }
 
-  function setNavHighlight(viewName) {
+  function setNavHighlight(viewName, immediate) {
     const buttons = document.querySelectorAll('#sp-nav [data-sp-view]');
+    let activeBtn = null;
     if (buttons && buttons.forEach) {
       buttons.forEach((button) => {
         if (button && button.classList && button.getAttribute) {
-          button.classList.toggle('active', button.getAttribute('data-sp-view') === viewName);
+          const isActive = button.getAttribute('data-sp-view') === viewName;
+          button.classList.toggle('active', isActive);
+          if (isActive) activeBtn = button;
         }
       });
     }
-  }
-
-  function runSlideStep(fromName, toName, dir, durationMs, onDone) {
-    const fromEl = document.getElementById('sp-view-' + fromName);
-    const toEl = document.getElementById('sp-view-' + toName);
-
-    if (!fromEl || !toEl || !fromEl.classList || !toEl.classList) {
-      if (onDone) onDone();
-      return;
-    }
-
-    if (panel.style && panel.style.setProperty) {
-      panel.style.setProperty('--slide-duration', durationMs + 'ms');
-    }
-    panel.setAttribute('data-slide', dir);
-
-    fromEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-    toEl.classList.remove('sp-slide-in-right', 'sp-slide-in-left', 'sp-slide-out-right', 'sp-slide-out-left');
-
-    const outClass = dir === 'right' ? 'sp-slide-out-left' : 'sp-slide-out-right';
-    const inClass  = dir === 'right' ? 'sp-slide-in-right' : 'sp-slide-in-left';
-
-    fromEl.classList.add(outClass);
-    toEl.classList.add(inClass);
-
-    activeFromEl = fromEl;
-    activeToEl = toEl;
-
-    slideCleanTimer = setTimeout(() => {
-      if (fromEl && fromEl.classList) fromEl.classList.remove(outClass);
-      if (toEl && toEl.classList) toEl.classList.remove(inClass);
-      activeFromEl = null;
-      activeToEl = null;
-      panel.removeAttribute('data-slide');
-      if (onDone) onDone();
-    }, durationMs);
+    if (activeBtn) updateNavPill(activeBtn, immediate);
   }
 
   function setView(name, opts) {
@@ -243,90 +224,66 @@
 
     if (prev === name) return;
 
-    // First load / same view
-    if (prevIdx < 0) {
-      panel.setAttribute('data-view', name);
-      setNavHighlight(name);
-      if (el.views) el.views.scrollTop = 0;
-      closeSheet();
-      sync();
-      return;
-    }
-
-    clearSlideClasses();
-
-    const dir = (opts && opts.dir) || (nextIdx > prevIdx ? 'right' : 'left');
-    const distance = Math.abs(nextIdx - prevIdx);
-
-    const isBrowserEnv = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
-    const shouldTraverse = distance > 1 && isBrowserEnv && (!opts || !opts.direct);
-
     // Immediate attribute update so state readers and synchronous tests remain accurate
     panel.setAttribute('data-view', name);
-    setNavHighlight(name);
+    setNavHighlight(name, !!(opts && opts.immediate));
 
-    if (shouldTraverse) {
-      panel.classList.add('sp-traversing');
-
-      const steps = [];
-      const delta = nextIdx > prevIdx ? 1 : -1;
-      for (let i = prevIdx + delta; (delta > 0 ? i <= nextIdx : i >= nextIdx); i += delta) {
-        steps.push(VIEWS[i]);
-      }
-
-      // Total sweep duration capped at ~600-750ms (well under 1s)
-      const stepDuration = Math.min(180, Math.max(110, Math.floor(650 / steps.length)));
-      let curStep = 0;
-      let curFrom = prev;
-
-      function executeNextStep() {
-        if (curStep >= steps.length) {
-          clearSlideClasses();
-          panel.setAttribute('data-view', name);
-          setNavHighlight(name);
-          if (el.views) el.views.scrollTop = 0;
-          closeSheet();
-          sync();
-          return;
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    const transformVal = 'translate3d(-' + (nextIdx * 100) + '%, 0, 0)';
+    if (panel.style && panel.style.setProperty) {
+      panel.style.setProperty('--sp-active-index', nextIdx);
+    }
+    if (track && track.style) {
+      if (opts && opts.immediate) {
+        track.style.transition = 'none';
+        track.style.transform = transformVal;
+        if (track.style.setProperty) {
+          track.style.setProperty('transition', 'none');
+          track.style.setProperty('transform', transformVal);
         }
-
-        const curTo = steps[curStep];
-        setNavHighlight(curTo);
-
-        runSlideStep(curFrom, curTo, dir, stepDuration, () => {
-          curFrom = curTo;
-          curStep++;
-          if (curStep === steps.length) {
-            clearSlideClasses();
-            panel.setAttribute('data-view', name);
-            setNavHighlight(name);
-            if (el.views) el.views.scrollTop = 0;
-            closeSheet();
-            sync();
-          } else {
-            traversalTimer = setTimeout(executeNextStep, 8);
-          }
-        });
+        void track.offsetWidth;
+        track.style.transition = '';
+        if (track.style.removeProperty) track.style.removeProperty('transition');
+      } else {
+        track.style.transform = transformVal;
+        if (track.style.setProperty) track.style.setProperty('transform', transformVal);
       }
-
-      executeNextStep();
-      return;
     }
 
-    // Adjacent tab or direct jump
-    const duration = distance === 1 ? 240 : 260;
-    runSlideStep(prev, name, dir, duration, () => {
-      panel.removeAttribute('data-slide');
+    // Active tab management: only the active tab gets .is-active to run animations
+    const allViews = document.querySelectorAll('.sp-view');
+    if (allViews && allViews.forEach) {
+      allViews.forEach((v) => {
+        if (v && v.classList) {
+          if (v.id === 'sp-view-' + name) {
+            if (opts && opts.immediate) {
+              v.classList.add('is-active');
+            }
+          } else {
+            v.classList.remove('is-active');
+          }
+        }
+      });
+    }
+
+    clearTimeout(enterTimer);
+    if (opts && opts.immediate) {
+      const destView = document.getElementById('sp-view-' + name);
+      if (destView && destView.classList) destView.classList.add('is-active');
       if (el.views) el.views.scrollTop = 0;
       closeSheet();
       sync();
-    });
+      return;
+    }
 
-    panel.classList.add('sp-enter');
-    clearTimeout(enterTimer);
-    enterTimer = setTimeout(() => panel.classList.remove('sp-enter'), ENTER_ANIMATION_MS);
+    // Settle transition: add is-active and run enter animation only when settled
+    enterTimer = setTimeout(() => {
+      const destView = document.getElementById('sp-view-' + name);
+      if (destView && destView.classList) destView.classList.add('is-active');
+      panel.classList.add('sp-enter');
+      setTimeout(() => panel.classList.remove('sp-enter'), 300);
+    }, 280);
 
-    if (el.views) el.views.scrollTop = 0;
     closeSheet();
     sync();
   }
@@ -1778,6 +1735,36 @@
   setInterval(updateMiniProgress, PROGRESS_INTERVAL_MS);
 
   initFind();
-  setView('library');
+  setView('library', { immediate: true });
   scheduleSync();
+
+  // Startup transition cleanup: remove .no-transition after initial layout settles
+  const appWrapper = $('app') || panel;
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (appWrapper && appWrapper.classList) appWrapper.classList.remove('no-transition');
+        if (panel && panel.classList) panel.classList.remove('no-transition');
+      });
+    });
+  } else {
+    if (appWrapper && appWrapper.classList) appWrapper.classList.remove('no-transition');
+    if (panel && panel.classList) panel.classList.remove('no-transition');
+  }
+
+  // Recalculate tab indicator pill when custom fonts finish loading
+  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      const activeBtn = document.querySelector('#sp-nav [data-sp-view].active');
+      if (activeBtn) updateNavPill(activeBtn, true);
+    });
+  }
+
+  // Recalculate tab indicator pill on window resize / orientation change
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('resize', () => {
+      const activeBtn = document.querySelector('#sp-nav [data-sp-view].active');
+      if (activeBtn) updateNavPill(activeBtn, true);
+    });
+  }
 })();

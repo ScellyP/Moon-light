@@ -78,18 +78,17 @@ check('text in the music player cannot be selected, but the fields you type in s
   assert.ok(/#audio-panel input, #audio-panel textarea \{ user-select: text;/.test(html));
 });
 
-check('sliding tab animations: GPU-accelerated translate3d slide-in and slide-out keyframes with traversal', () => {
+check('sliding tab navigation: GPU-accelerated horizontal flex track, sliding indicator pill and active state gating', () => {
   const html = read('index.html');
   const js = read('spotify-ui.js');
-  assert.ok(html.includes('@keyframes spSlideOutLeft'));
-  assert.ok(html.includes('@keyframes spSlideOutRight'));
-  assert.ok(html.includes('@keyframes spSlideInRight'));
-  assert.ok(html.includes('@keyframes spSlideInLeft'));
+  assert.ok(html.includes('id="sp-views-track"'));
+  assert.ok(html.includes('id="sp-nav-pill"'));
   assert.ok(html.includes('translate3d'));
-  assert.ok(html.includes('.sp-view.sp-slide-out-left'));
-  assert.ok(html.includes('.sp-view.sp-slide-in-right'));
-  assert.ok(js.includes('sp-traversing'));
-  assert.ok(js.includes('runSlideStep'));
+  assert.ok(html.includes('.sp-view:not(.is-active)'));
+  assert.ok(html.includes('content-visibility: auto'));
+  assert.ok(html.includes('.no-transition'));
+  assert.ok(js.includes('updateNavPill'));
+  assert.ok(js.includes('sp-views-track'));
 });
 
 console.log(n + ' checks passed');

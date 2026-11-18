@@ -2402,94 +2402,57 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   pointer-events: none; z-index: 0; transition: background .4s ease;
 }
 #audio-panel[data-view="library"], #audio-panel[data-view="search"], #audio-panel[data-view="download"] { --sp-cur: color-mix(in srgb, var(--accent) 38%, var(--bg)); }
+#audio-panel[data-view="download"] #sp-view-download { pointer-events: auto; }
+
+#audio-panel.no-transition,
+#audio-panel.no-transition * {
+  transition: none !important;
+  animation: none !important;
+}
 
 #sp-views {
-  position: relative; z-index: 1; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden;
-  overscroll-behavior: contain; scrollbar-width: none;
+  position: relative; z-index: 1; flex: 1 1 auto; overflow: hidden;
   padding-top: var(--status-bar-height);
+  width: 100%;
 }
-#sp-views::-webkit-scrollbar { display: none; }
-.sp-view { display: none; flex-direction: column; padding-bottom: 16px; }
-#audio-panel[data-view="library"] #sp-view-library,
-#audio-panel[data-view="search"] #sp-view-search,
-#audio-panel[data-view="album"] #sp-view-album,
-#audio-panel[data-view="download"] #sp-view-download,
-#audio-panel[data-view="track"] #sp-view-track { display: flex; animation: spIn .26s var(--ease) both; }
 
-/* Default: subtle fade + rise (no swipe direction) */
+#sp-views-track {
+  display: flex; flex-direction: row; width: 100%; height: 100%;
+  will-change: transform;
+  transform: translate3d(calc(-100% * var(--sp-active-index, 0)), 0, 0);
+  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sp-view {
+  flex: 0 0 100%; width: 100%; height: 100%;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-width: none; box-sizing: border-box; padding-bottom: 16px;
+  display: flex; flex-direction: column;
+  content-visibility: auto; contain-intrinsic-size: 1000px;
+}
+.sp-view::-webkit-scrollbar { display: none; }
+
+/* Inactive tabs: pause continuous animations and prevent interaction */
+.sp-view:not(.is-active) {
+  pointer-events: none;
+}
+.sp-view:not(.is-active) * {
+  animation-play-state: paused !important;
+}
+
+/* Entrance animation only on the settled active tab */
+.sp-view.is-active {
+  pointer-events: auto;
+}
+#audio-panel.sp-enter .sp-view.is-active {
+  animation: spIn .26s var(--ease) both;
+}
+
+/* Default: subtle fade + rise */
 @keyframes spIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* While traversing tabs, disable pointer events on views to prevent stray clicks */
-#audio-panel.sp-traversing #sp-views { pointer-events: none; }
-
-/* Suppress all views except the ones actively sliding during multi-step traversal */
-#audio-panel.sp-traversing .sp-view:not(.sp-slide-in-right):not(.sp-slide-in-left):not(.sp-slide-out-right):not(.sp-slide-out-left) {
-  display: none !important;
-}
-
-/* Clip overflow during slide transitions */
-#audio-panel[data-slide] #sp-views,
-#audio-panel.sp-traversing #sp-views { overflow-x: hidden; }
-
-/* Outgoing views: position absolute so incoming view is not pushed down */
-.sp-view.sp-slide-out-left {
-  display: flex !important;
-  position: absolute !important;
-  top: var(--status-bar-height, 0); left: 0; right: 0; width: 100%;
-  pointer-events: none;
-  z-index: 2;
-  animation: spSlideOutLeft var(--slide-duration, 0.24s) var(--ease) both !important;
-}
-.sp-view.sp-slide-out-right {
-  display: flex !important;
-  position: absolute !important;
-  top: var(--status-bar-height, 0); left: 0; right: 0; width: 100%;
-  pointer-events: none;
-  z-index: 2;
-  animation: spSlideOutRight var(--slide-duration, 0.24s) var(--ease) both !important;
-}
-
-/* Incoming views */
-.sp-view.sp-slide-in-right {
-  display: flex !important;
-  position: relative !important;
-  width: 100%;
-  z-index: 3;
-  animation: spSlideInRight var(--slide-duration, 0.24s) var(--ease) both !important;
-}
-.sp-view.sp-slide-in-left {
-  display: flex !important;
-  position: relative !important;
-  width: 100%;
-  z-index: 3;
-  animation: spSlideInLeft var(--slide-duration, 0.24s) var(--ease) both !important;
-}
-
-/* Fluid hardware-accelerated horizontal sliding animations */
-@keyframes spSlideOutLeft {
-  from { transform: translate3d(0, 0, 0); opacity: 1; }
-  to   { transform: translate3d(-100%, 0, 0); opacity: 0.85; }
-}
-@keyframes spSlideOutRight {
-  from { transform: translate3d(0, 0, 0); opacity: 1; }
-  to   { transform: translate3d(100%, 0, 0); opacity: 0.85; }
-}
-@keyframes spSlideInRight {
-  from { transform: translate3d(100%, 0, 0); opacity: 0.85; }
-  to   { transform: translate3d(0, 0, 0); opacity: 1; }
-}
-@keyframes spSlideInLeft {
-  from { transform: translate3d(-100%, 0, 0); opacity: 0.85; }
-  to   { transform: translate3d(0, 0, 0); opacity: 1; }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .sp-view.sp-slide-out-left,
-  .sp-view.sp-slide-out-right,
-  .sp-view.sp-slide-in-right,
-  .sp-view.sp-slide-in-left {
-    animation-duration: 0.01s !important;
-  }
+  #sp-views-track, #sp-nav-pill { transition: none !important; }
 }
 
 .sp-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; min-height: 52px; }
@@ -2735,9 +2698,29 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   position: relative; z-index: 2; flex: 0 0 auto; display: flex; background: color-mix(in srgb, var(--bg) 94%, transparent);
   padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
 }
+#sp-nav-pill {
+  position: absolute;
+  top: 6px;
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  width: 0;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--sp-elevated, rgba(255, 255, 255, 0.08)));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  z-index: 0;
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1), width 0.28s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
+  opacity: 0;
+}
+#sp-nav-pill.is-visible {
+  opacity: 1;
+}
 #sp-nav button {
+  position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0;
   background: none; border: 0; color: var(--sp-sub); font: 500 10px/1 var(--font-ui); cursor: pointer;
+  transition: color 0.2s ease;
 }
 #sp-nav button .ico { width: 24px; height: 24px; }
 #sp-nav button.active { color: var(--text); }
@@ -3743,11 +3726,12 @@ body.settings-open #srch-input { pointer-events: none; }
   <symbol id="i-planet" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.3" transform="rotate(-24 12 12)"/></symbol>
 </svg>
 
-<div id="app">
+<div id="app" class="no-transition">
   <div id="main">
     <div id="audio-panel" data-view="album">
       <div class="sky sm" aria-hidden="true"></div>
       <div id="sp-views">
+        <div id="sp-views-track">
 
         <!-- ============ LIBRARY (kit: "User Library") ============ -->
         <section id="sp-view-library" class="sp-view" aria-label="Library">
@@ -3845,18 +3829,6 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="audio-status-note"></div>
         </section>
 
-        <!-- ============ DOWNLOAD (song-download.js) ============ -->
-        <section id="sp-view-download" class="sp-view" aria-label="Download songs">
-          <div class="sp-topbar">
-            <h1>Download songs</h1>
-            <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
-          </div>
-          <div id="dl-body">
-            <!-- One step at a time: song-download.js replaces this box's content as the steps go by. -->
-            <div id="dl-stage" data-step="paste" aria-live="polite"></div>
-          </div>
-        </section>
-
         <!-- ============ NOW PLAYING (kit: "Track View") ============ -->
         <section id="sp-view-track" class="sp-view" aria-label="Now playing">
           <div class="sp-topbar">
@@ -3933,6 +3905,19 @@ body.settings-open #srch-input { pointer-events: none; }
             </div>
           </div>
         </section>
+
+        <!-- ============ DOWNLOAD (song-download.js) ============ -->
+        <section id="sp-view-download" class="sp-view" aria-label="Download songs">
+          <div class="sp-topbar">
+            <h1>Download songs</h1>
+            <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
+          </div>
+          <div id="dl-body">
+            <!-- One step at a time: song-download.js replaces this box's content as the steps go by. -->
+            <div id="dl-stage" data-step="paste" aria-live="polite"></div>
+          </div>
+        </section>
+        </div>
       </div>
 
       <!-- ============ Mini player ============ -->
@@ -3951,6 +3936,7 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <!-- ============ Bottom navigation ============ -->
       <nav id="sp-nav" aria-label="Music navigation">
+        <div id="sp-nav-pill" aria-hidden="true"></div>
         <button type="button" data-sp-view="library"><svg class="ico"><use href="#sp-home"/></svg><span>Home</span></button>
         <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="album"><svg class="ico"><use href="#i-moon-music"/></svg><span>Songs</span></button>
