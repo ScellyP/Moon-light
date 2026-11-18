@@ -146,10 +146,6 @@ html.theme-light #sp-nav {
   border-top: 1px solid var(--border);
 }
 
-html.theme-light #sp-nav-pill {
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.08);
-}
-
 html.theme-light #settings-drawer {
   box-shadow: 6px 0 24px rgba(0, 0, 0, 0.12);
 }
@@ -2529,7 +2525,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #sp-views-track, #sp-nav-pill { transition: none !important; }
+  #sp-views-track { transition: none !important; }
 }
 
 .sp-topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; min-height: 52px; }
@@ -2775,29 +2771,9 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   position: relative; z-index: 2; flex: 0 0 auto; display: flex; background: color-mix(in srgb, var(--bg) 94%, transparent);
   padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
 }
-#sp-nav-pill {
-  position: absolute;
-  top: 6px;
-  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-  left: 0;
-  width: 0;
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--accent) 18%, var(--sp-elevated, rgba(255, 255, 255, 0.08)));
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  pointer-events: none;
-  z-index: 0;
-  transform: translate3d(0, 0, 0);
-  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1), width 0.28s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease;
-  opacity: 0;
-}
-#sp-nav-pill.is-visible {
-  opacity: 1;
-}
 #sp-nav button {
-  position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0;
   background: none; border: 0; color: var(--sp-sub); font: 500 10px/1 var(--font-ui); cursor: pointer;
-  transition: color 0.2s ease;
 }
 #sp-nav button .ico { width: 24px; height: 24px; }
 #sp-nav button.active { color: var(--text); }
@@ -4032,7 +4008,6 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <!-- ============ Bottom navigation ============ -->
       <nav id="sp-nav" aria-label="Music navigation">
-        <div id="sp-nav-pill" aria-hidden="true"></div>
         <button type="button" data-sp-view="library"><svg class="ico"><use href="#sp-home"/></svg><span>Home</span></button>
         <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="album"><svg class="ico"><use href="#i-moon-music"/></svg><span>Songs</span></button>

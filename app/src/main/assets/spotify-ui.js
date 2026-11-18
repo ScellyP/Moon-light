@@ -306,7 +306,6 @@
     // kit: layout
     views: $('sp-views'),
     viewsTrack: $('sp-views-track'),
-    navPill: $('sp-nav-pill'),
     sheet: $('sp-sheet'),
     sleepOptions: $('sp-sleep-opts'),
 
@@ -395,55 +394,15 @@
 
   let enterTimer = 0;
 
-  function updateNavPill(activeBtn, immediate) {
-    const pill = el.navPill || document.getElementById('sp-nav-pill');
-    if (!pill || !activeBtn) return;
-    const span = activeBtn.querySelector ? activeBtn.querySelector('span') : null;
-    const textWidth = span && span.offsetWidth ? span.offsetWidth : 0;
-    const btnWidth = activeBtn.offsetWidth || 0;
-    const btnLeft = activeBtn.offsetLeft || 0;
-
-    // Sized to fit tab text length while staying comfortably within button bounds
-    const targetWidth = textWidth ? Math.min(Math.max(48, textWidth + 24), Math.max(48, btnWidth - 8)) : (btnWidth ? btnWidth - 12 : 56);
-    const targetLeft = btnLeft + (btnWidth ? (btnWidth - targetWidth) / 2 : 0);
-
-    if (pill.style) {
-      if (immediate) {
-        pill.style.transition = 'none';
-        if (pill.style.setProperty) pill.style.setProperty('transition', 'none');
-      } else {
-        pill.style.transition = '';
-        if (pill.style.removeProperty) pill.style.removeProperty('transition');
-      }
-      pill.style.width = targetWidth + 'px';
-      pill.style.transform = 'translate3d(' + targetLeft + 'px, 0, 0)';
-      if (pill.style.setProperty) {
-        pill.style.setProperty('width', targetWidth + 'px');
-        pill.style.setProperty('transform', 'translate3d(' + targetLeft + 'px, 0, 0)');
-      }
-    }
-    if (pill.classList) pill.classList.add('is-visible');
-
-    if (immediate && pill.style) {
-      void pill.offsetWidth;
-      pill.style.transition = '';
-      if (pill.style.removeProperty) pill.style.removeProperty('transition');
-    }
-  }
-
-  function setNavHighlight(viewName, immediate) {
+  function setNavHighlight(viewName) {
     const buttons = document.querySelectorAll('#sp-nav [data-sp-view]');
-    let activeBtn = null;
     if (buttons && buttons.forEach) {
       buttons.forEach((button) => {
         if (button && button.classList && button.getAttribute) {
-          const isActive = button.getAttribute('data-sp-view') === viewName;
-          button.classList.toggle('active', isActive);
-          if (isActive) activeBtn = button;
+          button.classList.toggle('active', button.getAttribute('data-sp-view') === viewName);
         }
       });
     }
-    if (activeBtn) updateNavPill(activeBtn, immediate);
   }
 
   function setView(name, opts) {
@@ -1856,21 +1815,5 @@
   } else {
     if (appWrapper && appWrapper.classList) appWrapper.classList.remove('no-transition');
     if (panel && panel.classList) panel.classList.remove('no-transition');
-  }
-
-  // Recalculate tab indicator pill when custom fonts finish loading
-  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(() => {
-      const activeBtn = document.querySelector('#sp-nav [data-sp-view].active');
-      if (activeBtn) updateNavPill(activeBtn, true);
-    });
-  }
-
-  // Recalculate tab indicator pill on window resize / orientation change
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('resize', () => {
-      const activeBtn = document.querySelector('#sp-nav [data-sp-view].active');
-      if (activeBtn) updateNavPill(activeBtn, true);
-    });
   }
 })();
