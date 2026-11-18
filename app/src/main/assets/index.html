@@ -4150,6 +4150,18 @@ body.settings-open #srch-input { pointer-events: none; }
           <input type="checkbox" id="set-dupes" checked>
         </label>
       </section>
+
+      <section class="sd-group" aria-labelledby="sd-backup">
+        <h3 class="sd-title" id="sd-backup">Backup & Restore</h3>
+        <div class="sd-account" id="backup-create-row">
+          <span class="sd-switch-text">Backup library<small id="backup-status-text">Save songs, playlists, and favourites to a ZIP archive in your Downloads folder.</small></span>
+          <button type="button" id="backup-create-btn" class="sd-btn">Backup</button>
+        </div>
+        <div class="sd-account" id="backup-restore-row">
+          <span class="sd-switch-text">Restore library<small id="restore-status-text">Import songs and playlists from a Moonlight backup ZIP archive.</small></span>
+          <button type="button" id="backup-restore-btn" class="sd-btn">Restore</button>
+        </div>
+      </section>
     </div>
 
     <footer class="sd-foot" aria-label="Updates">
@@ -4268,6 +4280,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="moon-theme.js"></script>
 <script src="player-app.js"></script>
 <script src="settings-menu.js"></script>
+<script src="song-backup.js"></script>
 <script src="app-update.js"></script>
 </body>
 </html>

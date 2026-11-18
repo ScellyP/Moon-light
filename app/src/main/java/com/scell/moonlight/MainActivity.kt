@@ -278,6 +278,9 @@ class MainActivity : ComponentActivity() {
 
     // Covers you chose for playlists: small JPEGs in Moonlight/playlist-covers (see PlaylistCovers.kt).
     private val playlistCovers = PlaylistCovers(File(playerRoot, "playlist-covers"))
+
+    // Public Downloads folder for portable ZIP backups (see SongBackup.kt).
+    private val downloadDir = File("/storage/emulated/0/Download")
     private var pendingCoverKey: String? = null
     private val pickPlaylistCover = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         val key = pendingCoverKey
@@ -1680,6 +1683,85 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 PlaybackService.effects?.setBoostDb(db.toFloat())
             }
+        }
+
+        // ---- Backup & Restore (Item 4) --------------------------------------------------------------------
+        // Creates a portable ZIP archive containing songs, playlists, covers and metadata in /storage/emulated/0/Download/
+        @JavascriptInterface
+        fun createBackup(): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onBackupComplete", err)
+                return err
+            }
+            Thread {
+                val backup = SongBackup(playerRoot, downloadDir)
+                val res = backup.createBackup(onProgress = { pct, item, tot ->
+                    val p = JSONObject().apply {
+                        put("percent", pct)
+                        put("item", item)
+                        put("total", tot)
+                    }.toString()
+                    runOnUiThread { callPage("onBackupProgress", p) }
+                })
+                runOnUiThread { callPage("onBackupComplete", res.toJson()) }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun restoreBackup(filePath: String): String {
+            if (!hasStoragePermission()) {
+                val err = JSONObject().apply {
+                    put("success", false)
+                    put("error", "Storage permission required")
+                }.toString()
+                callPage("onRestoreComplete", err)
+                return err
+            }
+            Thread {
+                val target = if (filePath.isNotBlank()) File(filePath) else {
+                    val backups = downloadDir.listFiles()?.filter {
+                        it.isFile && it.name.startsWith("moonlight-backup-") && it.name.endsWith(".zip")
+                    }?.sortedByDescending { it.lastModified() }
+                    backups?.firstOrNull()
+                }
+
+                if (target == null || !target.exists()) {
+                    val err = JSONObject().apply {
+                        put("success", false)
+                        put("error", "No backup file found")
+                    }.toString()
+                    runOnUiThread { callPage("onRestoreComplete", err) }
+                    return@Thread
+                }
+
+                val backup = SongBackup(playerRoot, downloadDir)
+                val res = backup.restoreBackup(target, onProgress = { pct, item, tot ->
+                    val p = JSONObject().apply {
+                        put("percent", pct)
+                        put("item", item)
+                        put("total", tot)
+                    }.toString()
+                    runOnUiThread { callPage("onRestoreProgress", p) }
+                })
+                runOnUiThread {
+                    callPage("onRestoreComplete", res.toJson())
+                    if (res.success) {
+                        runAudioScan()
+                    }
+                }
+            }.start()
+            return JSONObject().apply { put("started", true) }.toString()
+        }
+
+        @JavascriptInterface
+        fun listBackups(): String {
+            if (!hasStoragePermission()) return "[]"
+            return SongBackup(playerRoot, downloadDir).listBackups()
         }
     }
 
