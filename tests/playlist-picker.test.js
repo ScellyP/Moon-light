@@ -12,6 +12,7 @@ function picker(opts) {
   const o = opts || {};
   const tracks = o.tracks || Array.from({ length: 150 }, (_, i) => ({ id: 's' + i, path: '/m/s' + i + '.mp3', title: 'Song ' + i, artist: i % 2 ? 'Odd' : 'Even' }));
   const inList = o.inList || [];
+  const liked = o.liked !== undefined ? o.liked : ['s0', 's2', 's4'];
   const calls = [], toasts = [];
   const body = createNode('body');
   const doc = { body, createElement: createNode, createElementNS: (ns, t) => createNode(t) };
@@ -23,6 +24,8 @@ function picker(opts) {
     addSongToPlaylist: (k, id, quiet) => { calls.push(['add', k, id, quiet]); return o.addFails ? false : true; },
     removeSongFromPlaylist: (k, id, quiet) => { calls.push(['remove', k, id, quiet]); return o.removeFails ? false : true; },
     refreshPlaylists: () => calls.push(['refresh']),
+    isLiked: (id) => liked.indexOf(id) !== -1,
+    getLikedIds: () => liked.slice(),
   };
   const arts = [];
   const timers = [];
@@ -37,13 +40,19 @@ function picker(opts) {
   const list = () => findAll(layer(), hasClass('pp-list'))[0];
   const rows = () => findAll(layer(), hasClass('pp-row'));
   const names = () => findAll(layer(), hasClass('pp-name')).map((n) => n.textContent);
-  const tap = (n) => (n.listeners.click || []).forEach((f) => f({ target: n }));
+  const tap = (n) => (n.listeners.click || []).forEach((f) => f({ target: n, stopPropagation() {} }));
   const type = (text) => { const i = findAll(layer(), (n) => n.tag === 'input')[0]; i.value = text; (i.listeners.input || []).forEach((f) => f({})); };
   const scrollDown = () => { const l = list(); l.scrollTop = 1e9; l.clientHeight = 600; l.scrollHeight = 0; (l.listeners.scroll || []).forEach((f) => f({})); };
   const addBtn = (i) => findAll(rows()[i], hasClass('pp-add'))[0];
+  const selectBar = () => findAll(layer(), hasClass('pp-selectbar'))[0];
+  const pills = () => findAll(selectBar(), hasClass('pp-pill'));
+  const chips = () => findAll(layer(), hasClass('pp-chip'));
+  const checkBoxes = () => findAll(layer(), hasClass('pp-check-box'));
+  const pickedRows = () => findAll(layer(), (n) => hasClass('pp-row')(n) && hasClass('picked')(n));
+  const backBtn = () => findAll(layer(), hasClass('pp-back'))[0];
   const flushOne = () => { const f = timers.shift(); if (f) f(); return !!f; };
   const flushAll = () => { while (flushOne()); };
-  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, tracks, arts, timers, flushOne, flushAll };
+  return { win, calls, toasts, layer, rows, names, tap, type, scrollDown, addBtn, selectBar, pills, chips, checkBoxes, pickedRows, backBtn, tracks, arts, timers, flushOne, flushAll };
 }
 
 check('opens with the playlist name and lists ALL songs, drawing more as you scroll', () => {
@@ -221,6 +230,136 @@ check('closing right after tapping still writes everything that was tapped', () 
   assert.deepStrictEqual(p.calls.filter((c) => c[0] === 'add').map((c) => c[2]), ['s0', 's1']);
   assert.strictEqual(p.calls.filter((c) => c[0] === 'refresh').length, 1);
   assert.deepStrictEqual(p.toasts, ['Added 2 songs to \u201cMix\u201d']);
+});
+
+/* ---- New tests: Multi-select checkboxes & filter chips ---- */
+
+check('filter chips: clicking "Liked songs" narrows list to liked tracks, "All songs" restores full list', () => {
+  const p = picker({ liked: ['s0', 's3'] });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  const chipList = p.chips();
+  assert.strictEqual(chipList.length, 2);
+  const allChip = chipList[0], likedChip = chipList[1];
+  assert.ok(allChip.className.indexOf('active') !== -1);
+  assert.strictEqual(p.rows().length, 60);
+
+  // Switch to liked songs
+  p.tap(likedChip);
+  assert.ok(likedChip.className.indexOf('active') !== -1);
+  assert.ok(allChip.className.indexOf('active') === -1);
+  assert.deepStrictEqual(p.names(), ['Song 0', 'Song 3']);
+
+  // Switch back to all songs
+  p.tap(allChip);
+  assert.ok(allChip.className.indexOf('active') !== -1);
+  assert.strictEqual(p.rows().length, 60);
+});
+
+check('multi-select: enter selecting mode, check boxes exist on rows, tapping rows toggles picked state', () => {
+  const p = picker();
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), false);
+  assert.strictEqual(p.checkBoxes().length, 60);
+
+  // Enter selecting mode
+  p.win.PlaylistPicker.setSelecting(true);
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), true);
+  assert.ok(p.layer().className.indexOf('selecting') !== -1);
+
+  // Tap first row to pick
+  p.tap(p.rows()[0]);
+  assert.strictEqual(p.pickedRows().length, 1);
+  assert.ok(p.rows()[0].className.indexOf('picked') !== -1);
+
+  // Tap second row to pick
+  p.tap(p.rows()[1]);
+  assert.strictEqual(p.pickedRows().length, 2);
+
+  // Tap first row again to unpick
+  p.tap(p.rows()[0]);
+  assert.strictEqual(p.pickedRows().length, 1);
+  assert.ok(p.rows()[0].className.indexOf('picked') === -1);
+
+  // Exit selecting mode
+  p.win.PlaylistPicker.setSelecting(false);
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), false);
+  assert.strictEqual(p.pickedRows().length, 0);
+});
+
+check('multi-select: Select all selects all unadded songs, Deselect all clears selection', () => {
+  const p = picker({ tracks: [{ id: 's0', title: 'Song 0' }, { id: 's1', title: 'Song 1' }, { id: 's2', title: 'Song 2' }], inList: ['s0'] });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.win.PlaylistPicker.setSelecting(true);
+
+  // Select all (should select s1 and s2, because s0 is already inList)
+  p.win.PlaylistPicker.toggleSelectAll();
+  assert.strictEqual(p.pickedRows().length, 2);
+  const selBtn = p.pills().find((n) => n.textContent === 'Deselect all');
+  assert.ok(selBtn, 'Select all pill should now say Deselect all');
+
+  // Toggle select all again -> deselects all
+  p.win.PlaylistPicker.toggleSelectAll();
+  assert.strictEqual(p.pickedRows().length, 0);
+  const selBtn2 = p.pills().find((n) => n.textContent === 'Select all');
+  assert.ok(selBtn2, 'Pill should now say Select all');
+});
+
+check('multi-select: batch add adds all selected songs to playlist and closes selection mode', () => {
+  const p = picker({ tracks: [{ id: 's0', title: 'Song 0' }, { id: 's1', title: 'Song 1' }, { id: 's2', title: 'Song 2' }] });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.win.PlaylistPicker.setSelecting(true);
+
+  p.tap(p.rows()[0]);
+  p.tap(p.rows()[1]);
+  assert.strictEqual(p.pickedRows().length, 2);
+
+  // Batch add
+  p.win.PlaylistPicker.addSelectedBatch();
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), false);
+  assert.deepStrictEqual(p.calls.filter((c) => c[0] === 'add').map((c) => c[2]), ['s0', 's1']);
+  assert.ok(p.toasts.some((m) => /Added 2 songs/.test(m)));
+});
+
+check('multi-select: Cancel exits selection mode without modifying playlist', () => {
+  const p = picker();
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.win.PlaylistPicker.setSelecting(true);
+  p.tap(p.rows()[0]);
+  assert.strictEqual(p.pickedRows().length, 1);
+
+  // Tap cancel pill
+  const cancel = p.pills().find((n) => n.textContent === 'Cancel');
+  assert.ok(cancel);
+  p.tap(cancel);
+
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), false);
+  assert.strictEqual(p.calls.filter((c) => c[0] === 'add').length, 0);
+});
+
+check('multi-select: songs already in playlist cannot be selected and display proper state', () => {
+  const p = picker({ tracks: [{ id: 's0', title: 'Song 0' }, { id: 's1', title: 'Song 1' }], inList: ['s0'] });
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  assert.ok(p.rows()[0].className.indexOf('in-list') !== -1);
+
+  p.win.PlaylistPicker.setSelecting(true);
+  p.tap(p.rows()[0]);
+  assert.ok(p.rows()[0].className.indexOf('picked') === -1);
+  assert.ok(p.toasts.includes('Already in this playlist'));
+});
+
+check('multi-select: back button exits selecting mode before closing picker', () => {
+  const p = picker();
+  p.win.PlaylistPicker.open('name:Mix', 'Mix');
+  p.win.PlaylistPicker.setSelecting(true);
+
+  // First back press exits selecting mode
+  p.tap(p.backBtn());
+  assert.strictEqual(p.win.PlaylistPicker.isSelecting(), false);
+  assert.strictEqual(p.win.PlaylistPicker.isOpen(), true);
+
+  // Second back press closes picker
+  p.tap(p.backBtn());
+  assert.strictEqual(p.win.PlaylistPicker.isOpen(), false);
 });
 
 finish();

@@ -22,12 +22,14 @@
 
   const CHUNK = 60;
   let layer = null, list = null, input = null, subNode = null;
-  let ctx = null;            // { key, title, inList: Set of song ids, added, query, shown: [tracks], drawn }
+  let selectBar = null, pill = null, cancelPill = null, selectAllPill = null, addPill = null;
+  let chipsBar = null, allChip = null, likedChip = null;
+  let ctx = null;            // { key, title, inList: Set, was: Set, written: Set, wanted: Map, query, shown: [tracks], drawn, selected: Set, selecting: boolean, filter: string }
   let searchTimer = 0;
 
   const audio = () => root.NovelAudio || null;
   let worker = 0;
-  const buttons = new Map();     // song id -> its + / check button (only for rows that are drawn)
+  const buttons = new Map();     // song id -> { btn, track, row } (only for rows that are drawn)
 
   function el(tag, cls, text) {
     const n = doc.createElement(tag);
@@ -109,6 +111,113 @@
     });
   }
 
+  /* ---- filter & multi-select helpers ---- */
+  function setFilter(type) {
+    if (!ctx) return;
+    const filter = type === 'liked' ? 'liked' : 'all';
+    if (ctx.filter === filter) return;
+    ctx.filter = filter;
+    if (allChip) allChip.classList.toggle('active', filter === 'all');
+    if (likedChip) likedChip.classList.toggle('active', filter === 'liked');
+    ctx.shown = sourceTracks(ctx.query);
+    renderList();
+    list.scrollTop = 0;
+    if (ctx.selecting) updateSelectLabel();
+  }
+
+  function getSelectableShown() {
+    if (!ctx) return [];
+    return ctx.shown.filter((track) => !ctx.inList.has(track.id));
+  }
+
+  function setSelecting(on) {
+    if (!ctx) return;
+    ctx.selecting = !!on;
+    ctx.selected.clear();
+    layer.classList.toggle('selecting', ctx.selecting);
+    if (list) {
+      Array.prototype.forEach.call(list.children, (row) => row.classList.remove('picked'));
+    }
+    if (pill) pill.classList.toggle('hidden', ctx.selecting);
+    if (selectAllPill) selectAllPill.classList.toggle('hidden', !ctx.selecting);
+    if (addPill) addPill.classList.toggle('hidden', !ctx.selecting);
+    if (cancelPill) cancelPill.classList.toggle('hidden', !ctx.selecting);
+    updateSelectLabel();
+  }
+
+  function updateSelectLabel() {
+    if (!ctx || !addPill || !selectAllPill) return;
+    const n = ctx.selected.size;
+    addPill.textContent = n ? 'Add (' + n + ')' : 'Add songs';
+    addPill.disabled = n === 0;
+    const selectable = getSelectableShown();
+    const allSelected = selectable.length > 0 && selectable.every((t) => ctx.selected.has(t.id));
+    selectAllPill.textContent = allSelected ? 'Deselect all' : 'Select all';
+  }
+
+  function toggleSelectAll() {
+    if (!ctx) return;
+    const selectable = getSelectableShown();
+    if (!selectable.length) return;
+    const allSelected = selectable.every((t) => ctx.selected.has(t.id));
+    if (allSelected) {
+      selectable.forEach((t) => ctx.selected.delete(t.id));
+    } else {
+      selectable.forEach((t) => ctx.selected.add(t.id));
+    }
+    if (list) {
+      Array.prototype.forEach.call(list.children, (row) => {
+        const id = row.getAttribute('data-id');
+        if (id && !ctx.inList.has(id)) {
+          row.classList.toggle('picked', ctx.selected.has(id));
+        }
+      });
+    }
+    updateSelectLabel();
+  }
+
+  function togglePicked(row, trackId) {
+    if (!ctx || !ctx.selecting) return;
+    if (ctx.inList.has(trackId)) {
+      toast('Already in this playlist');
+      return;
+    }
+    if (ctx.selected.has(trackId)) {
+      ctx.selected.delete(trackId);
+      row.classList.remove('picked');
+    } else {
+      ctx.selected.add(trackId);
+      row.classList.add('picked');
+    }
+    updateSelectLabel();
+  }
+
+  function addSelectedBatch() {
+    if (!ctx || !ctx.selected.size) return;
+    const ids = Array.from(ctx.selected);
+    let count = 0;
+    ids.forEach((id) => {
+      if (!ctx.inList.has(id)) {
+        ctx.inList.add(id);
+        ctx.wanted.set(id, true);
+        count++;
+        const item = buttons.get(id);
+        if (item) {
+          markAdded(item.btn, item.track, true);
+          if (item.row) item.row.classList.add('in-list');
+        }
+      }
+    });
+    kick();
+    setSelecting(false);
+    if (count > 0) {
+      toast('Added ' + count + (count === 1 ? ' song' : ' songs') + ' to \u201c' + ctx.title + '\u201d');
+      ids.forEach((id) => ctx.was.add(id));
+      const a = audio();
+      if (a && a.refreshPlaylists) a.refreshPlaylists();
+    }
+  }
+
   /* ---- the screen ---- */
   function build() {
     if (layer) return;
@@ -120,7 +229,10 @@
     const bar = el('div', 'pp-bar');
     const back = button('pp-back', 'Back');
     back.appendChild(icon('i-chev-left'));
-    back.addEventListener('click', close);
+    back.addEventListener('click', () => {
+      if (ctx && ctx.selecting) setSelecting(false);
+      else close();
+    });
     const head = el('div', 'pp-head');
     head.appendChild(el('div', 'pp-title', 'Add to this playlist'));
     subNode = el('div', 'pp-sub');
@@ -132,6 +244,37 @@
     bar.appendChild(head);
     bar.appendChild(done);
     layer.appendChild(bar);
+
+    chipsBar = el('div', 'pp-chips');
+    allChip = button('pp-chip active', 'Show all songs');
+    allChip.textContent = 'All songs';
+    allChip.addEventListener('click', () => setFilter('all'));
+    likedChip = button('pp-chip', 'Show liked songs');
+    likedChip.textContent = 'Liked songs';
+    likedChip.addEventListener('click', () => setFilter('liked'));
+    chipsBar.appendChild(allChip);
+    chipsBar.appendChild(likedChip);
+    layer.appendChild(chipsBar);
+
+    selectBar = el('div', 'pp-selectbar');
+    pill = button('pp-pill', 'Select songs');
+    pill.textContent = 'Select';
+    pill.addEventListener('click', () => setSelecting(true));
+    selectAllPill = button('pp-pill hidden', 'Select all songs');
+    selectAllPill.textContent = 'Select all';
+    selectAllPill.addEventListener('click', toggleSelectAll);
+    addPill = button('pp-pill primary hidden', 'Add the selected songs');
+    addPill.textContent = 'Add songs';
+    addPill.disabled = true;
+    addPill.addEventListener('click', addSelectedBatch);
+    cancelPill = button('pp-pill hidden', 'Cancel selection');
+    cancelPill.textContent = 'Cancel';
+    cancelPill.addEventListener('click', () => setSelecting(false));
+    selectBar.appendChild(pill);
+    selectBar.appendChild(selectAllPill);
+    selectBar.appendChild(addPill);
+    selectBar.appendChild(cancelPill);
+    layer.appendChild(selectBar);
 
     list = el('div', 'pp-list');
     if (typeof root.IntersectionObserver === 'function') {
@@ -164,7 +307,12 @@
   function sourceTracks(query) {
     const a = audio();
     if (!a) return [];
-    return String(query || '').trim() ? (a.searchTracks ? a.searchTracks(query) : []) : (a.getTracks ? a.getTracks() : []);
+    let tracks = String(query || '').trim() ? (a.searchTracks ? a.searchTracks(query) : []) : (a.getTracks ? a.getTracks() : []);
+    if (ctx && ctx.filter === 'liked') {
+      const isLiked = (id) => (a.isLiked ? a.isLiked(id) : false);
+      tracks = tracks.filter((t) => isLiked(t.id));
+    }
+    return tracks;
   }
 
   function runSearch() {
@@ -182,6 +330,10 @@
     if (seen) seen.disconnect();
     ctx.drawn = 0;
     if (!ctx.shown.length) {
+      if (ctx.filter === 'liked') {
+        list.appendChild(el('div', 'pp-empty', 'No liked songs found. Heart some songs first!'));
+        return;
+      }
       const total = (audio() && audio().getTracks ? audio().getTracks().length : 0);
       list.appendChild(el('div', 'pp-empty', total
         ? 'No songs match \u201c' + String(ctx.query).trim().slice(0, 40) + '\u201d.'
@@ -226,8 +378,11 @@
     }
     // It did not work: the button goes back to what is really in the playlist, and says so.
     if (want) ctx.inList.delete(id); else ctx.inList.add(id);
-    const shown = buttons.get(id);
-    if (shown) { if (want) markAddable(shown.btn, shown.track, true); else markAdded(shown.btn, shown.track, true); }
+    const item = buttons.get(id);
+    if (item) {
+      if (want) markAddable(item.btn, item.track, true); else markAdded(item.btn, item.track, true);
+      if (item.row) item.row.classList.toggle('in-list', !want);
+    }
     toast(want ? 'Could not add the song' : 'Could not take the song out');
     return true;
   }
@@ -248,29 +403,55 @@
 
   function makeRow(track) {
     const row = el('div', 'pp-row');
+    row.setAttribute('data-id', track.id);
+    if (ctx.selected && ctx.selected.has(track.id)) row.classList.add('picked');
+    if (ctx.inList.has(track.id)) row.classList.add('in-list');
+
+    const check = el('div', 'pp-check-box');
+    check.appendChild(icon('i-check'));
+    row.appendChild(check);
+
     const tile = el('div', 'pp-art');
     tile.appendChild(icon('i-moon-music'));
     row.appendChild(tile);
+
     const text = el('div', 'pp-text');
     text.appendChild(el('div', 'pp-name', track.title || 'Unknown song'));
     if (track.artist) text.appendChild(el('div', 'pp-artist', track.artist));
     row.appendChild(text);
+
     const add = button('pp-add', 'Add to playlist: ' + (track.title || 'song'));
     add.appendChild(icon('i-circle-plus'));
     if (ctx.inList.has(track.id)) markAdded(add, track);
-    // The + adds the song; the check takes it out again (only its place in the playlist, never the music file).
-    // The button answers at once; the write to the phone follows right after (see step()), one song per task.
-    buttons.set(track.id, { btn: add, track: track });
-    add.addEventListener('click', () => {
+
+    buttons.set(track.id, { btn: add, track: track, row: row });
+
+    add.addEventListener('click', (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      if (ctx && ctx.selecting) {
+        togglePicked(row, track.id);
+        return;
+      }
       if (!ctx) return;
       const want = !ctx.inList.has(track.id);
-      if (want) ctx.inList.add(track.id); else ctx.inList.delete(track.id);
+      if (want) {
+        ctx.inList.add(track.id);
+        row.classList.add('in-list');
+      } else {
+        ctx.inList.delete(track.id);
+        row.classList.remove('in-list');
+      }
       if (want) markAdded(add, track, true); else markAddable(add, track, true);
       ctx.wanted.set(track.id, want);
       kick();
     });
     row.appendChild(add);
-    if (seen) { rowJobs.set(row, { tile: tile, track: track }); seen.observe(row); }      // art when it scrolls into view
+
+    row.addEventListener('click', () => {
+      if (ctx && ctx.selecting) togglePicked(row, track.id);
+    });
+
+    if (seen) { rowJobs.set(row, { tile: tile, track: track }); seen.observe(row); }
     else queueArt(tile, track);
     return row;
   }
@@ -282,9 +463,25 @@
     build();
     const order = a.getPlaylistOrder ? a.getPlaylistOrder(key) : [];
     const was = new Set(order.map((s) => s.id));
-    ctx = { key: String(key), title: title || '', inList: new Set(was), was: was, written: new Set(was), wanted: new Map(), query: '', shown: [], drawn: 0 };
+    ctx = {
+      key: String(key),
+      title: title || '',
+      inList: new Set(was),
+      was: was,
+      written: new Set(was),
+      wanted: new Map(),
+      query: '',
+      shown: [],
+      drawn: 0,
+      selected: new Set(),
+      selecting: false,
+      filter: 'all'
+    };
     subNode.textContent = ctx.title;
     input.value = '';
+    if (allChip) allChip.classList.add('active');
+    if (likedChip) likedChip.classList.remove('active');
+    setSelecting(false);
     ctx.shown = sourceTracks('');
     layer.classList.remove('hidden');
     renderList();
@@ -294,6 +491,7 @@
 
   function close() {
     if (!layer || layer.classList.contains('hidden')) return;
+    if (ctx && ctx.selecting) setSelecting(false);
     layer.classList.add('hidden');
     if (searchTimer) { root.clearTimeout(searchTimer); searchTimer = 0; }
     while (ctx && ctx.wanted.size) writeOne();                  // nothing tapped is left unwritten when the screen closes
@@ -321,5 +519,14 @@
 
   function isOpen() { return !!(layer && !layer.classList.contains('hidden')); }
 
-  root.PlaylistPicker = { open: open, close: close, isOpen: isOpen };
+  root.PlaylistPicker = {
+    open: open,
+    close: close,
+    isOpen: isOpen,
+    setSelecting: setSelecting,
+    isSelecting: () => !!(ctx && ctx.selecting),
+    toggleSelectAll: toggleSelectAll,
+    addSelectedBatch: addSelectedBatch,
+    setFilter: setFilter
+  };
 })(typeof window !== 'undefined' ? window : this);
