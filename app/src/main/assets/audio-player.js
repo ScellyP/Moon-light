@@ -2322,7 +2322,7 @@ window.NovelAudio = (function () {
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, playlistSharing: true, anonDropSharing: true },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false },
   });
 
   /* ---- Duplicate song memory ----------------------------------------------------

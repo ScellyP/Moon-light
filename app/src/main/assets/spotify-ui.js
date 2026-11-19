@@ -547,15 +547,6 @@
         break;
       }
 
-      case 'shareplaylist': {
-        closeSheet();
-        const a = window.NovelAudio;
-        const key = a && a.getActivePlaylistKey ? a.getActivePlaylistKey() : '';
-        if (window.PlaylistShare && window.PlaylistShare.shareCurrentPlaylist) {
-          window.PlaylistShare.shareCurrentPlaylist(key, getPlaylistTitle());
-        }
-        break;
-      }
 
       case 'addsongs': {
         const a = window.NovelAudio;
@@ -656,15 +647,8 @@
       return;
     }
 
-    // Share playlist archive package (Item 3)
-    if (target.closest('#sp-album-share')) {
-      const audio = window.NovelAudio;
-      const key = audio && audio.getActivePlaylistKey ? audio.getActivePlaylistKey() : '';
-      if (window.PlaylistShare && window.PlaylistShare.shareCurrentPlaylist) {
-        window.PlaylistShare.shareCurrentPlaylist(key, getPlaylistTitle());
-      }
-      return;
-    }
+    // The share icon is only a place-holder for now: it does nothing (the source-links text file is in the ... menu).
+    if (target.closest('#sp-album-share')) return;
 
     // "Edit" chip: the drag-to-reorder screen.
     if (target.closest('#sp-album-reorder')) {

@@ -164,7 +164,7 @@ check('workflow: publishes a Release, only for real-key builds, with a tag that 
   assert.ok(/\.apk/.test(step) && step.includes('app-release.apk'));
   // run the step's own tag extraction on the real version.js
   const line = step.split('\n').find((l) => l.includes('TAG=$('));
-  const cmd = line.trim().replace(/app\/src\/main\/assets\/version\.js/g, path.join(ASSETS, 'version.js')) + '\necho "$TAG"';
+  const cmd = line.trim().replace(/app\/src\/main\/assets\/version\.js/g, path.join(ASSETS, 'version.js').replace(/\\/g, '/')) + '\necho "$TAG"';
   const r = spawnSync('bash', ['-c', cmd], { encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   const expected = /window\.APP_VERSION = '(v\d+\.\d+\.\d+)'/.exec(versionJs)[1];

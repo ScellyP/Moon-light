@@ -7,6 +7,4 @@
     <external-path name="novel_audio" path="Novel/Audio/" />
     <!-- The text file of a playlist's source links (MainActivity.playlistShareLinks): written here, then shared. -->
     <cache-path name="playlist_links" path="playlist-links/" />
-    <!-- Shared playlist archive packages (MainActivity.sharePlaylistPackage) -->
-    <cache-path name="shared_playlists" path="shared-playlists/" />
 </paths>

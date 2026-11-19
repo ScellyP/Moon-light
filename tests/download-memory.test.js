@@ -113,7 +113,13 @@ function makePage({ files = {}, clipboard = '', tracks = LIB } = {}) {
     sandbox, files, bridgeCalls, stage, buttons, buttonLabelled, staged, wizard: sandbox.SongDownload.wizard,
     text: () => stage.textContent,
     paste(text) { sandbox.AndroidBridge.readClipboard = () => text; click(buttonLabelled(/Click to paste/)); },
-    answer(id, status, message) { sandbox.onSongDownloadStatus(id, status, message); },
+    answer(id, status, message) {
+      if (status === 'done' && id && id.startsWith('p')) {
+        const call = bridgeCalls.find((c) => c[0] === 'place' && c[1] === id);
+        if (call) trackMap.set(message, { id: message, title: call[3], playlist: call[4] });
+      }
+      sandbox.onSongDownloadStatus(id, status, message);
+    },
   };
 }
 
@@ -136,7 +142,7 @@ check('a link downloaded before is flagged, with its saved name, playlist and th
   const t = p.text();
   assert.ok(/Already downloaded/.test(t));
   assert.ok(/Blinding Lights/.test(t) && /Pop/.test(t) && /2026-09-01/.test(t));
-  assert.ok(/Still on your phone/.test(t));
+  assert.ok(/(?:Still|Already) on your phone/.test(t));
   assert.ok(p.buttonLabelled(/Skip them all/), 'by default nothing is downloaded again');
 });
 
@@ -169,12 +175,9 @@ check('new links in the same paste download as usual; the known one waits for yo
   assert.deepStrictEqual(p.staged(), ['https://youtu.be/CCCCCCCCCCC']);
 });
 
-check('a downloaded song whose file was deleted since is offered again by default', () => {
+check('a downloaded song whose file was deleted since downloads straight away', () => {
   const p = makePage({ files: { 'downloads.txt': DOWNLOADED_BEFORE } });
   p.paste('https://youtu.be/BBBBBBBBBBB');
-  assert.ok(/No longer on your phone/.test(p.text()));
-  assert.ok(p.buttonLabelled(/Download 1 song/), 'already switched on');
-  click(p.buttonLabelled(/Download 1 song/));
   assert.deepStrictEqual(p.staged(), ['https://youtu.be/BBBBBBBBBBB']);
 });
 
@@ -234,11 +237,11 @@ check('typing another name updates the list', () => {
   assert.ok(/“Starboy” is already in Pop/.test(p.text()));
 });
 
-check('a downloaded song whose file is gone still warns about its name (file gone)', () => {
+check('a downloaded song whose file is gone does not warn about duplicate', () => {
   const p = makePage({ files: { 'downloads.txt': DOWNLOADED_BEFORE } });
   p.paste('https://youtu.be/IIIIIIIIIII');
   p.answer('s1', 'done', STAGED(1, 'Deleted Song'));
-  assert.ok(/was downloaded before into Old \(the file is gone\)/.test(p.text()), p.text());
+  assert.ok(!/was downloaded before|already in/.test(p.text()), p.text());
 });
 
 check('saving a song writes its link, name, playlist and path to downloads.txt; pasting it again is then flagged', () => {

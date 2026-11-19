@@ -3492,7 +3492,7 @@ body.settings-open #srch-input { pointer-events: none; }
           <div id="sp-album-meta"></div>
           <div id="sp-album-desc" class="hidden"></div>
           <div id="sp-album-actions">
-            <button type="button" class="sp-icon-btn" id="sp-album-share" title="Share playlist" aria-label="Share this playlist"><svg class="ico"><use href="#i-share"/></svg></button>
+            <button type="button" class="sp-icon-btn" id="sp-album-share" title="Share source links" aria-label="Share the source links of these songs"><svg class="ico"><use href="#i-share"/></svg></button>
             <button type="button" class="sp-icon-btn" data-sp-more title="More" aria-label="More options"><svg class="ico"><use href="#sp-more"/></svg></button>
             <button type="button" class="sp-icon-btn" id="sp-album-shuffle" title="Shuffle" aria-label="Shuffle"><svg class="ico"><use href="#i-shuffle"/></svg></button>
             <button type="button" id="sp-album-play" class="sp-fab" title="Play or pause" aria-label="Play or pause">
@@ -3637,7 +3637,6 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" class="sp-pl-only hidden" data-sp-act="addsongs"><svg class="ico"><use href="#i-plus"/></svg><span>Add songs</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="editsongs"><svg class="ico"><use href="#i-menu"/></svg><span>Edit songs</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="editpl"><svg class="ico"><use href="#i-pencil"/></svg><span>Name and details</span></button>
-            <button type="button" class="sp-pl-only" data-sp-act="shareplaylist"><svg class="ico"><use href="#i-share"/></svg><span>Share playlist</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="sharelinks"><svg class="ico"><use href="#i-share"/></svg><span>Share source links</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="cover"><svg class="ico"><use href="#i-image"/></svg><span>Change cover</span></button>
             <button type="button" class="sp-pl-only hidden" data-sp-act="deletepl"><svg class="ico"><use href="#i-trash"/></svg><span>Delete playlist</span></button>
@@ -3750,17 +3749,7 @@ body.settings-open #srch-input { pointer-events: none; }
         </div>
       </section>
 
-      <section class="sd-group" aria-labelledby="sd-sharing">
-        <h3 class="sd-title" id="sd-sharing">Playlist Sharing</h3>
-        <label class="sd-switch" for="set-playlist-share">
-          <span class="sd-switch-text">Playlist sharing<small>Allow packaging and sharing playlists with other Moonlight devices.</small></span>
-          <input type="checkbox" id="set-playlist-share" checked>
-        </label>
-        <label class="sd-switch" for="set-anondrop">
-          <span class="sd-switch-text">AnonDrop cloud links<small>Generate anonymous cloud share links via AnonDrop (no login or account needed).</small></span>
-          <input type="checkbox" id="set-anondrop" checked>
-        </label>
-      </section>
+
     </div>
 
     <footer class="sd-foot" aria-label="Updates">
@@ -3919,7 +3908,6 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="player-app.js"></script>
 <script src="settings-menu.js"></script>
 <script src="song-backup.js"></script>
-<script src="playlist-share.js"></script>
 <script src="app-update.js"></script>
 </body>
 </html>

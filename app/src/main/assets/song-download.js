@@ -419,21 +419,7 @@
     };
   }
 
-  function handleSharedPlaylistLink(url) {
-    const ps = (typeof window !== 'undefined' ? window.PlaylistShare : null) || (typeof global !== 'undefined' ? global.PlaylistShare : null) || root.PlaylistShare;
-    if (ps) {
-      const isRecognized = (typeof ps.isRecognizedShareUrl === 'function' && ps.isRecognizedShareUrl(url)) ||
-                           (typeof ps.isAnonDropUrl === 'function' && ps.isAnonDropUrl(url)) ||
-                           (typeof ps.isFilebinUrl === 'function' && ps.isFilebinUrl(url));
-      if (isRecognized && typeof ps.importFromUrl === 'function') {
-        ps.importFromUrl(url);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  const api = { parseLinks, parsePlaylistLinksText, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink, formatEta };
+  const api = { parseLinks, parsePlaylistLinksText, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, formatEta };
   // The square frame: `size` is its side as a fraction of the picture's SHORTER side (0.3..1); (cx, cy) is where
   // its centre is wanted, in picture pixels. The frame is kept inside the picture. x, y, size go to the app.
   function cropRect(iw, ih, size, cx, cy) {
@@ -675,17 +661,6 @@
   let dupes = null;
 
   function reviewLinks(links) {
-    // Automatic playlist detection: detect when the user provides an AnonDrop or Filebin link
-    const shareLink = links.find((u) => /anondrop\.net/i.test(u) || /filebin\.net/i.test(u));
-    if (shareLink) {
-      if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
-        const isAnon = /anondrop\.net/i.test(shareLink);
-        root.PlaylistShare.importFromUrl(shareLink);
-        wizard.setMessage(isAnon ? 'Detected Moonlight playlist from AnonDrop! Downloading...' : 'Detected Moonlight playlist from Filebin! Downloading...');
-        return;
-      }
-    }
-
     const memory = root.SongMemory;
     if (!memory) { wizard.start(links); return; }
     const seen = new Set();
@@ -729,15 +704,6 @@
     if (!parsed.links.length) {
       wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
       return;
-    }
-    if (parsed.links.length === 1 && (/anondrop\.net/i.test(parsed.links[0]) || /filebin\.net/i.test(parsed.links[0]))) {
-      const shareUrl = parsed.links[0];
-      const isAnon = /anondrop\.net/i.test(shareUrl);
-      if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
-        root.PlaylistShare.importFromUrl(shareUrl);
-        wizard.setMessage(isAnon ? 'Detected Moonlight playlist from AnonDrop! Downloading...' : 'Detected Moonlight playlist from Filebin! Downloading...');
-        return;
-      }
     }
     if (parsed.links.length === 1 && isPlaylistUrl(parsed.links[0])) {
       startPlaylistFlow(parsed.links[0]);
