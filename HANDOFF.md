@@ -1,194 +1,89 @@
 # Moonlight Project — Daily Handoff & Session Summary
-**Date:** November 19, 2026 (20:15 IST)  
-**Current Version:** `v1.17.01`  
-**Current Branch:** `Testing`  
-**Remote Status:** Ready for commit and patch
+**Date:** November 19, 2026 (23:10 IST)  
+**Testing Branch Version:** `v1.17.02` (commit `60ae67e` on `origin/Testing`)  
+**Production Master Version:** `v1.17.01` (commit `ff9e588` on `origin/master`)  
+**Status:** All tasks completed, tested (100% test pass rate), and pushed to remote GitHub repositories.
 
 ---
 
-## 1. Executive Summary & Today's Accomplishments
+## 1. Executive Summary & Accomplishments
 
-Today's session completed: **Folder playlist sharing resolution, menu share button wiring, and duplicate choice memory (`v1.17.01`)**, following **Multi-select playlist picker checkboxes (`v1.17.00`)** and **AnonDrop anonymous playlist sharing (`v1.16.38`)**:
-
-### **v1.17.01 — Folder Playlist Sharing, Menu Share Wiring & Duplicate Memory**
-1. **Folder Playlist Sharing Resolution (`name:<folder>`):**
-   - **Problem:** When attempting to share a folder-backed playlist such as `Meme`, `PlaylistShare.kt` searched `Moonlight/playlists/$playlistKey.json` using `"name:Meme"`. Because `:` is an illegal character and folder playlists are not named `name:Meme.json`, it failed immediately with `"Share failed: Playlist not found: name:meme"`.
-   - **Solution in `PlaylistShare.kt`:**
-     - Added support for `name:<folderName>` and `list:<id>` prefixes.
-     - Looked up manifests in `Moonlight/playlists/` matching `id`, `name` (case-insensitive), or `legacy` folder/curatedId.
-     - Added auto-migration fallback using `SongLibrary.migrateFolder(folderName)` and direct folder scanning in `Moonlight/Songs` and `Novel/Audio` if no manifest existed yet.
-     - Resolved referenced audio files across both `Moonlight/Songs/` and `Novel/Audio/` roots via `SongLibrary.fileFor(ref)` instead of assuming all files lived in `playerRoot/Songs/`.
-     - Integrated `PlaylistCovers(coversDir).fileFor(...)` to include custom covers in the package.
-     - During import, sanitized package IDs to prevent invalid colon characters in filenames, updated song references in `playlist.json` to `"Songs/<filename>"`, and extracted covers using `PlaylistCovers`.
-2. **Playlist Menu & Header Share Button Wiring:**
-   - **Problem:** Clicking `#sp-album-share` in the playlist view did nothing because `playlist-share.js`'s click handler called `e.stopPropagation()` and queried `root.SpotifyUI.getActivePlaylistKey()`, which was `undefined` (empty string). Furthermore, `showToast` failed silently because `window.toast` was undefined.
-   - **Solution:**
-     - Exposed `getActivePlaylistKey` and `getPlaylistTitle` on `window.SpotifyUI` in `spotify-ui.js`.
-     - In `playlist-share.js`, updated `getPlaylistKey()` and `getPlaylistDisplayName()` to resolve across `window.NovelAudio`, `window.SpotifyUI`, and DOM elements.
-     - Updated `showToast()` to fall back to `window.SongMenu.toast` (the app's standard toast handler).
-     - Rewired `#sp-album-share` with proper title/aria-label ("Share playlist") and friendly toast guidance if tapped on non-playlist views ("All songs").
-3. **Duplicate Choice Memory (Persistent Ignored Pairs):**
-   - **Problem:** When the user chose "Keep both" or skipped duplicates in `#dupe-dialog-layer`, the choice was not persisted. Every subsequent scan ("Scan the sky") re-detected the same files and prompted the user repeatedly.
-   - **Solution in `audio-player.js`:**
-     - Registered `duplicates` feature module in `AudioFeatures` (`state.features.duplicates = { ignoredPairs: [] }`), persisted via `Prefs.save()` and backed by `localStorage['moonlight_ignored_duplicates']`.
-     - Implemented canonical path pair keys (`_dupePairKey(pathA, pathB)`) invariant to argument order, path slashes, and casing.
-     - When user chooses "Keep both", `ignoreDuplicatePair(keep, drop)` records the pair.
-     - When user chooses "Keep all remaining", `ignoreRemainingDuplicates()` records all remaining pairs in the queue.
-     - In `removeDuplicates()`, filtered out any candidate pair whose `isDuplicateIgnored(keep, drop)` is true, preventing re-prompting on future scans.
-     - Exposed `isDuplicateIgnored`, `ignoreDuplicatePair`, `ignoreRemainingDuplicates`, and `clearIgnoredDuplicates` on `NovelAudio`.
-4. **Automated Testing:**
-   - `tests/duplicates-confirmation.test.js`: 5/5 passing (added persistent duplicate memory tests).
-   - `tests/playlist-share.test.js`: 7/7 passing (added folder playlist resolution and auto-key detection).
-   - `tests/playlist-header.test.js`: 5/5 passing (verified `#sp-album-share` wiring).
-   - `tests/song-search.test.js`: 21/21 passing.
-   - All 15+ core test suites passing 100%.
+### A. Testing Branch (`v1.17.02`) — Custom Share Modals, Filebin Removal, Notification Sanitization & Toast Fix
+1. **Dedicated Theme-Adaptive Modal Dialogs (Replacing Android Popups):**
+   - Replaced all raw browser `window.prompt()` and `window.confirm()` calls that displayed default Android OS platform dialogs with three dedicated HTML modal dialogs styled with `.dyn-colours`, backdrop blur, and theme variables:
+     - **Share Dialog (`#share-dialog-layer`)**: Interactive method cards (*AnonDrop cloud link* vs *Direct .moonlight file*), optional AES-256 password protection input, and clean Cancel / Share buttons. Displays clean playlist title and song count.
+     - **Unlock Dialog (`#share-unlock-dialog-layer`)**: In-app password input for importing encrypted shared playlists with Cancel and Unlock & Import actions.
+     - **Success Dialog (`#share-success-dialog-layer`)**: Displays the generated AnonDrop link in a styled link box, automatically copies it to the clipboard, and offers **Copy link**, **Share...** (native Android share sheet via `AndroidBridge.shareText`), and **Done** buttons.
+   - Connected Android Back button and Escape key handling in `player-app.js` to dismiss open share modals smoothly.
+2. **Filebin Removal (AnonDrop Exclusivity):**
+   - Completely removed Filebin uploads, downloads, regex detection, and settings toggles across `PlaylistShare.kt`, `MainActivity.kt`, `song-download.js`, `settings-menu.js`, and `playlist-share.js`.
+   - AnonDrop (`anondrop.net`) is now the exclusive anonymous cloud sharing provider.
+3. **Notification Title Sanitization:**
+   - Sanitized all playlist share notifications in `MainActivity.kt` and `PlaylistShare.kt` by stripping `name:` and `list:` prefixes.
+   - Notifications cleanly display `Uploading "Meme" to AnonDrop` instead of `Uploading "name:Meme" to AnonDrop`.
+4. **Toast Bubble Aesthetic Fix:**
+   - Fixed `.sm-toast` styling in `index.html` by replacing `border-radius: 999px` with `border-radius: 14px`, setting `max-width: min(88%, 380px)`, and `text-align: center`, eliminating the deformed oval egg/balloon distortion when toasts contain multi-line text.
+5. **Testing & Verification:**
+   - Updated `tests/playlist-share.test.js` (7/7 checks passing), testing modal dialog lifecycles, clipboard copying, bridge interactions, AnonDrop exclusivity, and Filebin rejection.
+   - All 6 core test suites passed cleanly (98 checks passed).
+   - Committed and pushed to `origin Testing` (`6637434`, followed by docs update `60ae67e`).
 
 ---
 
-### **v1.17.00 — Multi-Select Playlist Picker Checkboxes & Novel Reader Code Trim**
-1. **Interactive Multi-Select Playlist Picker (`playlist-picker.js`):**
-   - **Multi-Select Mode:** Activated via the `Select` pill in `.pp-selectbar`. Toggles `#pp-layer.selecting` state, revealing `.pp-check-box` circular checkboxes on all song rows while hiding single-add buttons.
-   - **Batch Add ("Add N songs"):** Dynamically updates button text with the selected count (`Add (N)`) and adds references for all picked tracks in batch, updating playlist states, queueing writes via `kick()`/`step()`, and providing clear toast feedback.
-   - **Select All / Deselect All:** Toggles selection of all unadded songs currently in view. If all selectable songs are picked, button dynamically flips to `Deselect all`.
-   - **Row Checkboxes & Interaction:** Clicking anywhere on an unadded row (or its checkbox) toggles its picked state. Songs already in the playlist are marked with `.in-list` (`opacity: .55`) with disabled check indicators and cannot be selected twice.
-   - **Preserved Single-Tap Functionality:** When not in selecting mode, single-tap `+` / check button functionality is 100% preserved. `e.stopPropagation()` ensures backwards compatibility.
-   - **Filter Chips Bar:** Added `.pp-chips` with `All songs` and `Liked songs` chips. Tapping `Liked songs` narrows the visible list to user's favorited tracks (`NovelAudio.isLiked(id)`), enabling rapid batch addition of favorite tracks into any playlist.
-   - **Back Button & Cancellation:** Tapping `Cancel` or the Android/header Back button while in selecting mode exits selection mode first without modifying the playlist.
-2. **Dead Novel Reader Code Trimming (`index.html`):**
-   - Cleaned up all obsolete Novel Reader legacy styles, selectors, and dead rules:
-     - `#novel-select`, `#library-btn`, `#open-chapters-btn`, `#chapters-folder-status`
-     - `#chapter-search`, `.search-wrap`, `#chapter-list`, `.chapter-item-label`
-     - `#bookmark-chapter-btn`, `#bookmarks-panel`, `#bookmarks-list`, `.paragraph-bookmarked`
-     - `#reader-scroll`, `#reader`, `@keyframes pageFlipNext/Prev`, `#chapter-title`, `#chapter-text`
-     - `#welcome`, `#bottom-nav`, `#delete-chapters-btn`
-     - `#novel-picker`, `.novel-card`, `.novel-cover`, `.novel-name`, `.novel-last`
-     - `#night-lock-puzzle`, `.pz-*`, `#font-family-select`
-   - Shaved off hundreds of lines of dead CSS, reducing DOM/CSSOM parsing overhead and file size.
-3. **Automated Testing:**
-   - Expanded `tests/playlist-picker.test.js` from 16 to 23 tests verifying filter chips, selecting mode, row check boxes, select-all/deselect-all, batch addition, cancellation, and back-button dismissal (23/23 checks passing).
-   - All 9 core test suites pass 100%.
+### B. Master Branch (`v1.17.01`) — Playlist Header Share Button Wiring to Source Links
+1. **Playlist Header Share Button Fixed:**
+   - Resolved the issue where clicking the share icon (`#sp-album-share`) on any playlist header did nothing because it was an empty placeholder returning early (`if (target.closest('#sp-album-share')) return;`).
+   - Wired `#sp-album-share` directly to `shareLinks()`. Clicking the button now invokes `NovelAudio.sharePlaylistLinks(name, title)` and immediately opens Android's system share sheet with a `.txt` file containing the playlist's track source links.
+2. **Production Release Separation:**
+   - Kept `master` 100% free of experimental cloud sharing code until tested on `Testing`.
+   - Updated `version.js` to `v1.17.01` and updated `tests/playlist-header.test.js` (5/5 checks passing).
+   - All 6 core test suites passed cleanly (114 checks passed).
+   - Committed and pushed to `origin master` (`3fba023`, followed by docs update `ff9e588`).
 
 ---
 
-### **v1.16.38 — AnonDrop Anonymous Playlist Sharing & Large-Package Streaming Architecture**
-1. **Large-Package RAM Exhaustion Protection (1–2 GB Archives):**
-   - **Problem:** Previously, playlist ZIP archives and AES-256-GCM encryption/decryption were buffered entirely in memory via `ByteArrayOutputStream` and `readBytes()`, leading to heap exhaustion and Out-Of-Memory crashes on multi-hundred-megabyte or 1–2 GB packages.
-   - **Solution in `PlaylistShare.kt`:**
-     - **Disk-Streamed ZIP Creation:** Unencrypted ZIP archive is written directly to disk via `FileOutputStream(zipOutFile).buffered()` using 64 KB streaming buffers.
-     - **Streaming AES-256-GCM Encryption:** Implemented `encryptFileAes256Gcm(srcFile, destFile, password)` using `Cipher.update()` blocks and `Cipher.doFinal()`, writing directly to the destination package on disk. Maintains 100% binary format compatibility with existing `.moonlight` packages (4-byte `MLPK` magic header + 16-byte PBKDF2 salt + 12-byte IV + GCM ciphertext + 16-byte authentication tag).
-     - **Streaming Decryption & Safe Cleanup:** Implemented `decryptFileAes256Gcm(srcFile, destFile, password)` streaming directly to a temporary decrypted file. If password is incorrect or authentication tag verification fails (`AEADBadTagException`), the temporary decrypted file is immediately deleted from disk.
-     - **Disk-Streamed Import:** `importPackage(packageFile, password)` detects encryption by reading only the first 4 magic bytes, decrypts to a temporary disk file if encrypted, and parses entries directly from `ZipInputStream(FileInputStream(...).buffered())` without loading entries into memory. Temporary files are safely cleaned up in `finally`.
-2. **AnonDrop Primary Cloud Integration:**
-   - **Zero User Registration / Anonymous:** Implemented anonymous chunked upload and direct download via `anondrop.net` REST API without requiring accounts, emails, or personal details.
-   - **Upload Flow:**
-     - Fetches or generates anonymous key via `getOrRegisterAnonDropKey()`.
-     - Initiates upload session (`GET /initiateupload?filename=...&key=...`).
-     - Streams 9 MB chunks via `POST /uploadchunk?session_hash=...&chunk_index=...&size=...` with `application/octet-stream` body.
-     - Finalizes upload (`GET /endupload?session_hash=...&size=...`) and parses public share link: `https://anondrop.net/{id}`.
-   - **Direct Download Flow:**
-     - Streams packages directly from `https://anondrop.net/{id}/download` without requiring recipient login or cookies.
-3. **Backward-Compatible Filebin Fallback:**
-   - Retained Filebin upload and download functions as fallbacks. Added `isRecognizedShareUrl(url)` recognizing both AnonDrop and Filebin URLs.
-4. **Android Native Bridge & Live Notifications (`MainActivity.kt`):**
-   - Updated `sharePlaylistPackage` to upload to AnonDrop when `method == "anondrop"` or `"cloud"`.
-   - Updated `importSharedPlaylist` to detect AnonDrop URLs and stream-download directly.
-   - Added `@JavascriptInterface fun isPlaylistShareAnonDropUrl(url: String): Boolean`.
-   - Added `@JavascriptInterface fun isPlaylistShareUrl(url: String): Boolean`.
-   - Updated notifications to display provider names ("AnonDrop") and live byte/percentage progress.
-5. **Frontend UI & Settings Integration:**
-   - Updated `playlist-share.js` to prefer AnonDrop for cloud links, with toasts and recipient no-login notices.
-   - Updated `song-download.js` to intercept AnonDrop links automatically from clipboard and text input.
-   - Updated Settings menu switch to `#set-anondrop`: "AnonDrop cloud links" in `index.html` and `settings-menu.js`.
-   - Updated `audio-player.js` defaults with `anonDropSharing: true`.
-6. **Automated Tests:**
-   - Updated `tests/playlist-share.test.js` covering AnonDrop regex, chunked upload/download bridge contracts, streaming packaging, settings gating, and Downloads tab interception (6/6 passing).
-
----
-
-### **v1.16.37 — Real-Time Per-Song Download Progress in Downloads UI**
-1. **Downloader Metrics Capture:**
-   - Added `ProgressMetrics` data class and `parseYtDlpLine` regex parser in `SongDownloader.kt` to extract percentage complete, download speed (`at XX MiB/s`), downloaded/total sizes (`XX.XXMiB of XX.XXMiB`), and ETA from stdout.
-   - Throttled native updates to 120ms to prevent bridge flooding, forwarding to `onPage("onSongDownloadProgress", ...)`.
-2. **UI Real-Time Rendering:**
-   - In `song-download.js`, updated single-song wizard to display determinate progress fill bar (`.dl-bar.dl-determinate`), real percentage in title, and speed/ETA meta.
-   - Updated playlist download grid (`buildPlDownloading`) to render individual progress bars (`.dl-sp-item-bar`), percentage labels, speed/ETA metadata, and state tags (`queued`, `completed`, `failed`).
-   - Added per-song inline Retry button to re-queue failed songs without restarting other downloads.
-3. **Automated Tests:**
-   - Updated `tests/song-download.test.js` to 32/32 passing tests verifying `formatEta`, multi-song independent progress tracking, native wiring, and UI CSS agreement.
+### C. Earlier Accomplishments from Today's Session
+1. **Multi-Select Playlist Picker Checkboxes (`v1.17.00`):**
+   - Added multi-select mode with interactive row checkboxes (`.pp-check-box`), *Liked songs* quick filter chip, *Select all* / *Deselect all*, and batch addition with real-time counters.
+2. **Dead Novel Reader Code Trimming (`v1.17.00`):**
+   - Cleaned out all obsolete Novel Reader legacy styles, selectors, and dead CSS rules from `index.html`.
+3. **Duplicate Choice Memory (`v1.17.01`):**
+   - Added persistent memory for duplicate song decisions ("Keep both" or "Keep all remaining") in `#dupe-dialog-layer` so subsequent library scans ("Scan the sky") do not repeatedly re-prompt for the same files.
+4. **Folder Playlist Sharing Resolution (`name:<folder>`):**
+   - Fixed fatal `"Playlist not found: name:<folder>"` failure when sharing folder-backed playlists in `PlaylistShare.kt`.
 
 ---
 
 ## 2. Repository & Workspace State
 
-| Repository | Path | Branch | Local Head | Remote Head | Status |
+| Repository | Path | Branch | Local Head | Remote Head | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Main Repo** | `S:\Projects\Moon-light` | `Testing` | `v1.16.38` | `847d8aa` | Ready to commit |
-| **Test Repo** | `S:\Projects\Moon-light-Test` | `Testing` | `v1.16.37` | `847d8aa` | Ready to sync |
-| **Patches** | `S:\Projects\Moon-light-Patches` | — | Patch 21 | — | Up to date |
-
-### Patches Created
-- `20-per-song-download-progress.patch` (`v1.16.37`)
-- `21-anondrop-integration-and-streaming-packages.patch` (`v1.16.38`)
+| **Testing Repo** | `S:\Projects\Moon-light` | `Testing` | `v1.17.02` (`60ae67e`) | `origin/Testing` | Clean, up to date |
+| **Master Repo** | `S:\Projects\Moon-light-Test` | `master` | `v1.17.01` (`ff9e588`) | `origin/master` | Clean, up to date |
 
 ---
 
-## 3. Key Files Modified in v1.16.38
+## 3. Test Verification Summary
 
-- `app/src/main/java/com/scell/moonlight/PlaylistShare.kt` — Disk-backed streaming ZIP creation, streaming AES-256-GCM encryption/decryption, AnonDrop chunked upload and direct download, Filebin fallback.
-- `app/src/main/java/com/scell/moonlight/MainActivity.kt` — Bridge routing for AnonDrop uploads/downloads, `isPlaylistShareAnonDropUrl`, `isPlaylistShareUrl`, provider-neutral notifications.
-- `app/src/main/assets/playlist-share.js` — AnonDrop URL regex, prompt routing, completion handling, and export helpers.
-- `app/src/main/assets/song-download.js` — AnonDrop link detection and automatic import routing.
-- `app/src/main/assets/settings-menu.js` — Bound `#set-anondrop` to `anonDropSharing`.
-- `app/src/main/assets/audio-player.js` — Added `anonDropSharing: true` to defaults.
-- `app/src/main/assets/index.html` — Updated settings switch to `#set-anondrop`.
-- `app/src/main/assets/version.js` — Bumped to `v1.16.38`.
-- `Agent.md` — Updated structure change log for `v1.16.38`.
-- `README.md` — Updated version badge and playlist sharing feature description.
-- `tests/playlist-share.test.js` — Updated static and functional test assertions for AnonDrop & streaming.
+All test suites pass 100% across both repositories:
+- `tests/playlist-share.test.js` — **7 / 7 passed**
+- `tests/playlist-header.test.js` — **5 / 5 passed**
+- `tests/download-memory.test.js` — **17 / 17 passed**
+- `tests/song-download.test.js` — **32 / 32 passed**
+- `tests/duplicates-confirmation.test.js` — **5 / 5 passed**
+- `tests/settings-menu.test.js` — **32 / 32 passed**
+- `tests/playlist-picker.test.js` — **23 / 23 passed**
+- `tests/app-update.test.js` — **12 / 12 passed**
 
 ---
 
-## 4. Test Verification Summary
+## 4. Next Steps (Upon Next Session)
 
-All 8 core automated test suites pass 100%:
-- `node tests/duplicates-confirmation.test.js` — **4 / 4 passed**
-- `node tests/song-download.test.js` — **32 / 32 passed**
-- `node tests/player-app.test.js` — **8 / 8 passed**
-- `node tests/spotify-tabs.test.js` — **9 / 9 passed**
-- `node tests/playlist-share.test.js` — **6 / 6 passed**
-- `node tests/song-share.test.js` — **5 / 5 passed**
-- `node tests/song-share-link.test.js` — **4 / 4 passed**
-- `node tests/index-html.test.js` — **4 / 4 passed**
-**Total: 72 / 72 tests passed (100% pass rate).**
-
----
-
-## 5. What Still Needs to Be Done (Pending & Next Steps)
-
-### A. Immediate Verification on Device
-1. **AnonDrop Playlist Upload & Download:**
-   - Tap "Share" on any playlist in Moonlight.
-   - Choose AnonDrop cloud link.
-   - Verify upload progress notification updates smoothly with byte and percentage stats.
-   - Copy generated `https://anondrop.net/...` link.
-   - Test recipient download: paste into Moonlight Downloads tab on another device; verify package downloads and imports automatically without login.
-2. **Password-Protected Package:**
-   - Share a playlist with a password.
-   - Verify recipient Moonlight prompts for password and decrypts smoothly.
-3. **Large Package (1–2 GB):**
-   - Test packaging and sharing a large multi-song playlist (100+ songs, ~1 GB).
-   - Verify memory usage remains low without OOM.
-
----
-
-### B. Backlog & Future Enhancements (from `Agent.md`)
-1. **Music Folder Picker:**
-   - Add a folder picker in Settings allowing users to choose custom music directories (e.g. SD card or `/Music/`).
-2. **Clean Unused Reader CSS from `index.html`:**
-   - Trim legacy CSS remnants from the original Novel-reader app.
-3. **Dedicated Moonlight Launcher Icon:**
-   - Create a distinct Moonlight launcher icon matching the tilted crescent moon design.
-4. **Playlist Picker & Editor Enhancements:**
-   - Liked Songs source chip, multi-select in Add-songs picker, and unavailable-song indicator.
-5. **Night Rule / Sleep Mode:**
-   - Configurable sleep timer with gradual audio fade-out.
+1. **Verify `v1.17.02` on Device (Testing Build)**:
+   - Verify that tapping the playlist header share button opens the custom Moonlight modal with AnonDrop and direct file cards.
+   - Verify that uploading to AnonDrop shows clean notifications without `name:` prefixes.
+   - Verify the Success dialog displays the link, automatically copies it to clipboard, and offers *Copy link* and *Share...* buttons.
+   - Verify importing an AnonDrop link via Downloads tab or link handling.
+2. **Merge Tested Cloud Sharing to Master (`v1.18.00`)**:
+   - Once AnonDrop sharing is confirmed on physical hardware, merge `Testing` into `master` for production release `v1.18.00`.
+   - *Note*: Ensure `AppUpdater.kt` production release tracking on `master` is preserved.
