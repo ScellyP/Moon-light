@@ -235,14 +235,11 @@ window.NovelAudio = (function () {
         const validTrackIds = new Set(state.tracks.map((t) => t.id));
         let prefsChanged = false;
 
-        // Clean missing songs from current and remembered track
+        // Clean missing songs from current track
         if (state.currentTrackId && !validTrackIds.has(state.currentTrackId)) {
           state.currentTrackId = null;
           state.durationSec = 0;
           state.positionSec = 0;
-        }
-        if (state.lastTrackId && !validTrackIds.has(state.lastTrackId)) {
-          state.lastTrackId = null;
         }
 
         // Clean missing songs from Liked tracks

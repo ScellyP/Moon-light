@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.16.38-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.17.00-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -82,6 +82,7 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Visible "up next" queue.**
 - **Shuffle in rounds**: every song plays once, in random order, before any repeats, and the app remembers this even after you close it. **Repeat** has three modes: off / all / one.
 - **Song options menu** (the `⋮` next to any song): edit info, share, like, add to playlist, move/remove, add to queue, loop, delete.
+- **Multi-select playlist picker**: When adding songs to a playlist via *Add to this playlist*, use multi-select mode with interactive row checkboxes, quick *Liked songs* filter chip, *Select all* / *Deselect all*, and batch addition with real-time selection counters.
 - **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
 - **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
 - **Playlist sharing & AnonDrop integration**: Package and share complete playlists (songs, metadata, custom covers) via anonymous AnonDrop cloud links (no accounts or login required) or Android's direct share sheet. Fully stream-backed architecture handles 1–2 GB packages without memory exhaustion. Supports optional AES-256-GCM encryption with PBKDF2 password protection (passwords are never included in share URLs). Includes automatic detection in the Downloads tab and backward-compatible Filebin link importing.

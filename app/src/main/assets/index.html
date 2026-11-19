@@ -368,20 +368,6 @@ button:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: no
 }
 #bookmark-toggle.active .ico { fill: currentColor; fill-opacity: .25; }
 
-#novel-select {
-  display: block;
-  width: 100%;
-  margin-bottom: 10px;
-  padding: 11px 36px 11px 14px;
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  font-size: 14px;
-  cursor: pointer;
-}
-#novel-select.hidden { display: none; }
-
 /* Selects share one custom chevron. */
 select {
   -webkit-appearance: none;
@@ -391,7 +377,7 @@ select {
   background-position: right 12px center;
   background-size: 16px;
 }
-select:hover, #novel-select:hover { border-color: var(--border-strong); }
+select:hover { border-color: var(--border-strong); }
 select option { background: var(--panel-2); color: var(--text); }
 
 .load-btn {
@@ -412,84 +398,6 @@ select option { background: var(--panel-2); color: var(--text); }
 }
 .load-btn:hover { background: var(--accent-strong); }
 .load-btn:active { transform: scale(.985); }
-/* "Switch novel" is a secondary action: outlined, so it never reads as one
-   block with the accent-coloured "Allow access" button below it. */
-#library-btn {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-#library-btn:hover { background: var(--raised); border-color: var(--border-strong); }
-#library-btn:not([style*="none"]) + #open-chapters-btn { margin-top: 8px; }
-
-#chapters-folder-status {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 8px;
-  line-height: 1.45;
-}
-#chapters-folder-status:empty { display: none; }
-#chapters-folder-status button {
-  background: var(--panel-2);
-  color: var(--accent);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: pointer;
-  margin-top: 6px;
-}
-
-.search-wrap { position: relative; margin-top: 12px; }
-.search-wrap .ico {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  width: 16px; height: 16px; color: var(--faint);
-}
-#chapter-search {
-  width: 100%;
-  padding: 10px 12px 10px 36px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  color: var(--text);
-  font-size: 14px;
-}
-#chapter-search::placeholder { color: var(--faint); }
-#chapter-search:focus { outline: none; border-color: var(--accent-line); }
-
-#chapter-list {
-  list-style: none;
-  margin: 0;
-  padding: 8px;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  overscroll-behavior: none;
-}
-#chapter-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 12px;
-  margin-bottom: 2px;
-  border-radius: var(--r-sm);
-  border-left: 2px solid transparent;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.35;
-  color: var(--muted);
-  transition: background .12s ease, color .12s ease;
-}
-.chapter-item-label { flex: 1; word-break: break-word; }
-#chapter-list li:hover { background: var(--panel-2); color: var(--text); }
-/* The chapter you are on: an amber rule and warm text, not a solid slab. */
-#chapter-list li.active {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  border-left-color: var(--accent);
-  font-weight: 600;
-  border-radius: 2px var(--r-sm) var(--r-sm) 2px;
-}
 
 /* Version marker: pinned to the bottom of the side menu. Number is set in
    version.js (see the comment there for how the numbering works). */
@@ -591,23 +499,6 @@ select option { background: var(--panel-2); color: var(--text); }
 
 #topbar .spacer { flex: 1 1 0; }
 
-#font-controls { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
-
-#font-family-select {
-  background-color: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 0 32px 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  height: 42px;
-  min-width: 0;
-  max-width: 150px;
-  background-position: right 10px center;
-}
-
 /* Text-size stepper: one joined control, not two loose buttons. */
 #size-stepper { display: flex; align-items: stretch; }
 #size-stepper button { border-radius: 0; }
@@ -620,8 +511,7 @@ select option { background: var(--panel-2); color: var(--text); }
    --------------------------------------------------------------------- */
 #theme-panel,
 #session-settings-panel,
-#audio-panel,
-#bookmarks-panel {
+#audio-panel {
   position: fixed;
   top: calc(60px + var(--status-bar-height));
   left: 12px;
@@ -638,8 +528,7 @@ select option { background: var(--panel-2); color: var(--text); }
 }
 #theme-panel.hidden,
 #session-settings-panel.hidden,
-#audio-panel.hidden,
-#bookmarks-panel.hidden { display: none; }
+#audio-panel.hidden { display: none; }
 
 @keyframes panelIn { from { opacity: 0; transform: translateY(-6px) scale(.985); } to { opacity: 1; transform: none; } }
 
@@ -1157,164 +1046,9 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------------
-   Bookmarks
-   --------------------------------------------------------------------- */
-#bookmarks-panel { min-width: 260px; max-width: 320px; max-height: 64vh; }
-#bookmarks-panel-header { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
-
-#bookmark-chapter-btn {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  background: transparent; color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 11px 12px; font-size: 13.5px; font-weight: 600; cursor: pointer;
-  transition: background .12s ease, border-color .12s ease, color .12s ease;
-}
-#bookmark-chapter-btn:hover { background: var(--panel-2); border-color: var(--border-strong); }
-#bookmark-chapter-btn.active { color: var(--accent-strong); background: var(--accent-soft); border-color: var(--accent-line); }
-#bookmark-chapter-btn.active .ico { fill: currentColor; fill-opacity: .3; }
-
-#bookmarks-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; }
-#bookmarks-list li {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 6px 10px 12px; margin-bottom: 2px;
-  border-radius: var(--r-sm);
-  font-size: 13.5px; color: var(--text); cursor: pointer;
-  transition: background .12s ease;
-}
-#bookmarks-list li:hover { background: var(--panel-2); }
-.bookmark-kind { flex-shrink: 0; width: 16px; height: 16px; color: var(--accent); }
-.bookmark-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bookmark-remove-btn {
-  flex-shrink: 0; width: 30px; height: 30px;
-  display: flex; align-items: center; justify-content: center;
-  background: none; border: none; color: var(--faint);
-  border-radius: 50%; cursor: pointer; font-size: 14px;
-  transition: color .12s ease, background .12s ease;
-}
-.bookmark-remove-btn:hover { color: var(--danger); background: rgba(231,122,106,.12); }
-#bookmarks-empty { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
-
-.paragraph-bookmarked {
-  background: var(--accent-soft);
-  border-left: 3px solid var(--accent);
-  padding-left: 10px !important;
-  margin-left: -13px !important;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
-}
-
-/* ---------------------------------------------------------------------
-   Reader
-   --------------------------------------------------------------------- */
-#reader-scroll {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: flex; justify-content: center;
-  -webkit-overflow-scrolling: touch; overscroll-behavior: none;
-  background: var(--read-bg, transparent);
-}
-
-#reader { max-width: 720px; width: 100%; padding: 56px 28px calc(110px + var(--nav-bar-height, 0px)); color: var(--read-text, inherit); }
-
-#reader.flip-next, #reader.flip-prev {
-  transform-style: preserve-3d; backface-visibility: hidden;
-  animation-duration: var(--flip-duration, 2000ms);
-  animation-timing-function: cubic-bezier(.4, 0, .2, 1);
-  animation-fill-mode: both;
-}
-#reader.flip-next { transform-origin: left center; animation-name: pageFlipNext; }
-#reader.flip-prev { transform-origin: right center; animation-name: pageFlipPrev; }
-@keyframes pageFlipNext {
-  0%   { transform: perspective(1400px) rotateY(-72deg) scale(0.95); opacity: 0.45; }
-  55%  { transform: perspective(1400px) rotateY(12deg) scale(1); opacity: 1; }
-  80%  { transform: perspective(1400px) rotateY(-3deg); }
-  100% { transform: perspective(1400px) rotateY(0deg) scale(1); opacity: 1; }
-}
-@keyframes pageFlipPrev {
-  0%   { transform: perspective(1400px) rotateY(72deg) scale(0.95); opacity: 0.45; }
-  55%  { transform: perspective(1400px) rotateY(-12deg) scale(1); opacity: 1; }
-  80%  { transform: perspective(1400px) rotateY(3deg); }
-  100% { transform: perspective(1400px) rotateY(0deg) scale(1); opacity: 1; }
-}
 @media (prefers-reduced-motion: reduce) {
-  #reader.flip-next, #reader.flip-prev { animation: none; }
   #splash *, #splash::before { animation-duration: .01s !important; animation-delay: 0s !important; }
 }
-
-/* The chapter title is the book voice. */
-#chapter-title {
-  font-family: var(--font-book);
-  font-size: 34px; font-weight: 500; line-height: 1.18; letter-spacing: -.2px;
-  color: var(--read-text, inherit);
-  margin: 0 0 20px;
-  text-wrap: balance;
-}
-
-#chapter-text {
-  font-family: var(--font-book);
-  font-size: 19px; line-height: 1.6; letter-spacing: 0;
-  white-space: pre-wrap;
-  color: var(--read-text, inherit);
-  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-}
-#chapter-text p { margin: 0 0 22px; }
-
-/* Welcome / first-run state */
-#welcome { max-width: 560px; margin: 0 auto; padding: 72px 24px; text-align: center; color: var(--muted); }
-#welcome .wl-mark {
-  width: 64px; height: 64px; margin: 0 auto 24px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: var(--accent-soft); color: var(--accent);
-  border: 1px solid var(--accent-line);
-}
-#welcome .wl-mark .ico { width: 28px; height: 28px; }
-#welcome h2 { font-family: var(--font-book); font-weight: 500; color: var(--text); font-size: 30px; line-height: 1.15; margin: 0 0 10px; }
-#welcome p { margin: 0 auto 26px; max-width: 40ch; line-height: 1.6; font-size: 15px; }
-#welcome .steps {
-  text-align: left;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--r-md); padding: 6px 4px;
-  margin: 0; list-style: none; counter-reset: s;
-}
-#welcome .steps li {
-  counter-increment: s;
-  display: flex; gap: 14px; align-items: flex-start;
-  padding: 14px 16px; font-size: 14.5px; line-height: 1.5; color: var(--muted);
-}
-#welcome .steps li + li { border-top: 1px solid var(--border); }
-#welcome .steps li::before {
-  content: counter(s);
-  flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; border: 1px solid var(--accent-line);
-  color: var(--accent); font-size: 12px; font-weight: 700;
-}
-#welcome .steps code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent-strong); word-break: break-all; }
-#welcome .steps b { color: var(--text); font-weight: 600; }
-
-#welcome.is-loading .wl-mark { animation: breathe 2.4s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(188,68,221,.0); } 50% { box-shadow: 0 0 0 10px rgba(188,68,221,.10); } }
-
-#bottom-nav { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 56px; gap: 10px; }
-#bottom-nav button {
-  flex: 1 1 120px;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 15px 14px;
-  background: transparent; color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  font-size: 14.5px; font-weight: 600; cursor: pointer;
-  transition: background .12s ease, border-color .12s ease;
-}
-#bottom-nav button .ico { width: 18px; height: 18px; }
-#bottom-nav button:hover:not(:disabled) { background: var(--panel-2); border-color: var(--border-strong); }
-#bottom-nav button:disabled { opacity: .3; cursor: not-allowed; }
-#bottom-next:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-strong); }
-
-@keyframes chapterJobSpin { to { transform: rotate(360deg); } }
-
-/* "Delete chapters": a small icon button in the side menu's icon row; red only on hover. */
-#delete-chapters-btn:hover:not(:disabled) { color: var(--danger); }
-#delete-chapters-btn:disabled { opacity: .4; cursor: default; }
 
 #toggle-sidebar { flex-shrink: 0; }
 
@@ -1568,18 +1302,11 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 
   #sidebar-header { padding: 14px 14px 12px; padding-top: calc(14px + var(--status-bar-height)); }
   #sidebar-header h1 { font-size: 22px; }
-  #chapter-list { padding: 6px; }
-  #chapter-list li { padding: 13px 12px; font-size: 15px; }
 
   #main { width: 100%; }
 
-  #reader { padding: 30px 20px calc(120px + var(--nav-bar-height, 0px)); }
-  #chapter-title { font-size: 27px; }
-  #chapter-text { font-size: 18px; line-height: 1.6; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-
   #topbar { gap: 6px; padding: 8px 10px; position: sticky; top: 0; z-index: 40; }
   #topbar button { width: 40px; height: 40px; }
-  #font-family-select { height: 40px; max-width: 118px; font-size: 12.5px; padding-left: 10px; }
   #status-clock { left: 14px; font-size: 11px; }
 
   /* #toggle-sidebar (inside #topbar) can't be rescued with a bigger
@@ -1595,7 +1322,7 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
      only on mobile, and only once the drawer has content worth closing. */
   #sidebar-close { display: flex; }
 
-  #theme-panel, #bookmarks-panel, #session-settings-panel {
+  #theme-panel, #session-settings-panel {
     right: 10px; left: 10px; min-width: 0; max-width: none;
     top: calc(64px + var(--status-bar-height));
   }
@@ -1603,17 +1330,10 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
      its own rules near the top of the stylesheet) — it's intentionally
      excluded from the floating-card repositioning above. */
   #audio-panel { width: 92vw; max-width: 380px; }
-
-  #bottom-nav { margin-top: 44px; }
-  #bottom-nav button { min-height: 50px; }
-
-  #welcome { padding: 44px 18px; }
-  #welcome h2 { font-size: 26px; }
 }
 
 @media (max-width: 360px) {
   #topbar button { width: 36px; height: 36px; }
-  #font-family-select { max-width: 96px; }
 }
 
 /* Icon parts that are solid rather than stroked: transport glyphs and the
@@ -1639,38 +1359,23 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 :where(button:active:not(:disabled) .ico) { transform: scale(.92); }
 
 /* List rows: press feedback + smooth highlight. */
-#chapter-list li, #bookmarks-list li, #audio-queue li, #audio-playlist-list li {
+#audio-queue li, #audio-playlist-list li {
   transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .14s var(--ease);
 }
-#chapter-list li:active, #bookmarks-list li:active,
 #audio-queue li:active, #audio-playlist-list li:active { transform: scale(.985); }
 
 /* Panels: their contents rise in one after another each time one opens
    (the panels toggle display:none, so these replay on every open). */
 #theme-panel:not(.hidden) > *,
-#session-settings-panel:not(.hidden) > *,
-#bookmarks-panel:not(.hidden) > * { animation: rise .34s var(--ease) both; }
-#theme-panel:not(.hidden) > :nth-child(1), #session-settings-panel:not(.hidden) > :nth-child(1), #bookmarks-panel:not(.hidden) > :nth-child(1) { animation-delay: .00s; }
-#theme-panel:not(.hidden) > :nth-child(2), #session-settings-panel:not(.hidden) > :nth-child(2), #bookmarks-panel:not(.hidden) > :nth-child(2) { animation-delay: .03s; }
-#theme-panel:not(.hidden) > :nth-child(3), #session-settings-panel:not(.hidden) > :nth-child(3), #bookmarks-panel:not(.hidden) > :nth-child(3) { animation-delay: .06s; }
-#theme-panel:not(.hidden) > :nth-child(4), #session-settings-panel:not(.hidden) > :nth-child(4), #bookmarks-panel:not(.hidden) > :nth-child(4) { animation-delay: .09s; }
-#theme-panel:not(.hidden) > :nth-child(5), #session-settings-panel:not(.hidden) > :nth-child(5), #bookmarks-panel:not(.hidden) > :nth-child(5) { animation-delay: .12s; }
-#theme-panel:not(.hidden) > :nth-child(n+6), #session-settings-panel:not(.hidden) > :nth-child(n+6), #bookmarks-panel:not(.hidden) > :nth-child(n+6) { animation-delay: .15s; }
-
-/* Bookmark rows animate in when the list is shown. */
-#bookmarks-panel:not(.hidden) #bookmarks-list li { animation: fadeIn .3s ease both; }
+#session-settings-panel:not(.hidden) > * { animation: rise .34s var(--ease) both; }
+#theme-panel:not(.hidden) > :nth-child(1), #session-settings-panel:not(.hidden) > :nth-child(1) { animation-delay: .00s; }
+#theme-panel:not(.hidden) > :nth-child(2), #session-settings-panel:not(.hidden) > :nth-child(2) { animation-delay: .03s; }
+#theme-panel:not(.hidden) > :nth-child(3), #session-settings-panel:not(.hidden) > :nth-child(3) { animation-delay: .06s; }
+#theme-panel:not(.hidden) > :nth-child(4), #session-settings-panel:not(.hidden) > :nth-child(4) { animation-delay: .09s; }
+#theme-panel:not(.hidden) > :nth-child(5), #session-settings-panel:not(.hidden) > :nth-child(5) { animation-delay: .12s; }
+#theme-panel:not(.hidden) > :nth-child(n+6), #session-settings-panel:not(.hidden) > :nth-child(n+6) { animation-delay: .15s; }
 
 /* Music drawer: inline sections expand with a soft entrance. */
-#audio-playlist-list:not(.hidden),
-
-/* Music: the play button glows gently while audio is playing, and the
-   now-playing row in the queue has a slow pulse on its accent. */
-#audio-play-btn.is-playing { box-shadow: 0 0 0 6px var(--accent-soft); }
-#audio-queue li.playing { animation: fadeIn .25s ease both; }
-#audio-np-title, #audio-np-artist, #audio-status-note { transition: opacity .2s ease, color .2s ease; }
-
-/* Reading column: chapter title/text ease in when a chapter loads. */
-#chapter-title { animation: rise .45s var(--ease) both; }
 
 /* Sidebar: smoother slide, and the toggle button turns a little. */
 #toggle-sidebar .ico { transition: transform .26s var(--ease); }
@@ -1734,7 +1439,6 @@ body.peek-active #session-settings-panel > .peek-keep {
 body.peek-active #topbar,
 body.peek-active #sidebar,
 body.peek-active #sidebar-scrim,
-body.peek-active #bottom-nav,
 body.peek-active #status-clock { opacity: 0 !important; pointer-events: none; }
 body.peek-active #panel-scrim { opacity: 0 !important; background: transparent !important; }
 
@@ -1743,10 +1447,9 @@ body.peek-active #panel-scrim { opacity: 0 !important; background: transparent !
    and panels now fade/slide OUT instead of vanishing. Only transform and
    opacity are animated, which the browser can run without re-layout.
    --------------------------------------------------------------------- */
-#theme-panel, #session-settings-panel, #bookmarks-panel { animation-duration: .34s; }
+#theme-panel, #session-settings-panel { animation-duration: .34s; }
 #theme-panel:not(.hidden) > *,
-#session-settings-panel:not(.hidden) > *,
-#bookmarks-panel:not(.hidden) > * { animation-duration: .5s; }
+#session-settings-panel:not(.hidden) > * { animation-duration: .5s; }
 #dialog-layer { animation-duration: .26s; }
 #dialog-box { animation-duration: .34s; }
 
@@ -1754,17 +1457,17 @@ body.peek-active #panel-scrim { opacity: 0 !important; background: transparent !
   transition: background-color .2s ease, color .2s ease, border-color .2s ease,
               box-shadow .25s ease, opacity .2s ease, transform .2s var(--ease);
 }
-#chapter-list li, #bookmarks-list li, #audio-queue li, #audio-playlist-list li {
+#audio-queue li, #audio-playlist-list li {
   transition: background-color .2s ease, color .2s ease, border-color .2s ease, transform .2s var(--ease);
 }
 
 /* Panels fade and drift out on close (display is held until the fade ends;
    browsers without allow-discrete just close instantly as before). */
-#theme-panel, #session-settings-panel, #bookmarks-panel {
+#theme-panel, #session-settings-panel {
   transition: opacity .26s var(--ease), transform .26s var(--ease), display .26s allow-discrete,
               background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
-#theme-panel.hidden, #session-settings-panel.hidden, #bookmarks-panel.hidden {
+#theme-panel.hidden, #session-settings-panel.hidden {
   animation: none;
   opacity: 0;
   transform: translateY(-8px) scale(.985);
@@ -1777,73 +1480,6 @@ body.peek-active #panel-scrim { opacity: 0 !important; background: transparent !
   #sidebar { transition: transform .34s var(--ease); }
   #sidebar-scrim { transition: opacity .34s ease; }
 }
-
-/* ---- Library / novel picker ---- */
-#novel-picker {
-  position: fixed; inset: 0; z-index: 150;
-  background: var(--bg);
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
-  padding: calc(var(--status-bar-height, 24px) + 18px) 18px calc(var(--nav-bar-height, 24px) + 24px);
-  animation: fadeIn .35s ease both;
-}
-#novel-picker.hidden { display: none; }
-/* Swipe-up handle at the bottom of the library: swiping up from it opens the music player
-   (reader.js). It only draws; the gesture is judged from touch positions, so taps and
-   scrolling pass straight through it. */
-#novel-picker-player-hint {
-  display: none;
-  position: fixed; left: 0; right: 0; bottom: var(--nav-bar-height, 0px); z-index: 151;
-  height: 56px; padding-bottom: 6px;
-  flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px;
-  background: linear-gradient(180deg, transparent, var(--bg) 65%);
-  color: var(--muted); font-size: 12px; letter-spacing: .3px;
-  pointer-events: none;
-}
-#novel-picker-player-hint i { display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--border-strong); }
-#novel-picker:not(.hidden) + #novel-picker-player-hint { display: flex; }
-/* The music panel normally sits under the library (z 90 vs 150); lift it above while the
-   library is open so a swipe up from there can show it. */
-body.picker-open #audio-panel { z-index: 160; }
-/* Opened by a swipe up: the music panel rises from the bottom instead of sliding in from the
-   right (reader.js adds .from-bottom just before it opens; the toggle buttons remove it). */
-#audio-panel.from-bottom,
-#audio-panel.from-bottom.hidden { transform: translateY(100%); }
-#audio-panel.from-bottom:not(.hidden) { transform: none; }
-#novel-picker-inner { max-width: 760px; margin: 0 auto; }
-#novel-picker-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-#novel-picker-head h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.3px; color: var(--text); }
-#novel-picker-sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
-#novel-picker-close {
-  width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--panel-2); color: var(--text); border: 1px solid var(--border-strong); cursor: pointer;
-}
-#novel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 22px 16px; }
-.novel-card {
-  display: flex; flex-direction: column; gap: 10px; align-items: stretch;
-  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
-  color: var(--text); text-align: center; font: inherit;
-  animation: rise .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms);
-}
-.novel-cover {
-  position: relative; width: 100%; aspect-ratio: 2 / 3; overflow: hidden;
-  border-radius: 12px; background: var(--panel-2);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 8px 22px rgba(0,0,0,.35);
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .25s var(--ease), box-shadow .25s ease;
-}
-.novel-card:active .novel-cover { transform: scale(.96); }
-.novel-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fadeIn .4s ease both; }
-.novel-cover .nc-ph { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
-.novel-cover .nc-ph .ico { width: 34px; height: 34px; }
-.novel-cover .nc-ph b { font-size: 34px; font-weight: 700; color: var(--text); opacity: .85; }
-.novel-name {
-  font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--text);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.novel-last { font-size: 11px; color: var(--faint); margin-top: -6px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 <style id="lamplight-polish">
 /* =========================================================================
@@ -1869,11 +1505,10 @@ body.picker-open #audio-panel { z-index: 160; }
 
 /* ---- Focus: a clear, two-tone ring that works on every surface ---------- */
 :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 3px; border-radius: inherit; }
-li:focus-visible, .novel-card:focus-visible .novel-cover { outline-offset: -2px; }
-#chapter-search:focus, .audio-row select:focus, #novel-select:focus, #font-family-select:focus {
+li:focus-visible { outline-offset: -2px; }
+.audio-row select:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
 }
-#chapter-search:focus-visible { outline: none; }
 input[type="range"]:focus-visible { outline: none; }
 input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent-strong); }
 
@@ -1881,8 +1516,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
 /* The settings panels scroll without a visible scrollbar, so nothing hints at a hidden control below. */
-#theme-panel, #session-settings-panel, #bookmarks-panel { scrollbar-width: none; -ms-overflow-style: none; }
-#theme-panel::-webkit-scrollbar, #session-settings-panel::-webkit-scrollbar, #bookmarks-panel::-webkit-scrollbar { display: none; width: 0; height: 0; }
+#theme-panel, #session-settings-panel { scrollbar-width: none; -ms-overflow-style: none; }
+#theme-panel::-webkit-scrollbar, #session-settings-panel::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 /* ---- Sidebar -------------------------------------------------------------- */
 #sidebar-header { padding: 18px 18px 16px; padding-top: calc(18px + var(--status-bar-height)); }
@@ -1891,15 +1526,8 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px 
 #sidebar-icon-buttons { gap: 2px; }
 .sidebar-icon-btn { width: 40px; height: 40px; border-radius: 12px; }
 .sidebar-icon-btn.active, #session-timer-btn-sidebar.limit-active { box-shadow: inset 0 0 0 1px var(--accent-line); }
-#novel-select, #chapter-search { min-height: 44px; border-radius: 12px; }
-#novel-select { margin-bottom: 12px; }
-.search-wrap { margin-top: 14px; }
 .load-btn { min-height: 48px; border-radius: 12px; letter-spacing: .1px; }
 .load-btn:active { transform: scale(.975); }
-#library-btn:not([style*="none"]) + #open-chapters-btn { margin-top: 10px; }
-#chapter-list { padding: 10px 10px 16px; scroll-padding: 12px; }
-#chapter-list li { padding: 13px 14px; margin-bottom: 3px; min-height: 48px; border-radius: 12px; }
-#chapter-list li.active { border-radius: 4px 12px 12px 4px; box-shadow: inset 0 0 0 1px var(--accent-soft); }
 #empty-note { padding: 24px 22px 28px; }
 #app-version { padding: 10px 16px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
 
@@ -1907,12 +1535,11 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px 
 #topbar { padding: 9px 14px; gap: 10px; }
 #topbar button { border-radius: 12px; border-color: var(--border); }
 #topbar button:active:not(:disabled) { background: var(--raised); }
-#font-family-select { border-radius: 12px; }
 #size-stepper #font-smaller { border-radius: 12px 0 0 12px; }
 #size-stepper #font-bigger  { border-radius: 0 12px 12px 0; }
 
 /* ---- Floating panels: roomier shell ---------------------------------------- */
-#theme-panel, #session-settings-panel, #audio-panel, #bookmarks-panel {
+#theme-panel, #session-settings-panel, #audio-panel {
   padding: 20px;
   gap: 16px;
   border-radius: var(--r-lg);
@@ -1920,7 +1547,7 @@ input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px 
   box-shadow: var(--shadow-float), inset 0 1px 0 rgba(255,255,255,.04);
   background-image: linear-gradient(180deg, rgba(255,255,255,.022), transparent 120px);
 }
-#theme-panel:not(.hidden), #session-settings-panel:not(.hidden), #bookmarks-panel:not(.hidden) { will-change: transform, opacity; }
+#theme-panel:not(.hidden), #session-settings-panel:not(.hidden) { will-change: transform, opacity; }
 /* Keep tall panels reachable on short screens. */
 #theme-panel, #session-settings-panel {
   max-height: calc(100dvh - var(--status-bar-height) - var(--nav-bar-height) - 84px);
@@ -2084,55 +1711,23 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 .audio-track-duration { font-size: 12.5px; }
 #audio-status-note { padding-top: 12px; }
 
-/* ---- Bookmarks --------------------------------------------------------------------------------- */
-#bookmarks-panel-header { gap: 14px; }
-#bookmark-chapter-btn { min-height: 46px; border-radius: 12px; }
-#bookmark-chapter-btn:active { transform: scale(.975); }
-#bookmarks-list li { padding: 12px 8px 12px 14px; min-height: 48px; border-radius: 12px; }
-#bookmarks-list li:active { background: var(--raised); }
-.bookmark-remove-btn { width: 36px; height: 36px; }
-
-/* ---- Reader surface ---------------------------------------------------------------------------------- */
-#bottom-nav button { border-radius: 12px; min-height: 52px; }
-#bottom-nav button:active:not(:disabled) { transform: scale(.975); background: var(--raised); }
-#bottom-next:not(:disabled):active { background: rgba(188,68,221,.22); }
-#welcome .steps { border-radius: var(--r-lg); }
-/* The loading ring animates transform/opacity instead of box-shadow. */
-#welcome .wl-mark { position: relative; }
-#welcome.is-loading .wl-mark { animation: none; }
-#welcome.is-loading .wl-mark::after {
-  content: ""; position: absolute; inset: 0; border-radius: 50%;
-  border: 1px solid var(--accent-line); pointer-events: none;
-  animation: ringOut 2.4s var(--ease) infinite;
-}
-@keyframes ringOut { from { transform: scale(1); opacity: .8; } to { transform: scale(1.55); opacity: 0; } }
-
 /* ---- Dialog + overlays ------------------------------------------------------------------------------- */
 #dialog-box { border-radius: var(--r-lg); padding: 24px 22px 18px; box-shadow: var(--shadow-float); }
 #dialog-ok { min-height: 46px; padding: 12px 26px; border-radius: 12px; transition: background-color .2s ease, transform .2s var(--ease); }
 #dialog-ok:active { transform: scale(.96); }
 #session-limit-dismiss-btn { min-height: 48px; border-radius: 12px; }
 
-/* ---- Library picker ---------------------------------------------------------------------------------------- */
-#novel-picker-close { width: 44px; height: 44px; transition: background-color .2s ease, transform .2s var(--ease); }
-#novel-picker-close:active { transform: scale(.9); }
-.novel-cover { border-radius: 14px; }
-.novel-card:focus-visible { outline: none; }
-.novel-card:focus-visible .novel-cover { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
-
 /* ---- Mobile --------------------------------------------------------------------------------------------------- */
 @media (max-width: 720px) {
   #sidebar-header { padding: 16px 16px 14px; padding-top: calc(16px + var(--status-bar-height)); }
   #sidebar { will-change: transform; }
-  #chapter-list { padding: 8px 8px 16px; }
-  #chapter-list li { padding: 14px 14px; font-size: 15px; }
   #topbar { padding: 8px 12px; gap: 8px; }
-  #theme-panel, #bookmarks-panel, #session-settings-panel { right: 12px; left: 12px; }
+  #theme-panel, #session-settings-panel { right: 12px; left: 12px; }
   #audio-panel { width: 92vw; max-width: 380px; }
 }
 @media (max-width: 360px) {
   #topbar { padding: 8px 8px; gap: 6px; }
-  #theme-panel, #session-settings-panel, #bookmarks-panel { padding: 16px; }
+  #theme-panel, #session-settings-panel { padding: 16px; }
   #audio-controls button { width: 42px; height: 42px; }
   #audio-play-btn { width: 58px !important; height: 58px !important; }
 }
@@ -2155,7 +1750,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   .switch.on::after { background: Highlight; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #audio-play-btn.is-playing::before, #welcome.is-loading .wl-mark::after { animation: none; opacity: 0; }
+  #audio-play-btn.is-playing::before { animation: none; opacity: 0; }
   #audio-play-btn.is-playing { box-shadow: 0 0 0 6px var(--accent-soft); }
 }
 </style>
@@ -2278,7 +1873,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
    floating-card rules and their mobile overrides. The Music panel is a
    side drawer and is intentionally untouched.
    --------------------------------------------------------------------- */
-#theme-panel, #session-settings-panel, #bookmarks-panel {
+#theme-panel, #session-settings-panel {
   position: fixed;
   top: 0; right: 0; bottom: 0; left: 0;
   width: 100%; height: 100%;
@@ -2297,7 +1892,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 @keyframes panelFullIn { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 
 /* Closed state: slide down and fade out. */
-#theme-panel.hidden, #session-settings-panel.hidden, #bookmarks-panel.hidden {
+#theme-panel.hidden, #session-settings-panel.hidden {
   transform: translateY(24px);
 }
 
@@ -2310,16 +1905,11 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   background: var(--panel);
 }
 
-/* Bookmarks: header fixed, list fills the rest of the screen and scrolls. */
-#bookmarks-panel { overflow: hidden; padding-top: calc(12px + var(--status-bar-height)); }
-#bookmarks-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-#bookmarks-list li { padding-top: 14px; padding-bottom: 14px; font-size: 15px; }
-
 /* Bigger touch targets now that there is room. */
 #theme-panel .theme-panel-row, #session-settings-panel .theme-panel-row { min-height: 48px; }
 
 @media (prefers-reduced-motion: reduce) {
-  #theme-panel, #session-settings-panel, #bookmarks-panel { animation-duration: .01s; }
+  #theme-panel, #session-settings-panel { animation-duration: .01s; }
 }
 </style>
 <style id="ampm-toggle">
@@ -3108,14 +2698,12 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 }
 .sky.sm::before { --sky-hi: .6; }
 .sky.sm::after { --sky-hi: .7; }
-#sidebar-header, #welcome, #night-lock-stage, #session-limit-overlay, #splash, #novel-picker { isolation: isolate; }
-#sidebar-header, #welcome { position: relative; }
+#sidebar-header, #session-limit-overlay, #splash { isolation: isolate; }
+#sidebar-header { position: relative; }
 
 /* Live moon-phase badge (filled in by moon-theme.js). */
 .moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; }
 .moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
-#novel-picker-head h1 .moon-badge { margin-left: 10px; width: 20px; height: 20px; opacity: .85; }
-#novel-picker-head h1 { display: flex; align-items: center; }
 #status-gap .moon-badge { position: absolute; right: 16px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; opacity: .75; pointer-events: none; }
 body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 
@@ -3134,24 +2722,6 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
   animation: mtSpark 1.4s ease-in-out infinite;
 }
 
-/* Loading / first-run mark: a little world with something orbiting it. */
-#welcome .wl-mark::before {
-  content: ""; position: absolute; inset: -11px; border-radius: 50%; pointer-events: none;
-  border: 1px dashed var(--accent-line);
-  background: radial-gradient(circle at 50% 0, var(--accent) 0 2.6px, transparent 3.2px);
-  animation: mtOrbit 16s linear infinite;
-}
-
-/* Chapter ornaments: a crescent-and-star rule under the title and above the nav. */
-#reader #chapter-title::after, #bottom-nav::before {
-  content: ""; display: block; width: 120px; height: 14px; opacity: .5;
-  background-color: var(--read-text, currentColor);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 14'%3E%3Crect x='4' y='6.5' width='34' height='1' rx='.5'/%3E%3Crect x='82' y='6.5' width='34' height='1' rx='.5'/%3E%3Cpath d='M52 3a5 5 0 1 0 0 8 4 4 0 0 1 0-8Z'/%3E%3Cpath d='M68 3a5 5 0 1 1 0 8 4 4 0 0 0 0-8Z'/%3E%3Cpath d='M60 1.5c.4 3.3 1.2 4.1 4.5 4.5-3.3.4-4.1 1.2-4.5 4.5-.4-3.3-1.2-4.1-4.5-4.5 3.3-.4 4.1-1.2 4.5-4.5Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 14'%3E%3Crect x='4' y='6.5' width='34' height='1' rx='.5'/%3E%3Crect x='82' y='6.5' width='34' height='1' rx='.5'/%3E%3Cpath d='M52 3a5 5 0 1 0 0 8 4 4 0 0 1 0-8Z'/%3E%3Cpath d='M68 3a5 5 0 1 1 0 8 4 4 0 0 0 0-8Z'/%3E%3Cpath d='M60 1.5c.4 3.3 1.2 4.1 4.5 4.5-3.3.4-4.1 1.2-4.5 4.5-.4-3.3-1.2-4.1-4.5-4.5 3.3-.4 4.1-1.2 4.5-4.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-#reader #chapter-title::after { margin: 16px 0 0; }
-#bottom-nav { position: relative; }
-#bottom-nav::before { position: absolute; top: -34px; left: 50%; margin-left: -60px; background-color: var(--read-text, var(--muted)); }
-
 /* Version footer gets a crescent. */
 #app-version::before {
   content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 7px; vertical-align: -1px;
@@ -3159,26 +2729,12 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-/* Library covers without an image: a moonlit sky with a crescent. */
-.novel-cover { background: radial-gradient(circle at 76% 20%, rgba(255,255,255,.14) 0 14px, transparent 15px), radial-gradient(circle at 22% 78%, rgba(255,255,255,.08) 0 2px, transparent 3px), var(--panel-2); }
-.novel-cover .nc-ph .ico { opacity: .8; }
-
-/* Moonlit Lock: stars, a halo round the moon, and the odd shooting star. */
-#night-lock-stage .sky { z-index: 0; }
-#night-lock-box { z-index: 1; }
-#night-lock-name { margin-bottom: 8px; }
-#night-lock-icon { position: relative; }
-#night-lock-icon::before {
-  content: ""; position: absolute; inset: -26px; border-radius: 50%; pointer-events: none;
-  background: radial-gradient(closest-side, var(--text), transparent); opacity: .10;
-}
-
 /* Break overlay. */
 #session-limit-icon .ico { width: 34px; height: 34px; }
 
 
 /* ---- Moon theme: music player and panels ------------------------------- */
-#bookmarks-panel, #theme-panel, #session-settings-panel, #audio-panel { isolation: isolate; }
+#theme-panel, #session-settings-panel, #audio-panel { isolation: isolate; }
 
 /* Moonlit "album art" wherever a song has no cover of its own. */
 #audio-artwork:not(.has-art), #sp-mini-art:not(:has(img)), #sp-sheet-art:not(:has(img)) {
@@ -3221,49 +2777,8 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 /* Sliders: the thumb is a little moon with a halo. */
 input[type="range"]::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft), 0 0 12px var(--accent-line); }
 
-/* The chapter you are on gets a crescent. */
-#chapter-list li.active::before {
-  content: ""; flex-shrink: 0; width: 13px; height: 13px; background-color: var(--accent);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-
-/* Moonlit Lock puzzles (non-holiday days): six pure-logic puzzles, one picked at random. Opened by tapping one secret star, see moon-lock.js and moon-puzzles.js. */
-#night-lock-puzzle.hidden { display: none; }
-/* No tap flash anywhere on the lock: nothing should show which star is the secret one. */
-#night-lock-stage { -webkit-tap-highlight-color: transparent; }
-#night-lock-box.puzzle-open h2, #night-lock-box.puzzle-open > p, #night-lock-box.puzzle-open #night-lock-icon,
-#night-lock-box.puzzle-open #night-lock-phase, #night-lock-box.puzzle-open #night-lock-now,
-#night-lock-box.puzzle-open #night-lock-opens { display: none; }
-#pz-title { margin: 0 0 4px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent, var(--text)); }
-#pz-msg { min-height: 20px; margin: 0 0 12px; font-size: 14px; color: var(--muted); }
-#pz-grid { width: min(300px, 82vw); margin: 0 auto; display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
-#pz-grid button { font: inherit; color: var(--text); touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-#pz-grid button:active:not(:disabled) { transform: scale(.96); }
-#pz-grid button:disabled { cursor: default; }
-.pz-board { display: grid; gap: 6px; }
-.pz-slide { grid-template-columns: repeat(3, 1fr); }
-.pz-cell {
-  aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 8px;
-  border-radius: 12px; border: 1px solid var(--line, rgba(128,128,128,.35)); background: var(--panel-2, rgba(128,128,128,.12));
-}
-.pz-cell:disabled:not(.pz-blank) { opacity: .45; }
-.pz-blank { opacity: .15; }
-.pz-moon { display: block; width: 100%; height: 100%; }
-.pz-moon-dark { fill: currentColor; opacity: .18; }
-.pz-moon-lit { fill: var(--accent, #f2d27a); }
-.pz-goal { display: flex; justify-content: center; gap: 4px; margin-bottom: 4px; }
-.pz-goal .pz-moon { flex: none; width: 20px; height: 20px; opacity: .75; }
-.pz-stack { display: flex; flex-direction: column; gap: 6px; }
-.pz-pan { height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; }
-.pz-pan:disabled { opacity: 1; }
-.pz-bar { display: block; height: 26px; border-radius: 999px; background: var(--accent, #f2d27a); }
-#pz-grid.pz-done { box-shadow: 0 0 14px var(--accent-line, transparent); border-radius: 14px; }
-#pz-foot { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; font-size: 13px; color: var(--muted); }
-#pz-foot button { padding: 8px 14px; border-radius: 999px; font: inherit; font-size: 13px; color: var(--text); background: transparent; border: 1px solid var(--line, rgba(128,128,128,.35)); }
-
 @media (prefers-reduced-motion: reduce) {
-  .sky::before, .sky::after, .sky .shoot, #welcome .wl-mark::before, #splash-moon, #splash-status .dots i { animation: none !important; }
+  .sky::before, .sky::after, .sky .shoot, #splash-moon, #splash-status .dots i { animation: none !important; }
   .sky .shoot { display: none; }
 }
 
@@ -3477,8 +2992,32 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .pp-head { text-align: center; min-width: 0; }
 .pp-title { font: 700 17px/1.2 var(--font-ui); }
 .pp-sub { font: 400 12.5px/1.3 var(--font-ui); color: var(--sp-sub, var(--faint)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-chips { display: flex; align-items: center; gap: 8px; padding: 2px 14px 6px; flex-shrink: 0; }
+.pp-chip { min-height: 34px; padding: 0 14px; border: 0; border-radius: 999px; font: 600 13px/1 var(--font-ui); cursor: pointer;
+  background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); transition: background .15s, color .15s, transform .15s; }
+.pp-chip.active { background: var(--accent); color: var(--accent-ink, #000); }
+.pp-chip:active { transform: scale(.96); }
+.pp-selectbar { display: flex; align-items: center; gap: 8px; padding: 0 14px 6px; flex-shrink: 0; }
+.pp-pill { flex: 1; height: 38px; border: 0; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text); font: 600 13.5px/1 var(--font-ui); transition: transform .15s, opacity .15s, background .15s; }
+.pp-pill:active { transform: scale(.97); }
+.pp-pill.primary { background: var(--accent); color: var(--accent-ink, #000); }
+.pp-pill:disabled { opacity: .4; cursor: default; }
+.pp-pill.hidden { display: none; }
 .pp-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 8px; }
 .pp-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-height: 72px; content-visibility: auto; contain-intrinsic-size: auto 72px; }
+.pp-check-box { display: none; flex: none; width: 24px; height: 24px; border: 2px solid var(--sp-sub, var(--faint)); border-radius: 50%;
+  place-items: center; transition: all .15s; margin-right: 2px; }
+.pp-check-box .ico { width: 14px; height: 14px; opacity: 0; stroke-width: 2.5; stroke: var(--accent-ink, #000); fill: none; transition: opacity .15s; }
+#pp-layer.selecting .pp-check-box { display: grid; }
+#pp-layer.selecting .pp-add { display: none; }
+#pp-layer.selecting .pp-row { cursor: pointer; user-select: none; }
+#pp-layer.selecting .pp-row.picked .pp-check-box { background: var(--accent); border-color: var(--accent); }
+#pp-layer.selecting .pp-row.picked .pp-check-box .ico { opacity: 1; }
+#pp-layer.selecting .pp-row.picked { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#pp-layer.selecting .pp-row.in-list { opacity: .55; cursor: default; }
+#pp-layer.selecting .pp-row.in-list .pp-check-box { background: color-mix(in srgb, var(--text) 20%, transparent); border-color: transparent; }
+#pp-layer.selecting .pp-row.in-list .pp-check-box .ico { opacity: 1; stroke: var(--text); }
 .pp-art { flex: none; width: 56px; height: 56px; border-radius: 4px; display: grid; place-items: center; color: var(--sp-sub, var(--faint));
   background: color-mix(in srgb, var(--text) 10%, transparent) center / cover no-repeat var(--pp-cover); }
 .pp-art[data-pp-cover] .ico { display: none; }

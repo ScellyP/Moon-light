@@ -1,14 +1,39 @@
 # Moonlight Project — Daily Handoff & Session Summary
-**Date:** November 19, 2026 (18:30 IST)  
-**Current Version:** `v1.16.38`  
+**Date:** November 19, 2026 (19:30 IST)  
+**Current Version:** `v1.17.00`  
 **Current Branch:** `Testing`  
-**Remote Status:** Ahead by 4 commits (Ready for push pending user approval)
+**Remote Status:** Commits ready for patch and sync
 
 ---
 
 ## 1. Executive Summary & Today's Accomplishments
 
-Today's session completed two major milestones: **Real-time per-song download progress (`v1.16.37`)** and **AnonDrop anonymous playlist sharing & large-package streaming architecture (`v1.16.38`)**:
+Today's session completed: **Multi-select playlist picker checkboxes & dead novel reader code trim (`v1.17.00`)**, following **AnonDrop anonymous playlist sharing & streaming large-package architecture (`v1.16.38`)** and **Real-time per-song download progress (`v1.16.37`)**:
+
+### **v1.17.00 — Multi-Select Playlist Picker Checkboxes & Novel Reader Code Trim**
+1. **Interactive Multi-Select Playlist Picker (`playlist-picker.js`):**
+   - **Multi-Select Mode:** Activated via the `Select` pill in `.pp-selectbar`. Toggles `#pp-layer.selecting` state, revealing `.pp-check-box` circular checkboxes on all song rows while hiding single-add buttons.
+   - **Batch Add ("Add N songs"):** Dynamically updates button text with the selected count (`Add (N)`) and adds references for all picked tracks in batch, updating playlist states, queueing writes via `kick()`/`step()`, and providing clear toast feedback.
+   - **Select All / Deselect All:** Toggles selection of all unadded songs currently in view. If all selectable songs are picked, button dynamically flips to `Deselect all`.
+   - **Row Checkboxes & Interaction:** Clicking anywhere on an unadded row (or its checkbox) toggles its picked state. Songs already in the playlist are marked with `.in-list` (`opacity: .55`) with disabled check indicators and cannot be selected twice.
+   - **Preserved Single-Tap Functionality:** When not in selecting mode, single-tap `+` / check button functionality is 100% preserved. `e.stopPropagation()` ensures backwards compatibility.
+   - **Filter Chips Bar:** Added `.pp-chips` with `All songs` and `Liked songs` chips. Tapping `Liked songs` narrows the visible list to user's favorited tracks (`NovelAudio.isLiked(id)`), enabling rapid batch addition of favorite tracks into any playlist.
+   - **Back Button & Cancellation:** Tapping `Cancel` or the Android/header Back button while in selecting mode exits selection mode first without modifying the playlist.
+2. **Dead Novel Reader Code Trimming (`index.html`):**
+   - Cleaned up all obsolete Novel Reader legacy styles, selectors, and dead rules:
+     - `#novel-select`, `#library-btn`, `#open-chapters-btn`, `#chapters-folder-status`
+     - `#chapter-search`, `.search-wrap`, `#chapter-list`, `.chapter-item-label`
+     - `#bookmark-chapter-btn`, `#bookmarks-panel`, `#bookmarks-list`, `.paragraph-bookmarked`
+     - `#reader-scroll`, `#reader`, `@keyframes pageFlipNext/Prev`, `#chapter-title`, `#chapter-text`
+     - `#welcome`, `#bottom-nav`, `#delete-chapters-btn`
+     - `#novel-picker`, `.novel-card`, `.novel-cover`, `.novel-name`, `.novel-last`
+     - `#night-lock-puzzle`, `.pz-*`, `#font-family-select`
+   - Shaved off hundreds of lines of dead CSS, reducing DOM/CSSOM parsing overhead and file size.
+3. **Automated Testing:**
+   - Expanded `tests/playlist-picker.test.js` from 16 to 23 tests verifying filter chips, selecting mode, row check boxes, select-all/deselect-all, batch addition, cancellation, and back-button dismissal (23/23 checks passing).
+   - All 9 core test suites pass 100%.
+
+---
 
 ### **v1.16.38 — AnonDrop Anonymous Playlist Sharing & Large-Package Streaming Architecture**
 1. **Large-Package RAM Exhaustion Protection (1–2 GB Archives):**
