@@ -1,16 +1,22 @@
-name: Build Moon-light - Specific Commit
+name: Build Moon-light APK
 
 on:
   workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Enter the commit SHA to build'
+        required: true
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout specified commit
+      - name: Checkout selected commit
         uses: actions/checkout@v6
         with:
-          ref: 5bd14f2cb793afa34b9f7eef29d650374f5c135a
+          ref: ${{ inputs.commit_sha }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -20,13 +26,14 @@ jobs:
 
       - name: Build APK
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          java -Xmx64m -Xms64m \
+            -classpath gradle/wrapper/gradle-wrapper.jar \
+            org.gradle.wrapper.GradleWrapperMain assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Moon-light-5bd14f2-APK
+          name: Moon-light-${{ inputs.commit_sha }}-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
