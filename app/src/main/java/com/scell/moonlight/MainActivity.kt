@@ -234,6 +234,10 @@ class MainActivity : ComponentActivity() {
         onPage = { fn, args -> callPage(fn, args) },
     )
 
+    fun notifySongDownloadProgress(jobId: String, progressJson: String) {
+        callPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + progressJson)
+    }
+
     // "Sign in to YouTube" for downloads that YouTube blocks with its bot check (see YouTubeSignIn.kt).
     private val youTubeSignIn = YouTubeSignIn(this) { status, message ->
         callPage("onYouTubeSignIn", JSONObject.quote(status) + ", " + JSONObject.quote(message))

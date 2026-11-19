@@ -153,6 +153,19 @@
     return String(path == null ? '' : path).split(/[\\/]/).pop().replace(/\.[^.]*$/, '');
   }
 
+  function formatEta(seconds) {
+    const s = Math.round(Number(seconds) || 0);
+    if (s <= 0) return '00:00';
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    if (m >= 60) {
+      const h = Math.floor(m / 60);
+      const remM = m % 60;
+      return h + ':' + (remM < 10 ? '0' : '') + remM + ':' + (rem < 10 ? '0' : '') + rem;
+    }
+    return (m < 10 ? '0' : '') + m + ':' + (rem < 10 ? '0' : '') + rem;
+  }
+
   /* -----------------------------------------------------------------------
      The wizard's state machine.
        stage(jobId, url)                        starts a download; return false (or throw) if it cannot start
@@ -209,6 +222,9 @@
       item.path = path;
       item.name = cleanSongName(stemOf(path));
       item.state = 'ready';
+      item.percent = 100;
+      item.eta = 0;
+      item.speed = '';
       if (item === current() && w.step === 'download') w.step = 'name';
       emit();
       pump();
@@ -217,6 +233,9 @@
     function stageFailed(item, message) {
       item.state = 'failed';
       item.error = message || 'The download failed.';
+      item.percent = -1;
+      item.eta = -1;
+      item.speed = '';
       emit();
     }
 
@@ -266,7 +285,10 @@
       start(urls) {
         if (w.step !== 'paste' || !urls || !urls.length) return false;
         try { if (discard) discard(); } catch (e) { /* nothing staged */ }
-        w.items = urls.map((url, i) => ({ id: i + 1, url, state: 'waiting', path: '', name: '', error: '' }));
+        w.items = urls.map((url, i) => ({
+          id: i + 1, url, state: 'waiting', path: '', name: '', error: '',
+          percent: -1, eta: -1, speed: '', downloaded: '', total: ''
+        }));
         w.index = 0;
         w.message = '';
         w.step = 'download';
@@ -279,6 +301,19 @@
         if (w.step !== 'paste') return;
         w.message = text || '';
         emit();
+      },
+      // Real-time progress updates from the download stream.
+      progress(id, data) {
+        const job = jobs[id];
+        if (!job || !job.item) return null;
+        const d = typeof data === 'string' ? JSON.parse(data) : (data || {});
+        if (typeof d.percent === 'number') job.item.percent = d.percent;
+        if (typeof d.eta === 'number') job.item.eta = d.eta;
+        if (d.speed != null) job.item.speed = String(d.speed);
+        if (d.downloaded != null) job.item.downloaded = String(d.downloaded);
+        if (d.total != null) job.item.total = String(d.total);
+        emit();
+        return job.item;
       },
       // The native side answers here.
       report(id, status, message) {
@@ -295,6 +330,9 @@
         if (w.step !== 'download' || !cur || cur.state !== 'failed') return;
         cur.state = 'waiting';
         cur.error = '';
+        cur.percent = -1;
+        cur.eta = -1;
+        cur.speed = '';
         emit();
         pump();
       },
@@ -392,7 +430,7 @@
     return false;
   }
 
-  const api = { parseLinks, parsePlaylistLinksText, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink };
+  const api = { parseLinks, parsePlaylistLinksText, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink, formatEta };
   // The square frame: `size` is its side as a fraction of the picture's SHORTER side (0.3..1); (cx, cy) is where
   // its centre is wanted, in picture pixels. The frame is kept inside the picture. x, y, size go to the app.
   function cropRect(iw, ih, size, cx, cy) {
@@ -620,6 +658,11 @@
 
   // The native side calls this.
   root.onSongDownloadStatus = function (jobId, status, message) { wizard.report(jobId, status, message); };
+  root.onSongDownloadProgress = function (jobId, data) { wizard.progress(jobId, data); };
+  if (typeof window !== 'undefined') {
+    window.onSongDownloadStatus = root.onSongDownloadStatus;
+    window.onSongDownloadProgress = root.onSongDownloadProgress;
+  }
 
   /* ---- step 1 ---------------------------------------------------------- */
 
@@ -831,10 +874,23 @@
       return box;
     }
     box.appendChild(el('span', 'dl-spinner'));
-    box.appendChild(el('h2', 'dl-title', 'Downloading…'));
-    const bar = el('span', 'dl-bar');
-    bar.appendChild(el('i'));
+    const hasPct = item && typeof item.percent === 'number' && item.percent >= 0;
+    const pct = hasPct ? Math.min(100, Math.max(0, Math.round(item.percent))) : null;
+    box.appendChild(el('h2', 'dl-title dl-download-title', pct !== null ? 'Downloading… ' + pct + '%' : 'Downloading…'));
+    const bar = el('span', 'dl-bar dl-progress-bar' + (pct !== null ? ' dl-determinate' : ''));
+    const fill = el('i');
+    if (pct !== null) fill.style.width = pct + '%';
+    bar.appendChild(fill);
     box.appendChild(bar);
+
+    const metaParts = [];
+    if (item && item.downloaded && item.total) metaParts.push(item.downloaded + ' of ' + item.total);
+    else if (item && item.downloaded) metaParts.push(item.downloaded);
+    if (item && item.speed) metaParts.push(item.speed);
+    if (item && typeof item.eta === 'number' && item.eta > 0) metaParts.push('ETA ' + formatEta(item.eta));
+    const meta = el('p', 'dl-progress-meta', metaParts.join(' · '));
+    box.appendChild(meta);
+
     if (item) box.appendChild(el('p', 'dl-sub', shortLink(item.url)));
     return box;
   }
@@ -1088,7 +1144,7 @@
     pl.skipped    = 0;      // songs skipped because a copy already exists on device
     pl.items = pl.tracks.map((url) => ({
       url, jobId: '', name: '', path: '', fullArt: '', art: '', crop: null,
-      status: 'queued', error: '',
+      status: 'queued', error: '', percent: -1, eta: -1, speed: '', downloaded: '', total: '',
     }));
     render();
     // Start up to PL_CONCURRENCY jobs immediately; onPlSongStatus drains the queue.
@@ -1163,6 +1219,9 @@
     if (status === 'done') {
       item.path = message;
       item.status = 'done';
+      item.percent = 100;
+      item.eta = 0;
+      item.speed = '';
       pl.done++;
       const b = bridge();
       if (b && typeof b.getArtwork === 'function') {
@@ -1170,7 +1229,7 @@
       }
       item.name = stemOf(item.path);
     } else if (status === 'failed') {
-      item.status = 'failed'; item.error = message; pl.failed++;
+      item.status = 'failed'; item.error = message; item.percent = -1; item.eta = -1; item.speed = ''; pl.failed++;
     }
     // A slot freed — start the next queued item (concurrency pump).
     plStartNext();
@@ -1314,6 +1373,8 @@
     const list = el('div', 'dl-sp-song-list');
     pl.items.forEach((item, i) => {
       const row = el('div', 'dl-sp-song-row');
+      if (item.jobId) row.setAttribute('data-job', item.jobId);
+      row.setAttribute('data-idx', i);
 
       // Cover
       const thumb = el('div', 'dl-sp-thumb');
@@ -1330,8 +1391,44 @@
         nameEl.appendChild(el('span', 'dl-sp-skel'));
       }
       text.appendChild(nameEl);
-      if (item.status === 'failed' && item.error) {
-        text.appendChild(el('div', 'dl-sp-song-err', item.error.split('\n')[0].slice(0, 55)));
+
+      if (item.status === 'dl') {
+        const itemBarWrap = el('div', 'dl-sp-item-bar');
+        const itemBarFill = el('div', 'dl-sp-item-bar-fill');
+        const itemPct = item.percent != null && item.percent >= 0 ? Math.round(item.percent) : 0;
+        itemBarFill.style.width = itemPct + '%';
+        itemBarWrap.appendChild(itemBarFill);
+        text.appendChild(itemBarWrap);
+
+        const metaEl = el('div', 'dl-sp-item-meta');
+        metaEl.appendChild(el('span', 'dl-sp-meta-pct', (item.percent != null && item.percent >= 0 ? itemPct + '%' : 'Downloading…')));
+        if (item.speed) metaEl.appendChild(el('span', 'dl-sp-meta-speed', '· ' + item.speed));
+        if (item.eta && item.eta > 0) metaEl.appendChild(el('span', 'dl-sp-meta-eta', '· ETA ' + formatEta(item.eta)));
+        text.appendChild(metaEl);
+      } else if (item.status === 'queued') {
+        const metaEl = el('div', 'dl-sp-item-meta');
+        metaEl.appendChild(el('span', 'dl-sp-meta-status', 'Queued'));
+        text.appendChild(metaEl);
+      } else if (item.status === 'failed') {
+        if (item.error) {
+          text.appendChild(el('div', 'dl-sp-song-err', item.error.split('\n')[0].slice(0, 55)));
+        }
+        const retryBtn = el('button', 'dl-sp-retry-btn', 'Retry');
+        retryBtn.type = 'button';
+        retryBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          item.status = 'queued';
+          item.error = '';
+          item.percent = -1;
+          pl.failed = Math.max(0, pl.failed - 1);
+          plStartNext();
+          render();
+        });
+        text.appendChild(retryBtn);
+      } else if (item.status === 'done') {
+        const metaEl = el('div', 'dl-sp-item-meta');
+        metaEl.appendChild(el('span', 'dl-sp-meta-status', 'Completed'));
+        text.appendChild(metaEl);
       }
       row.appendChild(text);
 
@@ -1552,6 +1649,63 @@
     }
     takeClipboardText(url);
   };
+
+  root.onSongDownloadProgress = function (jobId, data) {
+    const d = typeof data === 'string' ? JSON.parse(data) : (data || {});
+    // 1. If currently in playlist download step:
+    if (pl && pl.step === 'pl-downloading') {
+      const item = pl.items && pl.items.find((it) => it.jobId === jobId);
+      if (item) {
+        if (typeof d.percent === 'number') item.percent = d.percent;
+        if (typeof d.eta === 'number') item.eta = d.eta;
+        if (d.speed) item.speed = d.speed;
+        if (d.downloaded) item.downloaded = d.downloaded;
+        if (d.total) item.total = d.total;
+
+        // Targeted DOM update
+        const row = stageEl.querySelector('[data-job="' + jobId + '"]');
+        if (row) {
+          const fill = row.querySelector('.dl-sp-item-bar-fill');
+          if (fill && item.percent >= 0) fill.style.width = Math.min(100, Math.max(0, Math.round(item.percent))) + '%';
+          const pctEl = row.querySelector('.dl-sp-meta-pct');
+          if (pctEl && item.percent >= 0) pctEl.textContent = Math.round(item.percent) + '%';
+          const speedEl = row.querySelector('.dl-sp-meta-speed');
+          if (speedEl && item.speed) speedEl.textContent = '· ' + item.speed;
+          const etaEl = row.querySelector('.dl-sp-meta-eta');
+          if (etaEl && item.eta > 0) etaEl.textContent = '· ETA ' + formatEta(item.eta);
+        }
+      }
+      return;
+    }
+
+    // 2. Wizard single song download:
+    if (wizard && typeof wizard.progress === 'function') {
+      const item = wizard.progress(jobId, d);
+      if (item) {
+        const titleEl = stageEl.querySelector('.dl-download-title');
+        const pct = item.percent >= 0 ? Math.min(100, Math.max(0, Math.round(item.percent))) : null;
+        if (titleEl && pct !== null) {
+          titleEl.textContent = 'Downloading… ' + pct + '%';
+        }
+        const bar = stageEl.querySelector('.dl-progress-bar');
+        if (bar && pct !== null) {
+          bar.classList.add('dl-determinate');
+          const fill = bar.querySelector('i');
+          if (fill) fill.style.width = pct + '%';
+        }
+        const metaEl = stageEl.querySelector('.dl-progress-meta');
+        if (metaEl) {
+          const metaParts = [];
+          if (item.downloaded && item.total) metaParts.push(item.downloaded + ' of ' + item.total);
+          else if (item.downloaded) metaParts.push(item.downloaded);
+          if (item.speed) metaParts.push(item.speed);
+          if (item.eta && item.eta > 0) metaParts.push('ETA ' + formatEta(item.eta));
+          metaEl.textContent = metaParts.join(' · ');
+        }
+      }
+    }
+  };
+  if (typeof window !== 'undefined') window.onSongDownloadProgress = root.onSongDownloadProgress;
 
   const BUILDERS = {
     paste: buildPaste, download: buildDownload, name: buildName, playlist: buildPlaylist,

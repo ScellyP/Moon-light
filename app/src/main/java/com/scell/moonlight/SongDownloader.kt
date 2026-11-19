@@ -9,6 +9,7 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
+import org.json.JSONObject
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ExecutorService
@@ -345,6 +346,48 @@ class SongDownloader(
         }
     }
 
+    data class ProgressMetrics(
+        val percent: Double = -1.0,
+        val eta: Long = -1L,
+        val speed: String = "",
+        val downloaded: String = "",
+        val total: String = ""
+    )
+
+    private fun parseYtDlpLine(line: String?): ProgressMetrics {
+        if (line.isNullOrBlank()) return ProgressMetrics()
+        var pct = -1.0
+        var eta = -1L
+        var speed = ""
+        var downloaded = ""
+        var total = ""
+        try {
+            val pctMatch = Regex("""(\d+(?:\.\d+)?)\s*%""").find(line)
+            if (pctMatch != null) {
+                pct = pctMatch.groupValues[1].toDoubleOrNull() ?: -1.0
+            }
+            val sizeMatch = Regex("""([0-9.]+\s*[kKMGT]?i?B)\s+of\s+~?\s*([0-9.]+\s*[kKMGT]?i?B)""").find(line)
+            if (sizeMatch != null) {
+                downloaded = sizeMatch.groupValues[1]
+                total = sizeMatch.groupValues[2]
+            }
+            val speedMatch = Regex("""at\s+([0-9.]+\s*[kKMGT]?i?B/s)""").find(line)
+            if (speedMatch != null) {
+                speed = speedMatch.groupValues[1]
+            }
+            val etaMatch = Regex("""ETA\s+([0-9:]+)""").find(line)
+            if (etaMatch != null) {
+                val parts = etaMatch.groupValues[1].split(":")
+                eta = when (parts.size) {
+                    2 -> (parts[0].toLongOrNull() ?: 0L) * 60 + (parts[1].toLongOrNull() ?: 0L)
+                    3 -> (parts[0].toLongOrNull() ?: 0L) * 3600 + (parts[1].toLongOrNull() ?: 0L) * 60 + (parts[2].toLongOrNull() ?: 0L)
+                    else -> -1L
+                }
+            }
+        } catch (_: Exception) {}
+        return ProgressMetrics(percent = pct, eta = eta, speed = speed, downloaded = downloaded, total = total)
+    }
+
     /** Runs yt-dlp once. Returns null on success, else the message to show. */
     private fun download(jobId: String, url: String, runDir: File, tmpDir: File, fallbackClients: Boolean = false): String? {
         // Same settings as the old script: best audio, converted to mp3 (quality 0), metadata and
@@ -369,8 +412,31 @@ class SongDownloader(
         // Your own cookies, when you put a cookies.txt in the Moonlight folder (a copy is used, see COOKIES_FILE).
         cookiesCopy(tmpDir)?.let { request.addOption("--cookies", it.absolutePath) }
         if (fallbackClients) request.addOption("--extractor-args", FALLBACK_CLIENTS)
+        var lastProgressAt = 0L
         return try {
-            YoutubeDL.getInstance().execute(request, jobId, null)
+            YoutubeDL.getInstance().execute(request, jobId) { progress: Float, etaInSeconds: Long, line: String? ->
+                if (jobId !in cancelled) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastProgressAt >= 120L || progress >= 99.9f) {
+                        lastProgressAt = now
+                        val info = parseYtDlpLine(line)
+                        val finalPct = if (progress >= 0f) progress.toDouble() else info.percent
+                        val finalEta = if (etaInSeconds >= 0L) etaInSeconds else info.eta
+                        val json = JSONObject().apply {
+                            put("jobId", jobId)
+                            put("percent", finalPct)
+                            put("eta", finalEta)
+                            put("speed", info.speed)
+                            put("downloaded", info.downloaded)
+                            put("total", info.total)
+                            put("status", "downloading")
+                        }.toString()
+                        main.post {
+                            onPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + json)
+                        }
+                    }
+                }
+            }
             null
         } catch (e: YoutubeDL.CanceledException) {
             "Stopped"
