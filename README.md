@@ -83,9 +83,11 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Shuffle in rounds**: every song plays once, in random order, before any repeats, and the app remembers this even after you close it. **Repeat** has three modes: off / all / one.
 - **Song options menu** (the `⋮` next to any song): edit info, share, like, add to playlist, move/remove, add to queue, loop, delete.
 - **Multi-select playlist picker**: When adding songs to a playlist via *Add to this playlist*, use multi-select mode with interactive row checkboxes, quick *Liked songs* filter chip, *Select all* / *Deselect all*, and batch addition with real-time selection counters.
+- **Share playlist source links**: Tap the share icon on any playlist header (or choose *Share source links* in the playlist menu) to export and share a text file (`.txt`) containing all song source URLs via Android's native share sheet.
 - **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
 - **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
-- **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. You can choose to *Keep both*, *Move duplicate* to `Moonlight/Duplicates`, or apply the choice to all remaining tracks. Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
+- **Duplicate clean-up with persistent choice memory**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. Choosing *Keep both* or *Keep all remaining* is permanently remembered across subsequent scans ("Scan the sky"). Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
+- **Complete music backup & restore**: In the Settings menu, export complete `.zip` archives of your playlists, covers, and settings to `Download/Moonlight-Backups/`, with one-tap restore.
 - **Share** a song's file (the mp3) through Android's share sheet, or just the link it was downloaded from.
 - **Delete** a song's file for good (after a confirmation), which is different from *Remove from this playlist*.
 
