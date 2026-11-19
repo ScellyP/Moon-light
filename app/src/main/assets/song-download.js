@@ -421,8 +421,11 @@
 
   function handleSharedPlaylistLink(url) {
     const ps = (typeof window !== 'undefined' ? window.PlaylistShare : null) || (typeof global !== 'undefined' ? global.PlaylistShare : null) || root.PlaylistShare;
-    if (ps && typeof ps.isFilebinUrl === 'function' && ps.isFilebinUrl(url)) {
-      if (typeof ps.importFromUrl === 'function') {
+    if (ps) {
+      const isRecognized = (typeof ps.isRecognizedShareUrl === 'function' && ps.isRecognizedShareUrl(url)) ||
+                           (typeof ps.isAnonDropUrl === 'function' && ps.isAnonDropUrl(url)) ||
+                           (typeof ps.isFilebinUrl === 'function' && ps.isFilebinUrl(url));
+      if (isRecognized && typeof ps.importFromUrl === 'function') {
         ps.importFromUrl(url);
         return true;
       }
@@ -672,12 +675,13 @@
   let dupes = null;
 
   function reviewLinks(links) {
-    // 3.4 Automatic playlist detection: detect when the user provides a Filebin link
-    const filebinLink = links.find((u) => /filebin\.net/i.test(u));
-    if (filebinLink) {
+    // Automatic playlist detection: detect when the user provides an AnonDrop or Filebin link
+    const shareLink = links.find((u) => /anondrop\.net/i.test(u) || /filebin\.net/i.test(u));
+    if (shareLink) {
       if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
-        root.PlaylistShare.importFromUrl(filebinLink);
-        wizard.setMessage('Detected Moonlight playlist from Filebin! Downloading...');
+        const isAnon = /anondrop\.net/i.test(shareLink);
+        root.PlaylistShare.importFromUrl(shareLink);
+        wizard.setMessage(isAnon ? 'Detected Moonlight playlist from AnonDrop! Downloading...' : 'Detected Moonlight playlist from Filebin! Downloading...');
         return;
       }
     }
@@ -726,10 +730,12 @@
       wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
       return;
     }
-    if (parsed.links.length === 1 && /filebin\.net/i.test(parsed.links[0])) {
+    if (parsed.links.length === 1 && (/anondrop\.net/i.test(parsed.links[0]) || /filebin\.net/i.test(parsed.links[0]))) {
+      const shareUrl = parsed.links[0];
+      const isAnon = /anondrop\.net/i.test(shareUrl);
       if (root.PlaylistShare && typeof root.PlaylistShare.importFromUrl === 'function') {
-        root.PlaylistShare.importFromUrl(parsed.links[0]);
-        wizard.setMessage('Detected Moonlight playlist from Filebin! Downloading...');
+        root.PlaylistShare.importFromUrl(shareUrl);
+        wizard.setMessage(isAnon ? 'Detected Moonlight playlist from AnonDrop! Downloading...' : 'Detected Moonlight playlist from Filebin! Downloading...');
         return;
       }
     }
