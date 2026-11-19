@@ -1885,9 +1885,48 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val f = File(pkgRes.filePath)
-                if (method.equals("filebin", ignoreCase = true)) {
+                if (method.equals("anondrop", ignoreCase = true) || method.equals("cloud", ignoreCase = true)) {
                     runOnUiThread {
-                        updateShareUploadProgressNotification(playlistKey, 0L, f.length())
+                        updateShareUploadProgressNotification(playlistKey, 0L, f.length(), "AnonDrop")
+                    }
+
+                    var lastUploadTime = 0L
+                    var lastPercent = -1
+
+                    val (uploaded, shareUrl) = share.uploadToAnonDrop(f) { uploadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastPercent && (now - lastUploadTime > 300 || percent == 100)) {
+                            lastUploadTime = now
+                            lastPercent = percent
+                            runOnUiThread {
+                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes, "AnonDrop")
+                            }
+                        }
+                    }
+
+                    val res = JSONObject().apply {
+                        put("success", uploaded)
+                        put("method", "anondrop")
+                        put("shareUrl", shareUrl)
+                        put("isEncrypted", pkgRes.isEncrypted)
+                        put("songCount", pkgRes.songCount)
+                        if (!uploaded) put("error", shareUrl)
+                    }.toString()
+
+                    runOnUiThread {
+                        if (uploaded) {
+                            updateShareCompleteNotification(playlistKey, shareUrl, "AnonDrop")
+                            callPage("onPlaylistShareComplete", res)
+                            shareText(shareUrl)
+                        } else {
+                            updateShareErrorNotification(playlistKey, shareUrl)
+                            callPage("onPlaylistShareComplete", res)
+                        }
+                    }
+                } else if (method.equals("filebin", ignoreCase = true)) {
+                    runOnUiThread {
+                        updateShareUploadProgressNotification(playlistKey, 0L, f.length(), "Filebin")
                     }
 
                     var lastUploadTime = 0L
@@ -1900,7 +1939,7 @@ class MainActivity : ComponentActivity() {
                             lastUploadTime = now
                             lastPercent = percent
                             runOnUiThread {
-                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes)
+                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes, "Filebin")
                             }
                         }
                     }
@@ -1916,7 +1955,7 @@ class MainActivity : ComponentActivity() {
 
                     runOnUiThread {
                         if (uploaded) {
-                            updateShareCompleteNotification(playlistKey, shareUrl)
+                            updateShareCompleteNotification(playlistKey, shareUrl, "Filebin")
                             callPage("onPlaylistShareComplete", res)
                             shareText(shareUrl)
                         } else {
@@ -1970,17 +2009,42 @@ class MainActivity : ComponentActivity() {
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
                 val share = PlaylistShare(playerRoot, shareDir)
+                val isAnonDrop = PlaylistShare.isAnonDropUrl(source)
                 val isFb = PlaylistShare.isFilebinUrl(source)
-                if (isFb) {
+                if (isAnonDrop || isFb) {
                     runOnUiThread {
-                        updateShareDownloadProgressNotification(source, 0L, 0L)
+                        updateShareDownloadProgressNotification(source, 0L, 0L, if (isAnonDrop) "AnonDrop" else "Filebin")
                     }
                 }
 
                 var lastDlTime = 0L
                 var lastDlPercent = -1
 
-                val targetFile: File? = if (isFb) {
+                val targetFile: File? = if (isAnonDrop) {
+                    val (dlSuccess, downloadedFile) = share.downloadFromAnonDrop(source) { downloadedBytes, totalBytes ->
+                        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
+                        val now = System.currentTimeMillis()
+                        if (percent != lastDlPercent && (now - lastDlTime > 300 || percent == 100)) {
+                            lastDlTime = now
+                            lastDlPercent = percent
+                            runOnUiThread {
+                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes, "AnonDrop")
+                            }
+                        }
+                    }
+                    if (!dlSuccess || downloadedFile == null) {
+                        val err = JSONObject().apply {
+                            put("success", false)
+                            put("error", "Could not download playlist package from AnonDrop")
+                        }.toString()
+                        runOnUiThread {
+                            updateShareErrorNotification("Import", "Could not download package from AnonDrop")
+                            callPage("onPlaylistImportComplete", err)
+                        }
+                        return@Thread
+                    }
+                    downloadedFile
+                } else if (isFb) {
                     val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source) { downloadedBytes, totalBytes ->
                         val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
                         val now = System.currentTimeMillis()
@@ -1988,7 +2052,7 @@ class MainActivity : ComponentActivity() {
                             lastDlTime = now
                             lastDlPercent = percent
                             runOnUiThread {
-                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes)
+                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes, "Filebin")
                             }
                         }
                     }
@@ -2033,8 +2097,18 @@ class MainActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
+        fun isPlaylistShareAnonDropUrl(url: String): Boolean {
+            return PlaylistShare.isAnonDropUrl(url)
+        }
+
+        @JavascriptInterface
         fun isPlaylistShareFilebinUrl(url: String): Boolean {
             return PlaylistShare.isFilebinUrl(url)
+        }
+
+        @JavascriptInterface
+        fun isPlaylistShareUrl(url: String): Boolean {
+            return PlaylistShare.isRecognizedShareUrl(url)
         }
     }
 
@@ -2685,7 +2759,7 @@ class MainActivity : ComponentActivity() {
         nm.notify(SHARE_NOTIF_ID, notif)
     }
 
-    fun updateShareUploadProgressNotification(playlistName: String, uploadedBytes: Long, totalBytes: Long) {
+    fun updateShareUploadProgressNotification(playlistName: String, uploadedBytes: Long, totalBytes: Long, provider: String = "AnonDrop") {
         ensureShareChannel()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
@@ -2694,11 +2768,11 @@ class MainActivity : ComponentActivity() {
         val text = if (totalBytes > 0) {
             String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", uploadedMb, totalMb, percent)
         } else {
-            "Uploading to Filebin..."
+            "Uploading to $provider..."
         }
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Uploading \"$playlistName\" to Filebin")
+            .setContentTitle("Uploading \"$playlistName\" to $provider")
             .setContentText(text)
             .setProgress(100, percent, false)
             .setOngoing(true)
@@ -2707,7 +2781,7 @@ class MainActivity : ComponentActivity() {
         nm.notify(SHARE_NOTIF_ID, notif)
     }
 
-    fun updateShareCompleteNotification(playlistName: String, shareUrl: String) {
+    fun updateShareCompleteNotification(playlistName: String, shareUrl: String, provider: String = "AnonDrop") {
         ensureShareChannel()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -2721,10 +2795,11 @@ class MainActivity : ComponentActivity() {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT
         }
         val pendingIntent = android.app.PendingIntent.getActivity(this, SHARE_NOTIF_ID, chooser, flags)
+        val subText = if (provider.equals("Filebin", ignoreCase = true)) "Tap to share link (expires in 6 days)" else "Tap to share anonymous link"
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Playlist uploaded to Filebin!")
-            .setContentText("Tap to share link (expires in 6 days)")
+            .setContentTitle("Playlist uploaded to $provider!")
+            .setContentText(subText)
             .setProgress(0, 0, false)
             .setOngoing(false)
             .setAutoCancel(true)
@@ -2747,7 +2822,7 @@ class MainActivity : ComponentActivity() {
         nm.notify(SHARE_NOTIF_ID, notif)
     }
 
-    fun updateShareDownloadProgressNotification(source: String, downloadedBytes: Long, totalBytes: Long) {
+    fun updateShareDownloadProgressNotification(source: String, downloadedBytes: Long, totalBytes: Long, provider: String = "AnonDrop") {
         ensureShareChannel()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
@@ -2756,7 +2831,7 @@ class MainActivity : ComponentActivity() {
         val text = if (totalBytes > 0) {
             String.format(java.util.Locale.US, "%.1f / %.1f MB (%d%%)", dlMb, totalMb, percent)
         } else {
-            "Downloading package from Filebin..."
+            "Downloading package from $provider..."
         }
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)

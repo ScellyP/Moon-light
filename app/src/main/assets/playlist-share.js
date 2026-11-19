@@ -1,26 +1,44 @@
-/* Moonlight — Playlist Sharing & Filebin integration (playlist-share.js)
-   Item 3:
-   - 3.1 Filebin integration: automated upload & link generation with 6-day expiration notice.
-   - 3.2 Share Playlist: packages songs, playlist metadata, and cover into an archive.
-   - 3.3 Password-protected sharing: AES-256 encryption, password never leaked in link.
-   - 3.4 Automatic playlist detection in Downloads tab: detects Filebin links and imports.
-   - 3.5 Sharing settings: gated by playlistSharing and filebinSharing toggles.
+/* Moonlight — Playlist Sharing & AnonDrop anonymous integration (playlist-share.js)
+   - AnonDrop anonymous cloud integration: chunked upload & instant direct-download link (no login/accounts required).
+   - Filebin fallback link detection and download for backward compatibility.
+   - Share Playlist: packages songs, playlist metadata, and cover into an archive.
+   - Password-protected sharing: AES-256 encryption, password never leaked in link.
+   - Automatic playlist detection in Downloads tab: detects AnonDrop & Filebin links and imports.
+   - Sharing settings: gated by playlistSharing and anonDropSharing toggles.
 */
 (function (root) {
   'use strict';
 
+  var ANONDROP_REGEX = /https?:\/\/(?:www\.)?anondrop\.net\/([a-zA-Z0-9]+)(?:\/([^\s/?#]+))?/i;
   var FILEBIN_REGEX = /https?:\/\/filebin\.net\/([a-zA-Z0-9_-]+)(?:\/([^\s/?#]+))?/i;
   var lastImportSource = '';
+
+  function isAnonDropUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return ANONDROP_REGEX.test(url.trim());
+  }
 
   function isFilebinUrl(url) {
     if (!url || typeof url !== 'string') return false;
     return FILEBIN_REGEX.test(url.trim());
   }
 
+  function isRecognizedShareUrl(url) {
+    return isAnonDropUrl(url) || isFilebinUrl(url);
+  }
+
   function isSharingEnabled() {
     var a = (this && this.NovelAudio) || (typeof window !== 'undefined' ? window.NovelAudio : null) || (typeof global !== 'undefined' ? global.NovelAudio : null) || root.NovelAudio;
     if (a && typeof a.getSetting === 'function') {
       return a.getSetting('playlistSharing') !== false;
+    }
+    return true;
+  }
+
+  function isAnonDropEnabled() {
+    var a = (this && this.NovelAudio) || (typeof window !== 'undefined' ? window.NovelAudio : null) || (typeof global !== 'undefined' ? global.NovelAudio : null) || root.NovelAudio;
+    if (a && typeof a.getSetting === 'function') {
+      return a.getSetting('anonDropSharing') !== false;
     }
     return true;
   }
@@ -59,9 +77,17 @@
       password = passInput.trim();
     }
 
-    // Check if Filebin is preferred/available
+    // Check if cloud sharing is preferred/available (AnonDrop primary, Filebin fallback)
     var method = 'direct';
-    if (isFilebinEnabled()) {
+    if (isAnonDropEnabled()) {
+      var confirmFn = typeof window !== 'undefined' && window.confirm ? window.confirm : null;
+      if (confirmFn) {
+        var useCloud = confirmFn('Share via AnonDrop cloud link?\n(Click OK for AnonDrop anonymous cloud link, or Cancel to share file directly)');
+        if (useCloud) method = 'anondrop';
+      } else {
+        method = 'anondrop';
+      }
+    } else if (isFilebinEnabled()) {
       var confirmFn = typeof window !== 'undefined' && window.confirm ? window.confirm : null;
       if (confirmFn) {
         var useFilebin = confirmFn('Share via Filebin cloud link?\n(Click OK for Filebin link [expires in 6 days], or Cancel to share file directly)');
@@ -74,7 +100,13 @@
 
   function startShare(playlistKey, password, method) {
     var b = root.AndroidBridge || (typeof window !== 'undefined' ? window.AndroidBridge : null);
-    showToast(method === 'filebin' ? 'Packaging and uploading to Filebin (see notification for progress)...' : 'Packaging playlist files...');
+    var toastMsg = 'Packaging playlist files...';
+    if (method === 'anondrop') {
+      toastMsg = 'Packaging and uploading to AnonDrop (see notification for progress)...';
+    } else if (method === 'filebin') {
+      toastMsg = 'Packaging and uploading to Filebin (see notification for progress)...';
+    }
+    showToast(toastMsg);
 
     if (b && typeof b.sharePlaylistPackage === 'function') {
       try {
@@ -85,7 +117,15 @@
     } else {
       // Browser / test mock fallback
       setTimeout(function () {
-        if (method === 'filebin') {
+        if (method === 'anondrop') {
+          onPlaylistShareComplete({
+            success: true,
+            method: 'anondrop',
+            shareUrl: 'https://anondrop.net/mockid123',
+            isEncrypted: !!password,
+            songCount: 1
+          });
+        } else if (method === 'filebin') {
           onPlaylistShareComplete({
             success: true,
             method: 'filebin',
@@ -133,10 +173,22 @@
   function onPlaylistShareComplete(data) {
     var res = typeof data === 'string' ? JSON.parse(data) : data;
     if (res.success) {
-      if (res.method === 'filebin') {
+      if (res.method === 'anondrop') {
+        var msg = 'AnonDrop link ready! Recipient can download without an account.';
+        if (res.isEncrypted) msg += ' Password protection active.';
+        showToast(msg);
+        var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
+        if (promptFn && res.shareUrl) {
+          promptFn('AnonDrop Share Link (copy & send):', res.shareUrl);
+        }
+      } else if (res.method === 'filebin') {
         var msg = 'Filebin link ready! Note: Links expire in 6 days.';
         if (res.isEncrypted) msg += ' Password protection active.';
         showToast(msg);
+        var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
+        if (promptFn && res.shareUrl) {
+          promptFn('Filebin Share Link (copy & send):', res.shareUrl);
+        }
       } else {
         showToast('Playlist package ready to share!');
       }
@@ -189,8 +241,13 @@
   }
 
   var api = {
+    ANONDROP_REGEX: ANONDROP_REGEX,
+    FILEBIN_REGEX: FILEBIN_REGEX,
+    isAnonDropUrl: isAnonDropUrl,
     isFilebinUrl: isFilebinUrl,
+    isRecognizedShareUrl: isRecognizedShareUrl,
     isSharingEnabled: isSharingEnabled,
+    isAnonDropEnabled: isAnonDropEnabled,
     isFilebinEnabled: isFilebinEnabled,
     shareCurrentPlaylist: shareCurrentPlaylist,
     startShare: startShare,
