@@ -375,4 +375,63 @@ check('download screen buttons and layouts are horizontally centred', () => {
   assert.ok(js.includes('buildPlResolving') && js.includes('dl-spinner') && js.includes('dl-bar'));
 });
 
+check('parsePlaylistLinksText extracts playlist name, description, and songs while dropping duplicate links', () => {
+  const sample = [
+    '# Moonlight playlist links',
+    '# name: Chill Wave & Lo-Fi',
+    '# description: Favorite chill tracks',
+    '# songs: 3 (3 with a source link)',
+    '# One link per line. Lines that start with # are notes.',
+    '',
+    '# Track One - Artist A',
+    'https://www.youtube.com/watch?v=abc12345',
+    '',
+    '# Track Two - Artist B',
+    'https://youtu.be/def67890',
+    '',
+    '# Duplicate link should be ignored',
+    'https://www.youtube.com/watch?v=abc12345',
+    '',
+    '# Track Three',
+    'https://soundcloud.com/artist/track-three'
+  ].join('\n');
+
+  const res = SD.parsePlaylistLinksText(sample);
+  assert.strictEqual(res.title, 'Chill Wave & Lo-Fi');
+  assert.strictEqual(res.description, 'Favorite chill tracks');
+  assert.strictEqual(res.links.length, 3);
+  assert.strictEqual(res.links[0], 'https://www.youtube.com/watch?v=abc12345');
+  assert.strictEqual(res.links[1], 'https://youtu.be/def67890');
+  assert.strictEqual(res.links[2], 'https://soundcloud.com/artist/track-three');
+});
+
+check('parsePlaylistLinksText falls back to provided filename title when # name: is missing', () => {
+  const sample = 'https://youtu.be/123\nhttps://youtu.be/456';
+  const res = SD.parsePlaylistLinksText(sample, 'Summer Vacation');
+  assert.strictEqual(res.title, 'Summer Vacation');
+  assert.strictEqual(res.links.length, 2);
+});
+
+check('System share receiver and intent wiring in AndroidManifest.xml and MainActivity.kt', () => {
+  const manifest = fs.readFileSync(path.join(__dirname, '../app/src/main/AndroidManifest.xml'), 'utf8');
+  assert.ok(manifest.includes('android:name="android.intent.action.SEND"'), 'manifest handles ACTION_SEND');
+  assert.ok(manifest.includes('android:mimeType="text/plain"'), 'manifest filters text/plain MIME type');
+  assert.ok(manifest.includes('android:launchMode="singleTask"'), 'MainActivity uses singleTask launch mode');
+
+  const main = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
+  assert.ok(main.includes('handleIncomingSendIntent'), 'MainActivity handles incoming send intents');
+  assert.ok(main.includes('onIncomingShareLink'), 'calls onIncomingShareLink page callback');
+  assert.ok(main.includes('open.spotify.com'), 'filters out Spotify links');
+  assert.ok(main.includes('onShowFileChooser'), 'implements onShowFileChooser for HTML5 file picker');
+  assert.ok(main.includes('fileChooserLauncher'), 'implements fileChooserLauncher for file chooser result');
+});
+
+check('Downloads tab UI contains Import playlist .txt button and file input', () => {
+  const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+  assert.ok(js.includes('Import playlist .txt'), 'has Import playlist .txt button');
+  assert.ok(js.includes("fileInput.accept = '.txt,text/plain'"), 'file input accepts .txt and text/plain');
+  assert.ok(js.includes('root.onIncomingShareLink ='), 'defines window.onIncomingShareLink');
+  assert.ok(js.includes('startCustomPlaylistFlow'), 'defines startCustomPlaylistFlow');
+});
+
 console.log(n + ' checks passed');
