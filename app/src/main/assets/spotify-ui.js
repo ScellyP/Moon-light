@@ -490,6 +490,7 @@
     dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
     getActivePlaylistKey: () => (window.NovelAudio && window.NovelAudio.getActivePlaylistKey ? window.NovelAudio.getActivePlaylistKey() : ''),
     getPlaylistTitle: () => getPlaylistTitle(),
+    shareLinks: () => shareLinks(),
   };
 
   /* =======================================================================
@@ -647,8 +648,11 @@
       return;
     }
 
-    // The share icon is only a place-holder for now: it does nothing (the source-links text file is in the ... menu).
-    if (target.closest('#sp-album-share')) return;
+    // The share icon on the playlist header: shares the playlist source links file.
+    if (target.closest('#sp-album-share')) {
+      shareLinks();
+      return;
+    }
 
     // "Edit" chip: the drag-to-reorder screen.
     if (target.closest('#sp-album-reorder')) {

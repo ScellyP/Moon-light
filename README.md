@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.17.00-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.17.01-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 

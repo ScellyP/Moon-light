@@ -25,12 +25,11 @@ check('Songs tab layout: Find in playlist on top, cover, title, share / more / s
   assert.ok(!/id="sp-album-edit"[^>]*sp-icon-btn|sp-icon-btn[^>]*id="sp-album-add"/.test(html));   // the old icon buttons are gone
 });
 
-check('the chips and the share button are wired: Add = picker, Edit = edit screen, Name and details = sheet, share icon = nothing yet', () => {
+check('the chips and the share button are wired: Add = picker, Edit = edit screen, Name and details = sheet, share icon = shareLinks', () => {
   assert.ok(/target\.closest\('#sp-album-add'\)[\s\S]{0,260}PlaylistPicker\.open/.test(ui));
   assert.ok(/target\.closest\('#sp-album-reorder'\)[\s\S]{0,260}PlaylistEditor\.open/.test(ui));
   assert.ok(/target\.closest\('#sp-album-edit'\)[\s\S]{0,260}SongMenu\.openEdit/.test(ui));
-  assert.ok(/target\.closest\('#sp-album-share'\)\) return;/.test(ui));              // the share icon does nothing for now
-  assert.ok(!/#sp-album-share'\)\) return shareLinks/.test(ui));
+  assert.ok(/target\.closest\('#sp-album-share'\)[\s\S]{0,60}shareLinks\(\)/.test(ui));
   assert.ok(/case 'sharelinks': \{\s*closeSheet\(\);\s*shareLinks\(\);/.test(ui));       // the links file stays in the ... menu
   assert.ok(/case 'sharelinks'/.test(ui) && /data-sp-act="sharelinks"/.test(html));
   assert.ok(/albumChips\.classList\.toggle\('hidden', !sum\.canEdit\)/.test(ui));
