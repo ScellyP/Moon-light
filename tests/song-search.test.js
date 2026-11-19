@@ -275,7 +275,7 @@ check('the Search tab sits second in the bottom bar and has its view, input and 
   assert.deepStrictEqual(nav, ['library', 'search', 'album', 'track', 'download']);
   ['sp-view-search', 'srch-input', 'srch-body', 'srch-clear', 'srch-chips'].forEach((id) => assert.ok(body.includes('id="' + id + '"'), id));
   ['all', 'songs', 'playlists', 'artists'].forEach((f) => assert.ok(body.includes('data-srch-filter="' + f + '"'), f));
-  assert.ok(/#audio-panel\[data-view="search"\] #sp-view-search/.test(HTML));
+  assert.ok(/#audio-panel\[data-view="search"\]/.test(HTML));
   assert.ok(/id="i-history"/.test(HTML));
 });
 

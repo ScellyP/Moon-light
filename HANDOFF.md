@@ -1,14 +1,49 @@
 # Moonlight Project — Daily Handoff & Session Summary
-**Date:** November 19, 2026 (19:30 IST)  
-**Current Version:** `v1.17.00`  
+**Date:** November 19, 2026 (20:15 IST)  
+**Current Version:** `v1.17.01`  
 **Current Branch:** `Testing`  
-**Remote Status:** Commits ready for patch and sync
+**Remote Status:** Ready for commit and patch
 
 ---
 
 ## 1. Executive Summary & Today's Accomplishments
 
-Today's session completed: **Multi-select playlist picker checkboxes & dead novel reader code trim (`v1.17.00`)**, following **AnonDrop anonymous playlist sharing & streaming large-package architecture (`v1.16.38`)** and **Real-time per-song download progress (`v1.16.37`)**:
+Today's session completed: **Folder playlist sharing resolution, menu share button wiring, and duplicate choice memory (`v1.17.01`)**, following **Multi-select playlist picker checkboxes (`v1.17.00`)** and **AnonDrop anonymous playlist sharing (`v1.16.38`)**:
+
+### **v1.17.01 — Folder Playlist Sharing, Menu Share Wiring & Duplicate Memory**
+1. **Folder Playlist Sharing Resolution (`name:<folder>`):**
+   - **Problem:** When attempting to share a folder-backed playlist such as `Meme`, `PlaylistShare.kt` searched `Moonlight/playlists/$playlistKey.json` using `"name:Meme"`. Because `:` is an illegal character and folder playlists are not named `name:Meme.json`, it failed immediately with `"Share failed: Playlist not found: name:meme"`.
+   - **Solution in `PlaylistShare.kt`:**
+     - Added support for `name:<folderName>` and `list:<id>` prefixes.
+     - Looked up manifests in `Moonlight/playlists/` matching `id`, `name` (case-insensitive), or `legacy` folder/curatedId.
+     - Added auto-migration fallback using `SongLibrary.migrateFolder(folderName)` and direct folder scanning in `Moonlight/Songs` and `Novel/Audio` if no manifest existed yet.
+     - Resolved referenced audio files across both `Moonlight/Songs/` and `Novel/Audio/` roots via `SongLibrary.fileFor(ref)` instead of assuming all files lived in `playerRoot/Songs/`.
+     - Integrated `PlaylistCovers(coversDir).fileFor(...)` to include custom covers in the package.
+     - During import, sanitized package IDs to prevent invalid colon characters in filenames, updated song references in `playlist.json` to `"Songs/<filename>"`, and extracted covers using `PlaylistCovers`.
+2. **Playlist Menu & Header Share Button Wiring:**
+   - **Problem:** Clicking `#sp-album-share` in the playlist view did nothing because `playlist-share.js`'s click handler called `e.stopPropagation()` and queried `root.SpotifyUI.getActivePlaylistKey()`, which was `undefined` (empty string). Furthermore, `showToast` failed silently because `window.toast` was undefined.
+   - **Solution:**
+     - Exposed `getActivePlaylistKey` and `getPlaylistTitle` on `window.SpotifyUI` in `spotify-ui.js`.
+     - In `playlist-share.js`, updated `getPlaylistKey()` and `getPlaylistDisplayName()` to resolve across `window.NovelAudio`, `window.SpotifyUI`, and DOM elements.
+     - Updated `showToast()` to fall back to `window.SongMenu.toast` (the app's standard toast handler).
+     - Rewired `#sp-album-share` with proper title/aria-label ("Share playlist") and friendly toast guidance if tapped on non-playlist views ("All songs").
+3. **Duplicate Choice Memory (Persistent Ignored Pairs):**
+   - **Problem:** When the user chose "Keep both" or skipped duplicates in `#dupe-dialog-layer`, the choice was not persisted. Every subsequent scan ("Scan the sky") re-detected the same files and prompted the user repeatedly.
+   - **Solution in `audio-player.js`:**
+     - Registered `duplicates` feature module in `AudioFeatures` (`state.features.duplicates = { ignoredPairs: [] }`), persisted via `Prefs.save()` and backed by `localStorage['moonlight_ignored_duplicates']`.
+     - Implemented canonical path pair keys (`_dupePairKey(pathA, pathB)`) invariant to argument order, path slashes, and casing.
+     - When user chooses "Keep both", `ignoreDuplicatePair(keep, drop)` records the pair.
+     - When user chooses "Keep all remaining", `ignoreRemainingDuplicates()` records all remaining pairs in the queue.
+     - In `removeDuplicates()`, filtered out any candidate pair whose `isDuplicateIgnored(keep, drop)` is true, preventing re-prompting on future scans.
+     - Exposed `isDuplicateIgnored`, `ignoreDuplicatePair`, `ignoreRemainingDuplicates`, and `clearIgnoredDuplicates` on `NovelAudio`.
+4. **Automated Testing:**
+   - `tests/duplicates-confirmation.test.js`: 5/5 passing (added persistent duplicate memory tests).
+   - `tests/playlist-share.test.js`: 7/7 passing (added folder playlist resolution and auto-key detection).
+   - `tests/playlist-header.test.js`: 5/5 passing (verified `#sp-album-share` wiring).
+   - `tests/song-search.test.js`: 21/21 passing.
+   - All 15+ core test suites passing 100%.
+
+---
 
 ### **v1.17.00 — Multi-Select Playlist Picker Checkboxes & Novel Reader Code Trim**
 1. **Interactive Multi-Select Playlist Picker (`playlist-picker.js`):**

@@ -1859,7 +1859,7 @@ class MainActivity : ComponentActivity() {
             }
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
-                val share = PlaylistShare(playerRoot, shareDir)
+                val share = PlaylistShare(playerRoot, shareDir, audioRoot)
                 var lastNotifTime = 0L
 
                 runOnUiThread {
@@ -2008,7 +2008,7 @@ class MainActivity : ComponentActivity() {
             }
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
-                val share = PlaylistShare(playerRoot, shareDir)
+                val share = PlaylistShare(playerRoot, shareDir, audioRoot)
                 val isAnonDrop = PlaylistShare.isAnonDropUrl(source)
                 val isFb = PlaylistShare.isFilebinUrl(source)
                 if (isAnonDrop || isFb) {

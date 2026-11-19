@@ -1,5 +1,6 @@
 package com.scell.moonlight
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -31,7 +32,8 @@ import javax.crypto.spec.SecretKeySpec
  */
 class PlaylistShare(
     private val playerRoot: File = File("/storage/emulated/0/Moonlight"),
-    private val cacheDir: File = File("/storage/emulated/0/Android/data/com.scell.moonlight/cache/shared-playlists")
+    private val cacheDir: File = File("/storage/emulated/0/Android/data/com.scell.moonlight/cache/shared-playlists"),
+    private val audioRoot: File = File("/storage/emulated/0/Novel/Audio")
 ) {
 
     companion object {
@@ -118,38 +120,194 @@ class PlaylistShare(
     ): SharePackageResult {
         return try {
             cacheDir.mkdirs()
-            val safeName = playlistKey.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+            val trimmedKey = playlistKey.trim()
+            val isFolderPlaylist = trimmedKey.startsWith("name:", ignoreCase = true)
+            val isCuratedList = trimmedKey.startsWith("list:", ignoreCase = true)
+            val folderName = if (isFolderPlaylist) trimmedKey.substring(5).trim() else null
+            val listId = if (isCuratedList) trimmedKey.substring(5).trim() else null
 
-            // 1. Locate playlist file in Moonlight/playlists/
             val playlistsDir = File(playerRoot, "playlists")
-            val playlistFile = File(playlistsDir, "$playlistKey.json").takeIf { it.isFile }
-                ?: playlistsDir.listFiles()?.firstOrNull { it.name.startsWith(playlistKey) && it.name.endsWith(".json") }
-                ?: return SharePackageResult(success = false, error = "Playlist not found: $playlistKey")
+            val songsDir = File(playerRoot, "Songs")
+            val songLib = SongLibrary(audioRoot, songsDir, playlistsDir)
 
-            val playlistJsonStr = playlistFile.readText()
-            val playlistJson = JSONObject(playlistJsonStr)
-            val plName = playlistJson.optString("name", safeName)
+            // 1. Locate or synthesize playlist JSON
+            var playlistJson: JSONObject? = null
+            var playlistJsonStr: String? = null
+
+            // Direct candidate filenames in playlistsDir
+            val candidateFileNames = mutableListOf<String>()
+            if (!trimmedKey.contains(":")) candidateFileNames.add("$trimmedKey.json")
+            if (listId != null) {
+                candidateFileNames.add("$listId.json")
+                candidateFileNames.add("curated-$listId.json")
+                candidateFileNames.add("pl-$listId.json")
+            }
+            if (folderName != null) {
+                val slug = SongLibrary.slug(folderName)
+                candidateFileNames.add("folder-$slug.json")
+                candidateFileNames.add("pl-$slug.json")
+                candidateFileNames.add("$folderName.json")
+            }
+
+            for (fn in candidateFileNames) {
+                val f = File(playlistsDir, fn)
+                if (f.isFile) {
+                    try {
+                        val text = f.readText()
+                        playlistJson = JSONObject(text)
+                        playlistJsonStr = text
+                        break
+                    } catch (e: Exception) { /* continue */ }
+                }
+            }
+
+            // Search by reading JSON files in playlistsDir
+            if (playlistJson == null && playlistsDir.isDirectory) {
+                val allFiles = playlistsDir.listFiles()?.filter { it.isFile && it.name.endsWith(".json") } ?: emptyList()
+                for (f in allFiles) {
+                    try {
+                        val text = f.readText()
+                        val json = JSONObject(text)
+                        val id = json.optString("id", "")
+                        val name = json.optString("name", "")
+                        val legacyFolder = json.optJSONObject("legacy")?.optString("folder", "") ?: ""
+                        val legacyCurated = json.optJSONObject("legacy")?.optString("curatedId", "") ?: ""
+
+                        if (folderName != null) {
+                            if (name.equals(folderName, ignoreCase = true) || legacyFolder.equals(folderName, ignoreCase = true)) {
+                                playlistJson = json
+                                playlistJsonStr = text
+                                break
+                            }
+                        } else if (listId != null) {
+                            if (id == listId || id == "curated-$listId" || legacyCurated == listId) {
+                                playlistJson = json
+                                playlistJsonStr = text
+                                break
+                            }
+                        } else {
+                            if (id == trimmedKey || name.equals(trimmedKey, ignoreCase = true)) {
+                                playlistJson = json
+                                playlistJsonStr = text
+                                break
+                            }
+                        }
+                    } catch (e: Exception) { /* continue */ }
+                }
+            }
+
+            // Folder playlist fallback: migrate or synthesize from folder on disk if no JSON exists yet
+            if (playlistJson == null && folderName != null) {
+                try { songLib.migrateFolder(folderName) } catch (e: Exception) { /* ignore */ }
+
+                val slug = SongLibrary.slug(folderName)
+                val migratedFile = File(playlistsDir, "folder-$slug.json").takeIf { it.isFile }
+                    ?: File(playlistsDir, "$folderName.json").takeIf { it.isFile }
+                if (migratedFile != null) {
+                    try {
+                        playlistJsonStr = migratedFile.readText()
+                        playlistJson = JSONObject(playlistJsonStr)
+                    } catch (e: Exception) { /* ignore */ }
+                }
+
+                if (playlistJson == null) {
+                    val folderInSongs = File(songsDir, folderName)
+                    val folderInAudio = File(audioRoot, folderName)
+                    val audioExts = SongLibrary.AUDIO_EXTENSIONS
+                    val diskFiles = listOf(folderInSongs, folderInAudio).flatMap { dir ->
+                        if (dir.isDirectory) {
+                            dir.walkTopDown().filter { it.isFile && audioExts.contains(it.extension.lowercase(Locale.ROOT)) }.toList()
+                        } else emptyList()
+                    }.distinctBy { it.name }
+
+                    if (diskFiles.isNotEmpty()) {
+                        val songsArr = JSONArray()
+                        for (f in diskFiles) {
+                            val ref = songLib.refFor(f) ?: "Songs/${f.name}"
+                            songsArr.put(JSONObject().apply {
+                                put("ref", ref)
+                                put("title", f.nameWithoutExtension)
+                                put("size", f.length())
+                            })
+                        }
+                        val syntheticJson = JSONObject().apply {
+                            put("format", SongLibrary.FORMAT)
+                            put("version", SongLibrary.VERSION)
+                            put("id", "folder-$slug")
+                            put("name", folderName)
+                            put("source", "folder")
+                            put("legacy", JSONObject().put("folder", folderName))
+                            put("songs", songsArr)
+                        }
+                        playlistJson = syntheticJson
+                        playlistJsonStr = syntheticJson.toString(2)
+                        try {
+                            playlistsDir.mkdirs()
+                            File(playlistsDir, "folder-$slug.json").writeText(playlistJsonStr)
+                        } catch (e: Exception) { /* non-fatal */ }
+                    }
+                }
+            }
+
+            if (playlistJson == null || playlistJsonStr == null) {
+                val displayName = folderName ?: listId ?: trimmedKey
+                return SharePackageResult(success = false, error = "Playlist not found: $displayName")
+            }
+
+            val plName = playlistJson.optString("name", folderName ?: listId ?: trimmedKey)
+            val plId = playlistJson.optString("id", trimmedKey)
+            val safeName = (folderName ?: listId ?: plName).replace(Regex("[^a-zA-Z0-9_.-]"), "_").ifBlank { "shared_playlist" }
 
             // 2. Identify referenced songs
-            val songsDir = File(playerRoot, "Songs")
-            val songsArray = playlistJson.optJSONArray("songs") ?: org.json.JSONArray()
+            val songsArray = playlistJson.optJSONArray("songs") ?: JSONArray()
             val songFiles = mutableListOf<File>()
 
             for (i in 0 until songsArray.length()) {
                 val item = songsArray.optJSONObject(i) ?: continue
                 val ref = item.optString("ref", "")
-                val fileName = ref.substringAfter("Songs/").substringAfter("Audio/")
-                val songFile = File(songsDir, fileName).takeIf { it.isFile }
+                if (ref.isBlank()) continue
+
+                val resolved = songLib.fileFor(ref)?.takeIf { it.isFile }
+                    ?: File(songsDir, ref.substringAfter("Songs/")).takeIf { it.isFile }
+                    ?: File(audioRoot, ref.substringAfter("Audio/")).takeIf { it.isFile }
+                    ?: File(audioRoot, ref).takeIf { it.isFile }
                     ?: File(playerRoot, ref).takeIf { it.isFile }
-                if (songFile != null && !songFiles.contains(songFile)) {
-                    songFiles.add(songFile)
+                    ?: File(songsDir, ref.substringAfterLast('/')).takeIf { it.isFile }
+                    ?: File(audioRoot, ref.substringAfterLast('/')).takeIf { it.isFile }
+
+                if (resolved != null && !songFiles.contains(resolved)) {
+                    songFiles.add(resolved)
                 }
+            }
+
+            // Fallback for folder playlists if referenced files weren't resolved
+            if (songFiles.isEmpty() && folderName != null) {
+                val folderInSongs = File(songsDir, folderName)
+                val folderInAudio = File(audioRoot, folderName)
+                val audioExts = SongLibrary.AUDIO_EXTENSIONS
+                listOf(folderInSongs, folderInAudio).forEach { dir ->
+                    if (dir.isDirectory) {
+                        dir.walkTopDown().filter { it.isFile && audioExts.contains(it.extension.lowercase(Locale.ROOT)) }.forEach { f ->
+                            if (!songFiles.contains(f)) songFiles.add(f)
+                        }
+                    }
+                }
+            }
+
+            if (songFiles.isEmpty()) {
+                return SharePackageResult(success = false, error = "Playlist '$plName' has no audio files to share")
             }
 
             // 3. Identify cover
             val coversDir = File(playerRoot, "playlist-covers")
-            val coverFile = File(coversDir, "$playlistKey.jpg").takeIf { it.isFile }
+            val coversMgr = PlaylistCovers(coversDir)
+            val coverFile = coversMgr.fileFor(trimmedKey).takeIf { it.isFile }
+                ?: folderName?.let { coversMgr.fileFor(it).takeIf { f -> f.isFile } }
+                ?: coversMgr.fileFor(plName).takeIf { it.isFile }
+                ?: coversMgr.fileFor(plId).takeIf { it.isFile }
                 ?: File(coversDir, "$safeName.jpg").takeIf { it.isFile }
+                ?: (if (!trimmedKey.contains(":")) File(coversDir, "$trimmedKey.jpg").takeIf { it.isFile } else null)
+                ?: folderName?.let { File(coversDir, "$it.jpg").takeIf { f -> f.isFile } }
 
             // 4. Build unencrypted ZIP directly on disk to prevent RAM exhaustion
             val fileName = "$safeName.moonlight"
@@ -170,7 +328,7 @@ class PlaylistShare(
                             put("format", "moonlight-shared-playlist")
                             put("version", VERSION)
                             put("playlistName", plName)
-                            put("playlistId", playlistKey)
+                            put("playlistId", safeName)
                             put("hasCover", coverFile != null)
                             put("isEncrypted", !password.isNullOrBlank())
                             put("songCount", songFiles.size)
@@ -573,24 +731,56 @@ class PlaylistShare(
                                 plId = m.optString("playlistId", "")
                             }
                             name == "playlist.json" -> {
-                                val plDest = File(playlistsDir, if (plId.isNotBlank()) "$plId.json" else "imported-${System.currentTimeMillis()}.json")
-                                FileOutputStream(plDest).buffered().use { fos ->
-                                    var len: Int
-                                    while (zis.read(buf).also { len = it } > 0) {
-                                        fos.write(buf, 0, len)
-                                    }
-                                    fos.flush()
+                                val baos = ByteArrayOutputStream()
+                                var len: Int
+                                while (zis.read(buf).also { len = it } > 0) {
+                                    baos.write(buf, 0, len)
                                 }
+                                val rawPlStr = baos.toString("UTF-8")
+                                val cleanId = (plId.ifBlank { SongLibrary.slug(plName) })
+                                    .removePrefix("name:")
+                                    .removePrefix("list:")
+                                    .replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+                                    .ifBlank { "imported-${System.currentTimeMillis()}" }
+                                val plDest = File(playlistsDir, "$cleanId.json")
+
+                                val updatedPlStr = try {
+                                    val pj = JSONObject(rawPlStr)
+                                    pj.put("id", cleanId)
+                                    if (plName.isNotBlank()) pj.put("name", plName)
+                                    val songs = pj.optJSONArray("songs")
+                                    if (songs != null) {
+                                        for (k in 0 until songs.length()) {
+                                            val s = songs.optJSONObject(k) ?: continue
+                                            val oldRef = s.optString("ref", "")
+                                            val fn = oldRef.substringAfterLast('/').substringAfterLast('\\')
+                                            if (fn.isNotBlank()) {
+                                                s.put("ref", "Songs/$fn")
+                                            }
+                                        }
+                                    }
+                                    pj.toString(2)
+                                } catch (e: Exception) {
+                                    rawPlStr
+                                }
+                                plDest.writeText(updatedPlStr)
                             }
                             name == "cover.jpg" -> {
-                                val cDest = File(coversDir, if (plId.isNotBlank()) "$plId.jpg" else "imported.jpg")
-                                FileOutputStream(cDest).buffered().use { fos ->
+                                val cleanId = (plId.ifBlank { SongLibrary.slug(plName) })
+                                    .removePrefix("name:")
+                                    .removePrefix("list:")
+                                    .replace(Regex("[^a-zA-Z0-9_.-]"), "_")
+                                    .ifBlank { "imported" }
+                                val coversMgr = PlaylistCovers(coversDir)
+                                val cTarget = coversMgr.fileFor(plName.ifBlank { cleanId })
+                                FileOutputStream(cTarget).buffered().use { fos ->
                                     var len: Int
                                     while (zis.read(buf).also { len = it } > 0) {
                                         fos.write(buf, 0, len)
                                     }
                                     fos.flush()
                                 }
+                                try { cTarget.copyTo(File(coversDir, "$cleanId.jpg"), overwrite = true) } catch (e: Exception) {}
                             }
                             name.startsWith("songs/") -> {
                                 val fn = name.substringAfter("songs/").substringAfterLast("/").substringAfterLast("\\")
