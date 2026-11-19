@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.16.36-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.16.37-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -94,6 +94,7 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Download via Share**: Tap "Share" on any YouTube video or media link in other apps and choose Moonlight to instantly open the Downloads tab and resolve the song.
 - A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
 - Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
+- **Real-time per-song download progress**: Individual progress bars with exact percentage, download speed, downloaded size / total size, and ETA readout for both single songs and multi-track playlist downloads. Tracks clearly reflect queued, downloading, completed, and failed states, with an inline Retry button for any failed item without losing other downloads.
 - **Remembers what you downloaded** and warns *Already downloaded* even if the link is written differently.
 - **Duplicate-name detection** while you name a song, ignoring capitals, punctuation and tags like "(Official Video)".
 - **Crop the cover**: choose which square of the video's thumbnail becomes the song's cover art.

@@ -434,4 +434,66 @@ check('Downloads tab UI contains Import playlist .txt button and file input', ()
   assert.ok(js.includes('startCustomPlaylistFlow'), 'defines startCustomPlaylistFlow');
 });
 
+check('formatEta formats seconds cleanly into MM:SS and H:MM:SS', () => {
+  assert.strictEqual(SD.formatEta(0), '00:00');
+  assert.strictEqual(SD.formatEta(45), '00:45');
+  assert.strictEqual(SD.formatEta(125), '02:05');
+  assert.strictEqual(SD.formatEta(3665), '1:01:05');
+});
+
+check('wizard progress updates track real percent, speed, and ETA per job without cross-talk', () => {
+  const t = setup();
+  t.w.start(['https://a/1', 'https://a/2']);
+  
+  // Progress on song 1
+  const item1 = t.w.progress('s1', {
+    percent: 42.5,
+    eta: 12,
+    speed: '2.5MiB/s',
+    downloaded: '4.2MiB',
+    total: '10.0MiB'
+  });
+  assert.strictEqual(item1.percent, 42.5);
+  assert.strictEqual(item1.eta, 12);
+  assert.strictEqual(item1.speed, '2.5MiB/s');
+  assert.strictEqual(item1.downloaded, '4.2MiB');
+  assert.strictEqual(item1.total, '10.0MiB');
+
+  // Song 1 completes
+  t.w.report('s1', 'done', STAGED(1));
+  assert.strictEqual(item1.state, 'ready');
+  assert.strictEqual(item1.percent, 100);
+
+  // Song 2 begins and receives independent progress
+  assert.deepStrictEqual(t.ids('stage'), ['s1', 's2']);
+  const item2 = t.w.progress('s2', {
+    percent: 15.0,
+    eta: 25,
+    speed: '1.8MiB/s'
+  });
+  assert.strictEqual(item2.percent, 15.0);
+  assert.strictEqual(item2.eta, 25);
+  assert.strictEqual(item2.speed, '1.8MiB/s');
+  // Verify song 1 wasn't affected
+  assert.strictEqual(item1.percent, 100);
+});
+
+check('Native progress wiring and UI styles agreement', () => {
+  const downloaderKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/SongDownloader.kt'), 'utf8');
+  assert.ok(downloaderKt.includes('onPage("onSongDownloadProgress"'), 'SongDownloader forwards progress to page');
+  assert.ok(downloaderKt.includes('parseYtDlpLine'), 'SongDownloader parses yt-dlp stdout lines');
+
+  const mainKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
+  assert.ok(mainKt.includes('callPage("onSongDownloadProgress"'), 'MainActivity forwards onSongDownloadProgress to WebView');
+
+  const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+  assert.ok(js.includes('root.onSongDownloadProgress ='), 'song-download.js defines root.onSongDownloadProgress');
+  assert.ok(js.includes('dl-determinate'), 'song-download.js uses dl-determinate for determinate bars');
+  assert.ok(js.includes('dl-sp-item-bar-fill'), 'song-download.js renders playlist row progress bars');
+
+  const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
+  assert.ok(html.includes('.dl-bar.dl-determinate'), 'index.html contains .dl-bar.dl-determinate CSS');
+  assert.ok(html.includes('.dl-sp-item-bar-fill'), 'index.html contains .dl-sp-item-bar-fill CSS');
+});
+
 console.log(n + ' checks passed');
