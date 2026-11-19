@@ -29,6 +29,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebChromeClient
+import android.webkit.ValueCallback
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -299,6 +300,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // HTML5 file chooser launcher for <input type="file"> support in WebView
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uris = if (result.resultCode == RESULT_OK) {
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        } else null
+        filePathCallback?.onReceiveValue(uris)
+        filePathCallback = null
+    }
+
     // `lazy`, because songDownloader (declared above) needs it only when a job runs.
     private val songLibrary: SongLibrary by lazy { SongLibrary(audioRoot, songsRoot, File(playerRoot, "playlists")) }
 
@@ -421,6 +434,46 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingSendIntent(intent)
+    }
+
+    private var pendingIncomingShareLink: String? = null
+
+    private fun handleIncomingSendIntent(intent: Intent?) {
+        if (intent == null || intent.action != Intent.ACTION_SEND) return
+        val type = intent.type ?: return
+        if (!type.startsWith("text/")) return
+
+        val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+            ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+            ?: return
+
+        val match = Regex("""https?://\S+""").find(sharedText) ?: return
+        val url = match.value.trim().trimEnd(')', ']', '>', '.', ',')
+
+        if (url.contains("open.spotify.com", ignoreCase = true)) {
+            runOnUiThread {
+                android.widget.Toast.makeText(
+                    this,
+                    "Spotify links cannot be downloaded directly",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            return
+        }
+
+        if (pageLoaded) {
+            runOnUiThread {
+                callPage("onIncomingShareLink", JSONObject.quote(url))
+            }
+        } else {
+            pendingIncomingShareLink = url
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -429,6 +482,7 @@ class MainActivity : ComponentActivity() {
         songDownloader.warmUp()
         appUpdater.start()
         busyCheck = { songDownloader.isBusy() || appUpdater.isBusy() }
+        handleIncomingSendIntent(intent)
         // Keeps updating the app while it is closed (see BackgroundUpdater.kt).
         BackgroundUpdater.schedule(applicationContext)
         // A few seconds after launch, so the check does not compete with the splash and the library scan.
@@ -539,6 +593,10 @@ class MainActivity : ComponentActivity() {
                 // fired, and auto-load novels if we already have permission.
                 setupImmersiveMode()
                 pageLoaded = true
+                pendingIncomingShareLink?.let { link ->
+                    pendingIncomingShareLink = null
+                    callPage("onIncomingShareLink", JSONObject.quote(link))
+                }
                 if (hasStoragePermission()) {
                     onStorageReady()
                 } else if (!permissionFlowActive) {
@@ -558,6 +616,26 @@ class MainActivity : ComponentActivity() {
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                view: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                this@MainActivity.filePathCallback?.onReceiveValue(null)
+                this@MainActivity.filePathCallback = filePathCallback
+                return try {
+                    val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    fileChooserLauncher.launch(intent)
+                    true
+                } catch (e: Exception) {
+                    this@MainActivity.filePathCallback?.onReceiveValue(null)
+                    this@MainActivity.filePathCallback = null
+                    false
+                }
+            }
             override fun onJsAlert(
                 view: WebView,
                 url: String?,

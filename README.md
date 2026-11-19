@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.13.00-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.16.35-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -90,6 +90,8 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 
 ### Download songs
 - Paste links from the clipboard (up to 50 at a time); each becomes a queued song.
+- **Import playlist .txt files**: Import exported playlist link files directly via the "Import playlist .txt" file picker, or paste text with `# name:` headers to auto-name the playlist and stage all tracks.
+- **Download via Share**: Tap "Share" on any YouTube video or media link in other apps and choose Moonlight to instantly open the Downloads tab and resolve the song.
 - A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
 - Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
 - **Remembers what you downloaded** and warns *Already downloaded* even if the link is written differently.

@@ -98,6 +98,50 @@
     return { links: links.slice(0, MAX_LINKS), skipped: skipped + Math.max(0, links.length - MAX_LINKS) };
   }
 
+  // Parses a playlist links text file or pasted text (created by getPlaylistLinksText or similar).
+  // Expects header metadata like:
+  //   # Moonlight playlist links
+  //   # name: <Playlist Name>
+  //   # description: <Description>
+  // Lines starting with # are comments or metadata; lines with http(s) links are track URLs.
+  function parsePlaylistLinksText(text, fallbackTitle) {
+    if (!text) return null;
+    const lines = String(text).split(/\r?\n/);
+    let title = '';
+    let description = '';
+    const links = [];
+    const seen = new Set();
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      if (line.startsWith('#')) {
+        const nameMatch = line.match(/^#\s*name\s*:\s*(.+)$/i);
+        if (nameMatch && !title) {
+          title = cleanFolderName(nameMatch[1].trim());
+          continue;
+        }
+        const descMatch = line.match(/^#\s*description\s*:\s*(.+)$/i);
+        if (descMatch && !description) {
+          description = descMatch[1].trim();
+          continue;
+        }
+        continue;
+      }
+      const match = line.match(/https?:\/\/\S+/i);
+      if (match) {
+        const u = match[0].replace(/[)\]>,.]+$/, '');
+        if (!seen.has(u)) {
+          seen.add(u);
+          links.push(u);
+        }
+      }
+    }
+
+    if (!title) title = cleanFolderName(fallbackTitle || 'Playlist');
+    return { title: title || 'Playlist', description, links: links.slice(0, MAX_LINKS) };
+  }
+
   // A short title for a link: host + path, without the scheme or tracking query.
   function shortLink(url) {
     const bare = String(url).replace(/^https?:\/\/(www\.)?/i, '').split(/[?#]/)[0].replace(/\/$/, '');
@@ -348,7 +392,7 @@
     return false;
   }
 
-  const api = { parseLinks, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink };
+  const api = { parseLinks, parsePlaylistLinksText, cleanFolderName, cleanSongName, createWizard, shortLink, stemOf, handleSharedPlaylistLink };
   // The square frame: `size` is its side as a fraction of the picture's SHORTER side (0.3..1); (cx, cy) is where
   // its centre is wanted, in picture pixels. The frame is kept inside the picture. x, y, size go to the app.
   function cropRect(iw, ih, size, cx, cy) {
@@ -627,6 +671,13 @@
   }
 
   function takeClipboardText(text) {
+    if (text && (/#\s*name\s*:/i.test(text) || /#\s*Moonlight playlist links/i.test(text))) {
+      const plText = parsePlaylistLinksText(text);
+      if (plText && plText.links.length > 0) {
+        startCustomPlaylistFlow(plText.title, plText.links);
+        return;
+      }
+    }
     const parsed = parseLinks(text);
     if (!parsed.links.length) {
       wizard.setMessage('No song link on the clipboard. Copy a link, then tap again.');
@@ -721,6 +772,41 @@
     if (dupes) return buildDupes();
     const box = el('div', 'dl-step');
     box.appendChild(button('Click to paste', 'dl-primary dl-big', pasteFromClipboard));
+
+    // Hidden file picker for importing playlist source links (.txt)
+    const fileInput = el('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.txt,text/plain';
+    fileInput.style.display = 'none';
+    fileInput.setAttribute('aria-label', 'Import playlist text file');
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        const fileContent = evt.target.result;
+        const fallbackTitle = (file.name || 'Playlist').replace(/\.[^.]+$/, '');
+        const res = parsePlaylistLinksText(fileContent, fallbackTitle);
+        if (res && res.links.length > 0) {
+          startCustomPlaylistFlow(res.title, res.links);
+        } else {
+          wizard.setMessage('No valid download links found in ' + file.name);
+          render();
+        }
+      };
+      reader.onerror = function () {
+        wizard.setMessage('Could not read the selected file.');
+        render();
+      };
+      reader.readAsText(file);
+      fileInput.value = '';
+    });
+    box.appendChild(fileInput);
+
+    const importBtn = button('Import playlist .txt', 'dl-secondary dl-big', () => fileInput.click());
+    importBtn.style.marginTop = '12px';
+    box.appendChild(importBtn);
+
     if (s.message) box.appendChild(el('p', 'dl-msg', s.message));
     return box;
   }
@@ -974,6 +1060,24 @@
     b.fetchPlaylistInfo(jobId, url);
   }
 
+  function startCustomPlaylistFlow(title, links) {
+    if (!links || !links.length) {
+      wizard.setMessage('No valid download links found.');
+      render();
+      return;
+    }
+    pl = {
+      url: '',
+      step: 'pl-confirm',
+      title: title || 'Playlist',
+      tracks: links,
+      items: [],
+      done: 0,
+      failed: 0,
+    };
+    render();
+  }
+
   // Max parallel yt-dlp processes for a playlist batch. More than 3 gives no speed benefit
   // (yt-dlp is CPU + network bound) and causes the library to re-init Python per extra fork.
   const PL_CONCURRENCY = 3;
@@ -1171,9 +1275,10 @@
 
   function buildPlConfirm() {
     const n = pl.tracks.length;
+    const typeLabel = pl.url ? 'YouTube playlist' : 'Imported playlist';
     const page = buildPlHero({
       title: pl.title,
-      meta: n + '\u2009song' + (n === 1 ? '' : 's') + '\u2009\u00b7\u2009YouTube playlist',
+      meta: n + '\u2009song' + (n === 1 ? '' : 's') + '\u2009\u00b7\u2009' + typeLabel,
       actions: [
         { label: 'Download all', cls: 'dl-primary dl-sp-act-btn', fn: startPlaylistDownloads },
         { label: 'Cancel',       cls: 'dl-secondary dl-sp-act-btn', fn: () => { pl = null; render(); } },
@@ -1431,6 +1536,21 @@
       if (jobId.startsWith('pl-place-') && onPlPlaceDone(jobId, status === 'done')) return;
     }
     if (typeof _prevStatus === 'function') _prevStatus(jobId, status, message);
+  };
+
+  // Called from native side (MainActivity) when another app shares a link (e.g. YouTube "Share" button)
+  root.onIncomingShareLink = function (url) {
+    if (!url || typeof url !== 'string') return;
+    if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
+      root.SpotifyUI.setView('download');
+    }
+    if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
+      pl = null;
+    }
+    if (wizard && wizard.state && wizard.state.step === 'done') {
+      wizard.again();
+    }
+    takeClipboardText(url);
   };
 
   const BUILDERS = {
