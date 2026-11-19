@@ -39,6 +39,9 @@ check('PlaylistShare.kt exists and implements streaming packaging, AES-256 encry
   assert.ok(src.includes('moonlight-shared-playlist'), 'writes moonlight-shared-playlist manifest');
   assert.ok(src.includes('MAGIC_ENCRYPTED'), 'uses magic header to detect encrypted packages');
   assert.ok(src.includes('onProgress'), 'provides progress callback for packaging and upload tracking');
+  assert.ok(src.includes('isFolderPlaylist') && src.includes('isCuratedList'), 'resolves folder playlists (name:*) and custom playlists (list:*)');
+  assert.ok(src.includes('SongLibrary'), 'leverages SongLibrary for song resolution and folder migration');
+  assert.ok(src.includes('PlaylistCovers'), 'uses PlaylistCovers to locate custom cover art');
 });
 
 check('MainActivity exposes AnonDrop and Filebin playlist sharing and import bridge interfaces', () => {
@@ -94,6 +97,40 @@ check('Sharing settings toggle gates sharing execution for AnonDrop', () => {
   assert.strictEqual(PlaylistShare.isSharingEnabled.call(mockRoot), false);
   assert.strictEqual(PlaylistShare.isAnonDropEnabled.call(mockRoot), true);
   assert.strictEqual(PlaylistShare.isFilebinEnabled.call(mockRoot), true);
+});
+
+check('shareCurrentPlaylist resolves folder playlists (name:Meme) and falls back to NovelAudio.getActivePlaylistKey()', () => {
+  const bridgeCalls = [];
+  const fakeBridge = {
+    sharePlaylistPackage: (key, pass, method) => {
+      bridgeCalls.push({ key, pass, method });
+    }
+  };
+  const savedWin = global.window;
+  global.window = {
+    AndroidBridge: fakeBridge,
+    toast: () => {},
+    prompt: () => '',
+    confirm: () => false, // direct share
+    NovelAudio: {
+      getActivePlaylistKey: () => 'name:Meme',
+      getSetting: () => true
+    },
+    SongMenu: { toast: () => {} }
+  };
+
+  // Call with no explicit key — should auto-detect from NovelAudio.getActivePlaylistKey()
+  PlaylistShare.shareCurrentPlaylist();
+  assert.strictEqual(bridgeCalls.length, 1);
+  assert.strictEqual(bridgeCalls[0].key, 'name:Meme');
+  assert.strictEqual(bridgeCalls[0].method, 'direct');
+
+  // Call with explicit folder playlist key
+  PlaylistShare.shareCurrentPlaylist('name:Meme', 'Meme');
+  assert.strictEqual(bridgeCalls.length, 2);
+  assert.strictEqual(bridgeCalls[1].key, 'name:Meme');
+
+  global.window = savedWin;
 });
 
 // 4. Packaging and bridge sharing lifecycle with AnonDrop as primary

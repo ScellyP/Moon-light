@@ -488,6 +488,8 @@
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
     dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
+    getActivePlaylistKey: () => (window.NovelAudio && window.NovelAudio.getActivePlaylistKey ? window.NovelAudio.getActivePlaylistKey() : ''),
+    getPlaylistTitle: () => getPlaylistTitle(),
   };
 
   /* =======================================================================

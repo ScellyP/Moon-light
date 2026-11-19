@@ -485,6 +485,57 @@ window.NovelAudio = (function () {
     _dupeIndex: 0,
     _dupeMovedCount: 0,
 
+    _dupePairKey(pathA, pathB) {
+      const norm = (p) => String(p || '').trim().replace(/\\/g, '/').toLowerCase().replace(/^\/+/, '');
+      const a = norm(pathA);
+      const b = norm(pathB);
+      return a < b ? a + ' <-> ' + b : b + ' <-> ' + a;
+    },
+
+    isDuplicateIgnored(pathA, pathB) {
+      const key = this._dupePairKey(pathA, pathB);
+      const st = state.features.duplicates;
+      if (st && Array.isArray(st.ignoredPairs) && st.ignoredPairs.indexOf(key) !== -1) return true;
+      try {
+        const ls = JSON.parse(localStorage.getItem('moonlight_ignored_duplicates') || '[]');
+        if (Array.isArray(ls) && ls.indexOf(key) !== -1) return true;
+      } catch (e) { /* ignore */ }
+      return false;
+    },
+
+    ignoreDuplicatePair(pathA, pathB) {
+      const key = this._dupePairKey(pathA, pathB);
+      if (!state.features.duplicates) state.features.duplicates = { ignoredPairs: [] };
+      if (!Array.isArray(state.features.duplicates.ignoredPairs)) state.features.duplicates.ignoredPairs = [];
+      if (state.features.duplicates.ignoredPairs.indexOf(key) === -1) {
+        state.features.duplicates.ignoredPairs.push(key);
+      }
+      try {
+        let ls = [];
+        try { ls = JSON.parse(localStorage.getItem('moonlight_ignored_duplicates') || '[]'); } catch (e) { ls = []; }
+        if (!Array.isArray(ls)) ls = [];
+        if (ls.indexOf(key) === -1) {
+          ls.push(key);
+          localStorage.setItem('moonlight_ignored_duplicates', JSON.stringify(ls));
+        }
+      } catch (e) { /* ignore */ }
+      Prefs.save();
+    },
+
+    ignoreRemainingDuplicates() {
+      const remaining = this._dupeQueue.slice(this._dupeIndex);
+      remaining.forEach(p => {
+        this.ignoreDuplicatePair(p.keep || p.keepId, p.drop || p.dropId);
+      });
+      this.closeDuplicateDialog();
+    },
+
+    clearIgnoredDuplicates() {
+      if (state.features.duplicates) state.features.duplicates.ignoredPairs = [];
+      try { localStorage.removeItem('moonlight_ignored_duplicates'); } catch (e) { /* ignore */ }
+      Prefs.save();
+    },
+
     isDuplicateDialogOpen() {
       const layer = typeof document !== 'undefined' && document.getElementById('dupe-dialog-layer');
       return !!(layer && !layer.classList.contains('hidden'));
@@ -512,6 +563,7 @@ window.NovelAudio = (function () {
       const pairs = [];
       found.forEach(g => g.drop.forEach(d => {
         if (d.id !== state.currentTrackId && pairs.length < 100) {
+          if (this.isDuplicateIgnored(g.keep.path || g.keep.id, d.path || d.id)) return;
           const keepFolder = g.keep.playlist || (g.keep.path && g.keep.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           const dropFolder = d.playlist || (d.path && d.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           pairs.push({
@@ -635,6 +687,12 @@ window.NovelAudio = (function () {
             Prefs.save();
             AudioUI.render();
           }
+        }
+      } else {
+        // User chose "Keep both" for this candidate pair: record so future scans skip it
+        const pair = this._dupeQueue[this._dupeIndex];
+        if (pair) {
+          this.ignoreDuplicatePair(pair.keep || pair.keepId, pair.drop || pair.dropId);
         }
       }
 
@@ -2267,6 +2325,15 @@ window.NovelAudio = (function () {
     defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, playlistSharing: true, anonDropSharing: true },
   });
 
+  /* ---- Duplicate song memory ----------------------------------------------------
+     Remembers pairs of duplicate candidate files that the user chose to keep, so
+     repeated scans ("Scan the sky") never re-prompt for acknowledged duplicates. */
+  AudioFeatures.register({
+    id: 'duplicates', label: 'Duplicate song memory', status: 'working',
+    defaults: { ignoredPairs: [] },
+    persistKeys: ['ignoredPairs'],
+  });
+
   /* ---- Remember the last song ---------------------------------------------------
      Every time a track starts, the audio prefs are saved with it as `lastTrackId`
      (see Prefs.save), so the next launch can bring that song back. */
@@ -2693,7 +2760,7 @@ window.NovelAudio = (function () {
 
       if (dupeKeep) dupeKeep.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(false, false));
       if (dupeMove) dupeMove.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(true, false));
-      if (dupeKeepAll) dupeKeepAll.addEventListener('click', () => MediaLibrary.closeDuplicateDialog());
+      if (dupeKeepAll) dupeKeepAll.addEventListener('click', () => MediaLibrary.ignoreRemainingDuplicates());
       if (dupeMoveAll) dupeMoveAll.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(false, true));
 
       if (dupeLayer) {
@@ -3328,6 +3395,14 @@ window.NovelAudio = (function () {
     isDuplicateDialogOpen() { return MediaLibrary.isDuplicateDialogOpen(); },
     closeDuplicateDialog() { return MediaLibrary.closeDuplicateDialog(); },
     getDuplicateQueue() { return MediaLibrary._dupeQueue ? MediaLibrary._dupeQueue.slice() : []; },
+    isDuplicateIgnored(a, b) { return MediaLibrary.isDuplicateIgnored(a, b); },
+    ignoreDuplicatePair(a, b) { MediaLibrary.ignoreDuplicatePair(a, b); },
+    ignoreRemainingDuplicates() { MediaLibrary.ignoreRemainingDuplicates(); },
+    clearIgnoredDuplicates() { MediaLibrary.clearIgnoredDuplicates(); },
+    getIgnoredDuplicates() {
+      const st = state.features.duplicates;
+      return (st && Array.isArray(st.ignoredPairs)) ? st.ignoredPairs.slice() : [];
+    },
 
     // The key of the playlist now shown in the Songs list, or '' for All songs / Liked / Recent (not editable).
     getActivePlaylistKey() {

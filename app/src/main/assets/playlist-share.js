@@ -52,8 +52,48 @@
   }
 
   function showToast(msg) {
-    var fn = (typeof window !== 'undefined' ? window.toast : null) || (typeof global !== 'undefined' ? global.toast : null) || root.toast;
+    var fn = (typeof window !== 'undefined' ? window.toast : null)
+      || (typeof global !== 'undefined' ? global.toast : null)
+      || (typeof window !== 'undefined' && window.SongMenu && window.SongMenu.toast ? window.SongMenu.toast : null)
+      || (root.SongMenu && root.SongMenu.toast ? root.SongMenu.toast : null)
+      || root.toast;
     if (typeof fn === 'function') fn(msg);
+  }
+
+  function getPlaylistKey() {
+    var a = (typeof window !== 'undefined' ? window.NovelAudio : null) || (typeof global !== 'undefined' ? global.NovelAudio : null) || root.NovelAudio;
+    var ui = (typeof window !== 'undefined' ? window.SpotifyUI : null) || (typeof global !== 'undefined' ? global.SpotifyUI : null) || root.SpotifyUI;
+    if (a && typeof a.getActivePlaylistKey === 'function') {
+      var k = a.getActivePlaylistKey();
+      if (k) return k;
+    }
+    if (ui && typeof ui.getActivePlaylistKey === 'function') {
+      var k2 = ui.getActivePlaylistKey();
+      if (k2) return k2;
+    }
+    if (typeof document !== 'undefined') {
+      var cover = document.getElementById('sp-album-cover');
+      if (cover) {
+        var pk = cover.getAttribute('data-pl-key');
+        if (pk && pk !== 'all' && pk !== '@liked' && pk !== '@recent') {
+          return pk.indexOf('name:') === 0 || pk.indexOf('list:') === 0 ? pk : 'name:' + pk;
+        }
+      }
+    }
+    return '';
+  }
+
+  function getPlaylistDisplayName() {
+    var ui = (typeof window !== 'undefined' ? window.SpotifyUI : null) || (typeof global !== 'undefined' ? global.SpotifyUI : null) || root.SpotifyUI;
+    if (ui && typeof ui.getPlaylistTitle === 'function') {
+      var t = ui.getPlaylistTitle();
+      if (t) return t;
+    }
+    if (typeof document !== 'undefined') {
+      var titleEl = document.getElementById('sp-album-title');
+      if (titleEl && titleEl.textContent) return titleEl.textContent.trim();
+    }
+    return '';
   }
 
   function shareCurrentPlaylist(playlistKey, playlistName) {
@@ -62,8 +102,9 @@
       return;
     }
 
-    var key = playlistKey || (root.SpotifyUI && root.SpotifyUI.getActivePlaylistKey ? root.SpotifyUI.getActivePlaylistKey() : '');
-    if (!key) {
+    var key = playlistKey || getPlaylistKey();
+    var name = playlistName || getPlaylistDisplayName() || key;
+    if (!key || key === 'all' || key === '@liked' || key === '@recent') {
       showToast('No playlist selected to share');
       return;
     }
@@ -72,7 +113,7 @@
     var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
     var password = '';
     if (promptFn) {
-      var passInput = promptFn('Set a password for playlist "' + (playlistName || key) + '" (optional, leave blank for no password):', '');
+      var passInput = promptFn('Set a password for playlist "' + name + '" (optional, leave blank for no password):', '');
       if (passInput === null) return; // User cancelled
       password = passInput.trim();
     }
@@ -234,8 +275,9 @@
       shareBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        var key = root.SpotifyUI && root.SpotifyUI.getActivePlaylistKey ? root.SpotifyUI.getActivePlaylistKey() : '';
-        shareCurrentPlaylist(key);
+        var key = getPlaylistKey();
+        var title = getPlaylistDisplayName();
+        shareCurrentPlaylist(key, title);
       });
     }
   }

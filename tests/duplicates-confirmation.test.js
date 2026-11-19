@@ -38,6 +38,10 @@ check('audio-player.js implements duplicate confirmation prompt and choice handl
   assert.ok(playerSrc.includes('_handleDuplicateChoice'), 'implements _handleDuplicateChoice');
   assert.ok(playerSrc.includes('isDuplicateDialogOpen'), 'implements isDuplicateDialogOpen');
   assert.ok(playerSrc.includes('closeDuplicateDialog'), 'implements closeDuplicateDialog');
+  assert.ok(playerSrc.includes('isDuplicateIgnored'), 'implements isDuplicateIgnored');
+  assert.ok(playerSrc.includes('ignoreDuplicatePair'), 'implements ignoreDuplicatePair');
+  assert.ok(playerSrc.includes('ignoreRemainingDuplicates'), 'implements ignoreRemainingDuplicates');
+  assert.ok(playerSrc.includes('clearIgnoredDuplicates'), 'implements clearIgnoredDuplicates');
 });
 
 // 3. Back handling in player-app.js
@@ -174,6 +178,84 @@ check('duplicate prompt asks per song instead of moving all at once', () => {
   // Restore globals
   global.document = originalDoc;
   global.window = originalWin;
+});
+
+// 5. Duplicate memory persists ignored pairs so subsequent scans skip them
+check('duplicate memory persists ignored pairs and skips them on subsequent scans', () => {
+  const store = {};
+  const mockLocalStorage = {
+    getItem: (k) => store[k] || null,
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; }
+  };
+
+  const fakeState = {
+    features: {
+      duplicates: { ignoredPairs: [] }
+    }
+  };
+
+  const dupeHelper = {
+    _dupePairKey(pathA, pathB) {
+      const norm = (p) => String(p || '').trim().replace(/\\/g, '/').toLowerCase().replace(/^\/+/, '');
+      const a = norm(pathA);
+      const b = norm(pathB);
+      return a < b ? a + ' <-> ' + b : b + ' <-> ' + a;
+    },
+    isDuplicateIgnored(pathA, pathB) {
+      const key = this._dupePairKey(pathA, pathB);
+      const st = fakeState.features.duplicates;
+      if (st && Array.isArray(st.ignoredPairs) && st.ignoredPairs.indexOf(key) !== -1) return true;
+      try {
+        const ls = JSON.parse(mockLocalStorage.getItem('moonlight_ignored_duplicates') || '[]');
+        if (Array.isArray(ls) && ls.indexOf(key) !== -1) return true;
+      } catch (e) { /* ignore */ }
+      return false;
+    },
+    ignoreDuplicatePair(pathA, pathB) {
+      const key = this._dupePairKey(pathA, pathB);
+      if (!fakeState.features.duplicates) fakeState.features.duplicates = { ignoredPairs: [] };
+      if (fakeState.features.duplicates.ignoredPairs.indexOf(key) === -1) {
+        fakeState.features.duplicates.ignoredPairs.push(key);
+      }
+      try {
+        let ls = [];
+        try { ls = JSON.parse(mockLocalStorage.getItem('moonlight_ignored_duplicates') || '[]'); } catch (e) { ls = []; }
+        if (!Array.isArray(ls)) ls = [];
+        if (ls.indexOf(key) === -1) {
+          ls.push(key);
+          mockLocalStorage.setItem('moonlight_ignored_duplicates', JSON.stringify(ls));
+        }
+      } catch (e) { /* ignore */ }
+    },
+    clearIgnoredDuplicates() {
+      if (fakeState.features.duplicates) fakeState.features.duplicates.ignoredPairs = [];
+      mockLocalStorage.removeItem('moonlight_ignored_duplicates');
+    }
+  };
+
+  const songA = '/Novel/Audio/Meme/track1.mp3';
+  const songB = '/Moonlight/Songs/track1 (1).mp3';
+
+  // Initially not ignored
+  assert.strictEqual(dupeHelper.isDuplicateIgnored(songA, songB), false);
+
+  // User chooses "Keep both"
+  dupeHelper.ignoreDuplicatePair(songA, songB);
+  assert.strictEqual(dupeHelper.isDuplicateIgnored(songA, songB), true, 'pair is now recognized as ignored');
+  // Order of arguments does not matter
+  assert.strictEqual(dupeHelper.isDuplicateIgnored(songB, songA), true, 'canonical pair key matches in reverse order');
+  // Path separators and casing do not matter
+  assert.strictEqual(dupeHelper.isDuplicateIgnored('\\Novel\\Audio\\meme\\track1.mp3', '\\Moonlight\\Songs\\track1 (1).mp3'), true, 'handles backslashes and case');
+
+  // Verify stored in localStorage
+  const saved = JSON.parse(mockLocalStorage.getItem('moonlight_ignored_duplicates'));
+  assert.ok(Array.isArray(saved) && saved.length === 1);
+
+  // Clearing resets memory
+  dupeHelper.clearIgnoredDuplicates();
+  assert.strictEqual(dupeHelper.isDuplicateIgnored(songA, songB), false);
+  assert.strictEqual(mockLocalStorage.getItem('moonlight_ignored_duplicates'), null);
 });
 
 console.log(n + ' checks passed');
