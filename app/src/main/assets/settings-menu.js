@@ -268,7 +268,6 @@
   bindSwitch('set-dupes', 'removeDuplicates', null);
   bindSwitch('set-playlist-share', 'playlistSharing', null);
   bindSwitch('set-anondrop', 'anonDropSharing', null);
-  bindSwitch('set-filebin', 'filebinSharing', null);
   bindSwitch('set-bg-dl', 'backgroundDownloads', function (on) {
     // Tell the native side immediately so SongDownloader can honour it mid-download.
     var b = root.AndroidBridge || null;

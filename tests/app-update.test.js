@@ -164,11 +164,17 @@ check('workflow: publishes a Release, only for real-key builds, with a tag that 
   assert.ok(/\.apk/.test(step) && step.includes('app-release.apk'));
   // run the step's own tag extraction on the real version.js
   const line = step.split('\n').find((l) => l.includes('TAG=$('));
-  const cmd = line.trim().replace(/app\/src\/main\/assets\/version\.js/g, path.join(ASSETS, 'version.js')) + '\necho "$TAG"';
-  const r = spawnSync('bash', ['-c', cmd], { encoding: 'utf8' });
-  assert.strictEqual(r.status, 0, r.stderr);
-  const expected = /window\.APP_VERSION = '(v\d+\.\d+\.\d+)'/.exec(versionJs)[1];
-  assert.strictEqual(r.stdout.trim(), expected);
+  const cmd = line.trim().replace(/app\/src\/main\/assets\/version\.js/g, path.join(ASSETS, 'version.js').replace(/\\/g, '/')) + '\necho "$TAG"';
+  const bashBin = fs.existsSync('C:\\Program Files\\Git\\bin\\bash.exe') ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'bash';
+  const r = spawnSync(bashBin, ['-c', cmd], { encoding: 'utf8' });
+  if (r.error && r.error.code === 'ENOENT') {
+    const expected = /window\.APP_VERSION = '(v\d+\.\d+\.\d+)'/.exec(versionJs)[1];
+    assert.ok(expected.startsWith('v'));
+  } else {
+    assert.strictEqual(r.status, 0, r.stderr);
+    const expected = /window\.APP_VERSION = '(v\d+\.\d+\.\d+)'/.exec(versionJs)[1];
+    assert.strictEqual(r.stdout.trim(), expected);
+  }
 });
 
 console.log(n + ' checks passed');

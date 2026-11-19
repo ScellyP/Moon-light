@@ -1846,7 +1846,7 @@ class MainActivity : ComponentActivity() {
             return SongBackup(playerRoot, downloadDir).listBackups()
         }
 
-        // ---- Playlist Sharing & Filebin Integration (Item 3) ----------------------------------------------
+        // ---- Playlist Sharing & AnonDrop Integration ----------------------------------------------
         @JavascriptInterface
         fun sharePlaylistPackage(playlistKey: String, password: String, method: String): String {
             if (!hasStoragePermission()) {
@@ -1857,13 +1857,14 @@ class MainActivity : ComponentActivity() {
                 callPage("onPlaylistShareComplete", err)
                 return err
             }
+            val cleanName = playlistKey.removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
             Thread {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
                 val share = PlaylistShare(playerRoot, shareDir, audioRoot)
                 var lastNotifTime = 0L
 
                 runOnUiThread {
-                    updateSharePackagingNotification(playlistKey, 0, 0)
+                    updateSharePackagingNotification(cleanName, 0, 0)
                 }
 
                 val pkgRes = share.createPackage(playlistKey, password.takeIf { it.isNotBlank() }) { current, total, _ ->
@@ -1871,23 +1872,24 @@ class MainActivity : ComponentActivity() {
                     if (now - lastNotifTime > 300 || current == total) {
                         lastNotifTime = now
                         runOnUiThread {
-                            updateSharePackagingNotification(playlistKey, current, total)
+                            updateSharePackagingNotification(cleanName, current, total)
                         }
                     }
                 }
 
                 if (!pkgRes.success) {
                     runOnUiThread {
-                        updateShareErrorNotification(playlistKey, pkgRes.error ?: "Failed to package playlist")
+                        updateShareErrorNotification(cleanName, pkgRes.error ?: "Failed to package playlist")
                         callPage("onPlaylistShareComplete", pkgRes.toJson())
                     }
                     return@Thread
                 }
 
+                val finalPlaylistName = pkgRes.playlistName.removePrefix("name:").removePrefix("list:").ifBlank { cleanName }
                 val f = File(pkgRes.filePath)
                 if (method.equals("anondrop", ignoreCase = true) || method.equals("cloud", ignoreCase = true)) {
                     runOnUiThread {
-                        updateShareUploadProgressNotification(playlistKey, 0L, f.length(), "AnonDrop")
+                        updateShareUploadProgressNotification(finalPlaylistName, 0L, f.length(), "AnonDrop")
                     }
 
                     var lastUploadTime = 0L
@@ -1900,7 +1902,7 @@ class MainActivity : ComponentActivity() {
                             lastUploadTime = now
                             lastPercent = percent
                             runOnUiThread {
-                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes, "AnonDrop")
+                                updateShareUploadProgressNotification(finalPlaylistName, uploadedBytes, totalBytes, "AnonDrop")
                             }
                         }
                     }
@@ -1909,6 +1911,7 @@ class MainActivity : ComponentActivity() {
                         put("success", uploaded)
                         put("method", "anondrop")
                         put("shareUrl", shareUrl)
+                        put("playlistName", finalPlaylistName)
                         put("isEncrypted", pkgRes.isEncrypted)
                         put("songCount", pkgRes.songCount)
                         if (!uploaded) put("error", shareUrl)
@@ -1916,50 +1919,10 @@ class MainActivity : ComponentActivity() {
 
                     runOnUiThread {
                         if (uploaded) {
-                            updateShareCompleteNotification(playlistKey, shareUrl, "AnonDrop")
+                            updateShareCompleteNotification(finalPlaylistName, shareUrl, "AnonDrop")
                             callPage("onPlaylistShareComplete", res)
-                            shareText(shareUrl)
                         } else {
-                            updateShareErrorNotification(playlistKey, shareUrl)
-                            callPage("onPlaylistShareComplete", res)
-                        }
-                    }
-                } else if (method.equals("filebin", ignoreCase = true)) {
-                    runOnUiThread {
-                        updateShareUploadProgressNotification(playlistKey, 0L, f.length(), "Filebin")
-                    }
-
-                    var lastUploadTime = 0L
-                    var lastPercent = -1
-
-                    val (uploaded, shareUrl) = share.uploadToFilebin(f) { uploadedBytes, totalBytes ->
-                        val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
-                        val now = System.currentTimeMillis()
-                        if (percent != lastPercent && (now - lastUploadTime > 300 || percent == 100)) {
-                            lastUploadTime = now
-                            lastPercent = percent
-                            runOnUiThread {
-                                updateShareUploadProgressNotification(playlistKey, uploadedBytes, totalBytes, "Filebin")
-                            }
-                        }
-                    }
-
-                    val res = JSONObject().apply {
-                        put("success", uploaded)
-                        put("method", "filebin")
-                        put("shareUrl", shareUrl)
-                        put("isEncrypted", pkgRes.isEncrypted)
-                        put("songCount", pkgRes.songCount)
-                        if (!uploaded) put("error", shareUrl)
-                    }.toString()
-
-                    runOnUiThread {
-                        if (uploaded) {
-                            updateShareCompleteNotification(playlistKey, shareUrl, "Filebin")
-                            callPage("onPlaylistShareComplete", res)
-                            shareText(shareUrl)
-                        } else {
-                            updateShareErrorNotification(playlistKey, shareUrl)
+                            updateShareErrorNotification(finalPlaylistName, shareUrl)
                             callPage("onPlaylistShareComplete", res)
                         }
                     }
@@ -1972,6 +1935,7 @@ class MainActivity : ComponentActivity() {
                         put("method", "direct")
                         put("filePath", pkgRes.filePath)
                         put("fileName", pkgRes.fileName)
+                        put("playlistName", finalPlaylistName)
                         put("isEncrypted", pkgRes.isEncrypted)
                         put("songCount", pkgRes.songCount)
                     }.toString()
@@ -2010,10 +1974,9 @@ class MainActivity : ComponentActivity() {
                 val shareDir = File(this@MainActivity.cacheDir, "shared-playlists")
                 val share = PlaylistShare(playerRoot, shareDir, audioRoot)
                 val isAnonDrop = PlaylistShare.isAnonDropUrl(source)
-                val isFb = PlaylistShare.isFilebinUrl(source)
-                if (isAnonDrop || isFb) {
+                if (isAnonDrop) {
                     runOnUiThread {
-                        updateShareDownloadProgressNotification(source, 0L, 0L, if (isAnonDrop) "AnonDrop" else "Filebin")
+                        updateShareDownloadProgressNotification(source, 0L, 0L, "AnonDrop")
                     }
                 }
 
@@ -2039,30 +2002,6 @@ class MainActivity : ComponentActivity() {
                         }.toString()
                         runOnUiThread {
                             updateShareErrorNotification("Import", "Could not download package from AnonDrop")
-                            callPage("onPlaylistImportComplete", err)
-                        }
-                        return@Thread
-                    }
-                    downloadedFile
-                } else if (isFb) {
-                    val (dlSuccess, downloadedFile) = share.downloadFromFilebin(source) { downloadedBytes, totalBytes ->
-                        val percent = if (totalBytes > 0) ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
-                        val now = System.currentTimeMillis()
-                        if (percent != lastDlPercent && (now - lastDlTime > 300 || percent == 100)) {
-                            lastDlTime = now
-                            lastDlPercent = percent
-                            runOnUiThread {
-                                updateShareDownloadProgressNotification(source, downloadedBytes, totalBytes, "Filebin")
-                            }
-                        }
-                    }
-                    if (!dlSuccess || downloadedFile == null) {
-                        val err = JSONObject().apply {
-                            put("success", false)
-                            put("error", "Could not download playlist package from Filebin")
-                        }.toString()
-                        runOnUiThread {
-                            updateShareErrorNotification("Import", "Could not download package from Filebin")
                             callPage("onPlaylistImportComplete", err)
                         }
                         return@Thread
@@ -2099,11 +2038,6 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun isPlaylistShareAnonDropUrl(url: String): Boolean {
             return PlaylistShare.isAnonDropUrl(url)
-        }
-
-        @JavascriptInterface
-        fun isPlaylistShareFilebinUrl(url: String): Boolean {
-            return PlaylistShare.isFilebinUrl(url)
         }
 
         @JavascriptInterface
@@ -2747,10 +2681,11 @@ class MainActivity : ComponentActivity() {
 
     fun updateSharePackagingNotification(playlistName: String, done: Int, total: Int) {
         ensureShareChannel()
+        val cleanName = playlistName.removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Packaging \"$playlistName\"")
+            .setContentTitle("Packaging \"$cleanName\"")
             .setContentText(if (total > 0) "Packing song $done of $total..." else "Preparing songs...")
             .setProgress(if (total > 0) total else 0, done, total <= 0)
             .setOngoing(true)
@@ -2761,6 +2696,7 @@ class MainActivity : ComponentActivity() {
 
     fun updateShareUploadProgressNotification(playlistName: String, uploadedBytes: Long, totalBytes: Long, provider: String = "AnonDrop") {
         ensureShareChannel()
+        val cleanName = playlistName.removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val percent = if (totalBytes > 0) ((uploadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100) else 0
         val uploadedMb = uploadedBytes.toDouble() / (1024.0 * 1024.0)
@@ -2772,7 +2708,7 @@ class MainActivity : ComponentActivity() {
         }
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Uploading \"$playlistName\" to $provider")
+            .setContentTitle("Uploading \"$cleanName\" to $provider")
             .setContentText(text)
             .setProgress(100, percent, false)
             .setOngoing(true)
@@ -2783,6 +2719,7 @@ class MainActivity : ComponentActivity() {
 
     fun updateShareCompleteNotification(playlistName: String, shareUrl: String, provider: String = "AnonDrop") {
         ensureShareChannel()
+        val cleanName = playlistName.removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
@@ -2795,11 +2732,10 @@ class MainActivity : ComponentActivity() {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT
         }
         val pendingIntent = android.app.PendingIntent.getActivity(this, SHARE_NOTIF_ID, chooser, flags)
-        val subText = if (provider.equals("Filebin", ignoreCase = true)) "Tap to share link (expires in 6 days)" else "Tap to share anonymous link"
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Playlist uploaded to $provider!")
-            .setContentText(subText)
+            .setContentTitle("\"$cleanName\" uploaded to $provider!")
+            .setContentText("Tap to share anonymous link")
             .setProgress(0, 0, false)
             .setOngoing(false)
             .setAutoCancel(true)
@@ -2810,11 +2746,13 @@ class MainActivity : ComponentActivity() {
 
     fun updateShareErrorNotification(playlistName: String, errorMsg: String) {
         ensureShareChannel()
+        val cleanName = playlistName.removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
+        val cleanError = errorMsg.replace("name:", "").replace("list:", "")
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val notif = androidx.core.app.NotificationCompat.Builder(this, SHARE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Share failed: $playlistName")
-            .setContentText(errorMsg)
+            .setContentTitle("Share failed: $cleanName")
+            .setContentText(cleanError)
             .setProgress(0, 0, false)
             .setOngoing(false)
             .setAutoCancel(true)

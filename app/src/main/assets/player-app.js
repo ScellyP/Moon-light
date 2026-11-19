@@ -61,6 +61,9 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (dialogOpen) closeDialog();
+      else if (window.PlaylistShare && window.PlaylistShare.isOpen && window.PlaylistShare.isOpen()) {
+        window.PlaylistShare.close();
+      }
       else if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
         window.NovelAudio.closeDuplicateDialog();
       }
@@ -106,6 +109,10 @@
      asks for a second back press before it exits. ---- */
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
+    if (window.PlaylistShare && window.PlaylistShare.isOpen && window.PlaylistShare.isOpen()) {
+      window.PlaylistShare.close();
+      return true;
+    }
     if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
       window.NovelAudio.closeDuplicateDialog();
       return true;

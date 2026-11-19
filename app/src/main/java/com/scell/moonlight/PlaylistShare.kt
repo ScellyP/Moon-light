@@ -57,19 +57,7 @@ class PlaylistShare(
             return id to extra
         }
 
-        /** Recognizes a Filebin link: e.g. https://filebin.net/abc123xyz or https://filebin.net/abc123xyz/playlist.zip */
-        private val FILEBIN_REGEX = Regex("""https?://filebin\.net/([a-zA-Z0-9_-]+)(?:/([^\s/?#]+))?""", RegexOption.IGNORE_CASE)
-
-        fun isFilebinUrl(url: String): Boolean = FILEBIN_REGEX.containsMatchIn(url.trim())
-
-        fun parseFilebinUrl(url: String): Pair<String, String?>? {
-            val match = FILEBIN_REGEX.find(url.trim()) ?: return null
-            val bin = match.groupValues[1]
-            val file = if (match.groupValues.size > 2 && match.groupValues[2].isNotBlank()) match.groupValues[2] else null
-            return bin to file
-        }
-
-        fun isRecognizedShareUrl(url: String): Boolean = isAnonDropUrl(url) || isFilebinUrl(url)
+        fun isRecognizedShareUrl(url: String): Boolean = isAnonDropUrl(url)
     }
 
     data class SharePackageResult(
@@ -250,7 +238,7 @@ class PlaylistShare(
             }
 
             if (playlistJson == null || playlistJsonStr == null) {
-                val displayName = folderName ?: listId ?: trimmedKey
+                val displayName = (folderName ?: listId ?: trimmedKey).removePrefix("name:").removePrefix("list:").ifBlank { "Playlist" }
                 return SharePackageResult(success = false, error = "Playlist not found: $displayName")
             }
 
@@ -536,129 +524,6 @@ class PlaylistShare(
         }
     }
 
-    /**
-     * Uploads a package to Filebin via REST API (POST https://filebin.net/{bin}/{filename}).
-     * Returns public shareable URL: https://filebin.net/{bin}
-     */
-    fun uploadToFilebin(
-        file: File,
-        binId: String? = null,
-        onProgress: ((uploadedBytes: Long, totalBytes: Long) -> Unit)? = null
-    ): Pair<Boolean, String> {
-        return try {
-            if (!file.isFile || file.length() == 0L) {
-                return false to "File to upload is empty or not found"
-            }
-            val bin = binId ?: generateRandomBinId()
-            val uploadUrl = URL("https://filebin.net/$bin/${file.name}")
-            val totalBytes = file.length()
-            val conn = (uploadUrl.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                setRequestProperty("Content-Type", "application/octet-stream")
-                setRequestProperty("User-Agent", "Moonlight-MusicPlayer/1.16")
-                setConnectTimeout(20000)
-                setReadTimeout(300000) // 5 minutes for large multi-song uploads
-                setFixedLengthStreamingMode(totalBytes) // Direct socket streaming, avoid RAM buffering
-            }
-
-            var uploadedBytes = 0L
-            FileInputStream(file).use { fis ->
-                conn.outputStream.use { os ->
-                    val buf = ByteArray(32 * 1024)
-                    var len: Int
-                    while (fis.read(buf).also { len = it } > 0) {
-                        os.write(buf, 0, len)
-                        uploadedBytes += len
-                        onProgress?.invoke(uploadedBytes, totalBytes)
-                    }
-                    os.flush()
-                }
-            }
-
-            val code = conn.responseCode
-            if (code == 201 || code == 200) {
-                val shareLink = "https://filebin.net/$bin"
-                true to shareLink
-            } else if (code == 503) {
-                false to "Filebin server is currently at capacity (503). Use direct sharing instead."
-            } else {
-                false to "Filebin upload failed with HTTP code $code"
-            }
-        } catch (e: Exception) {
-            false to (e.message ?: "Network error uploading to Filebin")
-        }
-    }
-
-    /**
-     * Downloads a playlist package from a Filebin link into cacheDir.
-     */
-    fun downloadFromFilebin(
-        filebinUrl: String,
-        onProgress: ((downloadedBytes: Long, totalBytes: Long) -> Unit)? = null
-    ): Pair<Boolean, File?> {
-        return try {
-            val parsed = parseFilebinUrl(filebinUrl) ?: return false to null
-            val bin = parsed.first
-            cacheDir.mkdirs()
-
-            // If file was specified, download direct; otherwise check bin metadata for moonlight package
-            val downloadUrl = if (parsed.second != null) {
-                URL("https://filebin.net/$bin/${parsed.second}")
-            } else {
-                // Fetch bin metadata
-                val metaUrl = URL("https://filebin.net/$bin")
-                val metaConn = (metaUrl.openConnection() as HttpURLConnection).apply {
-                    setRequestProperty("Accept", "application/json")
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                }
-                if (metaConn.responseCode != 200) return false to null
-                val metaStr = metaConn.inputStream.bufferedReader().use { it.readText() }
-                val metaJson = JSONObject(metaStr)
-                val filesArr = metaJson.optJSONArray("files")
-                var targetFilename: String? = null
-                if (filesArr != null) {
-                    for (i in 0 until filesArr.length()) {
-                        val f = filesArr.optJSONObject(i) ?: continue
-                        val fn = f.optString("filename", "")
-                        if (fn.endsWith(".moonlight") || fn.endsWith(".zip")) {
-                            targetFilename = fn
-                            break
-                        }
-                    }
-                }
-                val fn = targetFilename ?: "${bin}.zip"
-                URL("https://filebin.net/$bin/$fn")
-            }
-
-            val targetFile = File(cacheDir, "downloaded-${bin}.moonlight")
-            val conn = (downloadUrl.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 20000
-                readTimeout = 300000
-            }
-            if (conn.responseCode != 200) return false to null
-
-            val totalBytes = conn.contentLengthLong
-            var downloadedBytes = 0L
-
-            conn.inputStream.use { ins ->
-                FileOutputStream(targetFile).use { fos ->
-                    val buf = ByteArray(32 * 1024)
-                    var len: Int
-                    while (ins.read(buf).also { len = it } > 0) {
-                        fos.write(buf, 0, len)
-                        downloadedBytes += len
-                        onProgress?.invoke(downloadedBytes, totalBytes)
-                    }
-                    fos.flush()
-                }
-            }
-            true to targetFile
-        } catch (e: Exception) {
-            false to null
-        }
-    }
 
     /**
      * Imports a playlist package into Moonlight.

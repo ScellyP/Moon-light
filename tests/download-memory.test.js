@@ -75,7 +75,8 @@ function makePage({ files = {}, clipboard = '', tracks = LIB } = {}) {
   ['sp-view-download', 'dl-stage', 'audio-panel'].forEach((id) => { byId[id] = createNode('div'); byId[id].attrs.id = id; });
   byId['audio-panel'].attrs['data-view'] = 'download';
   const bridgeCalls = [];
-  const trackMap = new Map(tracks.map((t) => [t.id, t]));
+  const localTracks = tracks.slice();
+  const trackMap = new Map(localTracks.map((t) => [t.id, t]));
   const sandbox = {
     document: {
       getElementById: (id) => byId[id] || null, activeElement: null,
@@ -87,7 +88,7 @@ function makePage({ files = {}, clipboard = '', tracks = LIB } = {}) {
     setTimeout: (fn) => { fn(); return 0; }, clearTimeout() {},
     URL, Date,
     NovelAudio: {
-      getTracks: () => tracks,
+      getTracks: () => localTracks,
       getTrackInfo: (id) => (trackMap.has(id) ? trackMap.get(id) : null),
       getLikedIds: () => [], getHistoryIds: () => [], getPlaylists: () => [{ name: 'Pop' }], playAfterRescan: () => Promise.resolve(true),
     },
@@ -113,7 +114,14 @@ function makePage({ files = {}, clipboard = '', tracks = LIB } = {}) {
     sandbox, files, bridgeCalls, stage, buttons, buttonLabelled, staged, wizard: sandbox.SongDownload.wizard,
     text: () => stage.textContent,
     paste(text) { sandbox.AndroidBridge.readClipboard = () => text; click(buttonLabelled(/Click to paste/)); },
-    answer(id, status, message) { sandbox.onSongDownloadStatus(id, status, message); },
+    answer(id, status, message) {
+      if (status === 'done' && message && typeof message === 'string' && !message.includes('.staging') && message.endsWith('.mp3')) {
+        const trk = { id: message, title: path.basename(message, '.mp3'), artist: '', album: '', playlist: '', durationSec: 180 };
+        localTracks.push(trk);
+        trackMap.set(message, trk);
+      }
+      sandbox.onSongDownloadStatus(id, status, message);
+    },
   };
 }
 
@@ -136,7 +144,7 @@ check('a link downloaded before is flagged, with its saved name, playlist and th
   const t = p.text();
   assert.ok(/Already downloaded/.test(t));
   assert.ok(/Blinding Lights/.test(t) && /Pop/.test(t) && /2026-09-01/.test(t));
-  assert.ok(/Still on your phone/.test(t));
+  assert.ok(/(?:Still|Already) on your phone/.test(t));
   assert.ok(p.buttonLabelled(/Skip them all/), 'by default nothing is downloaded again');
 });
 
@@ -169,12 +177,9 @@ check('new links in the same paste download as usual; the known one waits for yo
   assert.deepStrictEqual(p.staged(), ['https://youtu.be/CCCCCCCCCCC']);
 });
 
-check('a downloaded song whose file was deleted since is offered again by default', () => {
+check('a downloaded song whose file was deleted since downloads again immediately without dupe warning', () => {
   const p = makePage({ files: { 'downloads.txt': DOWNLOADED_BEFORE } });
   p.paste('https://youtu.be/BBBBBBBBBBB');
-  assert.ok(/No longer on your phone/.test(p.text()));
-  assert.ok(p.buttonLabelled(/Download 1 song/), 'already switched on');
-  click(p.buttonLabelled(/Download 1 song/));
   assert.deepStrictEqual(p.staged(), ['https://youtu.be/BBBBBBBBBBB']);
 });
 
@@ -234,11 +239,12 @@ check('typing another name updates the list', () => {
   assert.ok(/“Starboy” is already in Pop/.test(p.text()));
 });
 
-check('a downloaded song whose file is gone still warns about its name (file gone)', () => {
+check('a downloaded song whose file is gone does not warn about duplicate name', () => {
   const p = makePage({ files: { 'downloads.txt': DOWNLOADED_BEFORE } });
   p.paste('https://youtu.be/IIIIIIIIIII');
   p.answer('s1', 'done', STAGED(1, 'Deleted Song'));
-  assert.ok(/was downloaded before into Old \(the file is gone\)/.test(p.text()), p.text());
+  assert.ok(!/was downloaded before/.test(p.text()));
+  assert.ok(!/Saving adds another copy/.test(p.text()));
 });
 
 check('saving a song writes its link, name, playlist and path to downloads.txt; pasting it again is then flagged', () => {

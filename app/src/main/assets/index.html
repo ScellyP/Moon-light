@@ -1162,6 +1162,107 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 .dupe-link-btn:hover { color: var(--text); }
 
+/* Playlist Share, Unlock, and Success Dialogs */
+#share-dialog-layer, #share-unlock-dialog-layer, #share-success-dialog-layer {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#share-dialog-layer.hidden, #share-unlock-dialog-layer.hidden, #share-success-dialog-layer.hidden { display: none; }
+#share-dialog-box, #share-unlock-box, #share-success-box {
+  width: 100%; max-width: 380px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 18px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+#share-dialog-header, #share-unlock-header, #share-success-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+#share-dialog-icon, #share-unlock-icon, #share-success-icon {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: color-mix(in srgb, var(--sp-accent, var(--accent)) 18%, transparent);
+  color: var(--sp-accent, var(--accent));
+}
+#share-dialog-icon .ico, #share-unlock-icon .ico, #share-success-icon .ico { width: 22px; height: 22px; }
+#share-dialog-titles, #share-unlock-titles, #share-success-titles { flex: 1; min-width: 0; }
+#share-dialog-title, #share-unlock-title, #share-success-title {
+  margin: 0; font: 700 18px/1.2 var(--font-ui); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#share-dialog-sub, #share-unlock-sub, #share-success-sub {
+  margin-top: 3px; font: 600 13px/1.3 var(--font-ui);
+  color: var(--sp-sub, var(--muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.share-field-group { margin-bottom: 15px; }
+.share-field-label { display: block; font: 700 11.5px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .5px; color: var(--sp-sub, var(--muted)); margin-bottom: 8px; }
+.share-method-cards { display: flex; flex-direction: column; gap: 8px; }
+.share-method-card {
+  display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1.5px solid transparent; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.share-method-card input[type="radio"] { display: none; }
+.share-method-radio {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--text) 35%, transparent);
+  flex: none; display: flex; align-items: center; justify-content: center; transition: border-color .15s;
+}
+.share-method-card.active {
+  background: color-mix(in srgb, var(--sp-accent, var(--accent)) 12%, transparent);
+  border-color: var(--sp-accent, var(--accent));
+}
+.share-method-card.active .share-method-radio {
+  border-color: var(--sp-accent, var(--accent));
+}
+.share-method-card.active .share-method-radio::after {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--sp-accent, var(--accent));
+}
+.share-method-info { display: flex; flex-direction: column; min-width: 0; }
+.share-method-name { font: 700 13.5px/1.2 var(--font-ui); color: var(--text); }
+.share-method-desc { font: 400 11.5px/1.35 var(--font-ui); color: var(--sp-sub, var(--muted)); margin-top: 2px; }
+.share-input-wrap { position: relative; display: flex; align-items: center; }
+.share-text-input {
+  width: 100%; height: 42px; padding: 0 13px; border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text); font: 500 14px/1 var(--font-ui); outline: none; transition: border-color .15s;
+  box-sizing: border-box;
+}
+.share-text-input:focus { border-color: var(--sp-accent, var(--accent)); }
+.share-field-hint { display: block; font: 400 11px/1.3 var(--font-ui); color: var(--sp-sub, var(--muted)); margin-top: 5px; }
+.share-link-box {
+  width: 100%; padding: 11px 13px; border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--sp-accent, var(--accent)); font: 600 13px/1.4 var(--font-mono, monospace);
+  word-break: break-all; user-select: all; -webkit-user-select: all; box-sizing: border-box; margin-bottom: 12px;
+}
+#share-dialog-actions, #share-unlock-actions, #share-success-actions {
+  display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px;
+}
+.share-btn-cancel, .share-btn-submit, .share-btn-secondary {
+  min-height: 42px; border-radius: 999px; font: 700 13.5px/1 var(--font-ui); cursor: pointer;
+  transition: transform .15s ease, background-color .15s ease;
+}
+.share-btn-cancel {
+  padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+  background: none; color: var(--text);
+}
+.share-btn-cancel:active { transform: scale(.96); }
+.share-btn-submit {
+  padding: 0 20px; border: none;
+  background: var(--sp-accent, var(--accent)); color: var(--sp-ink, var(--accent-ink));
+}
+.share-btn-submit:active { transform: scale(.96); }
+.share-btn-secondary {
+  padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+  background: none; color: var(--text);
+}
+.share-btn-secondary:active { transform: scale(.96); }
+
 /* "Delete chapters" popup: asks for a chapter number (reader.js). Same look as the message dialog. */
 #delete-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -3069,8 +3170,8 @@ html.kb-open .sm-body { padding-bottom: 8px; }
 #sp-album-cover { position: relative; cursor: pointer; }
 #sp-album-cover::after { content: ""; position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.55) center / 16px no-repeat
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4L19.2 8.8a2.1 2.1 0 0 0 0-3L18.2 4.8a2.1 2.1 0 0 0-3 0L4 16z'/%3E%3C/svg%3E"); }
-.sm-toast { position: fixed; left: 50%; bottom: calc(96px + var(--nav-bar-height, 0px)); transform: translate(-50%, 12px); z-index: 95; max-width: 86%; padding: 11px 18px; border-radius: 999px;
-  background: var(--text); color: var(--bg); font: 600 13.5px/1.3 var(--font-ui); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.sm-toast { position: fixed; left: 50%; bottom: calc(96px + var(--nav-bar-height, 0px)); transform: translate(-50%, 12px); z-index: 95; max-width: min(88%, 380px); padding: 11px 18px; border-radius: 14px;
+  background: var(--text); color: var(--bg); font: 600 13.5px/1.35 var(--font-ui); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
 .sm-toast.show { opacity: 1; transform: translate(-50%, 0); }
 #audio-queue li.reveal { animation: smReveal 1.6s ease both; }
 @keyframes smReveal { 0%, 60% { background: color-mix(in srgb, var(--accent) 30%, transparent); } 100% { background: transparent; } }
@@ -3819,6 +3920,105 @@ body.settings-open #srch-input { pointer-events: none; }
     <div id="dupe-dialog-footer" class="hidden">
       <button id="dupe-btn-keep-all" type="button" class="dupe-link-btn">Keep all remaining</button>
       <button id="dupe-btn-move-all" type="button" class="dupe-link-btn">Move all remaining</button>
+    </div>
+  </div>
+</div>
+
+<div id="share-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+  <div id="share-dialog-box">
+    <div id="share-dialog-header">
+      <div id="share-dialog-icon"><svg class="ico"><use href="#i-share"/></svg></div>
+      <div id="share-dialog-titles">
+        <h3 id="share-dialog-title">Share playlist</h3>
+        <div id="share-dialog-sub"></div>
+      </div>
+      <button type="button" class="sp-icon-btn" id="share-dialog-close" aria-label="Close dialog"><svg class="ico"><use href="#i-close"/></svg></button>
+    </div>
+
+    <div id="share-dialog-content">
+      <div class="share-field-group">
+        <label class="share-field-label">Share method</label>
+        <div class="share-method-cards">
+          <label class="share-method-card active" id="share-method-anondrop-card">
+            <input type="radio" name="share-method" id="share-method-anondrop" value="anondrop" checked>
+            <div class="share-method-radio"></div>
+            <div class="share-method-info">
+              <span class="share-method-name">AnonDrop cloud link</span>
+              <span class="share-method-desc">Generate an anonymous cloud link. No account, email, or login required to download.</span>
+            </div>
+          </label>
+          <label class="share-method-card" id="share-method-direct-card">
+            <input type="radio" name="share-method" id="share-method-direct" value="direct">
+            <div class="share-method-radio"></div>
+            <div class="share-method-info">
+              <span class="share-method-name">Direct file (.moonlight)</span>
+              <span class="share-method-desc">Share complete package file directly via Nearby Share, Bluetooth, chat, or Drive.</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="share-field-group">
+        <label class="share-field-label" for="share-dialog-password">Password protection (optional)</label>
+        <div class="share-input-wrap">
+          <input type="password" id="share-dialog-password" class="share-text-input" placeholder="Leave empty for no password" autocomplete="off" spellcheck="false">
+        </div>
+        <span class="share-field-hint">AES-256-GCM encrypted. Passwords are never stored or included in share links.</span>
+      </div>
+    </div>
+
+    <div id="share-dialog-actions">
+      <button type="button" id="share-dialog-cancel" class="share-btn-cancel">Cancel</button>
+      <button type="button" id="share-dialog-submit" class="share-btn-submit">Share</button>
+    </div>
+  </div>
+</div>
+
+<div id="share-unlock-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="share-unlock-title">
+  <div id="share-unlock-box">
+    <div id="share-unlock-header">
+      <div id="share-unlock-icon"><svg class="ico"><use href="#i-info"/></svg></div>
+      <div id="share-unlock-titles">
+        <h3 id="share-unlock-title">Encrypted playlist</h3>
+        <div id="share-unlock-sub">Password required</div>
+      </div>
+      <button type="button" class="sp-icon-btn" id="share-unlock-close" aria-label="Close dialog"><svg class="ico"><use href="#i-close"/></svg></button>
+    </div>
+
+    <div id="share-unlock-content">
+      <p id="share-unlock-prompt" style="margin: 0 0 12px; font-size: 13.5px; line-height: 1.4; color: var(--sp-sub, var(--muted));">This shared playlist is password-protected. Enter password to decrypt and import:</p>
+      <div class="share-input-wrap">
+        <input type="password" id="share-unlock-password" class="share-text-input" placeholder="Enter password" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div id="share-unlock-actions">
+      <button type="button" id="share-unlock-cancel" class="share-btn-cancel">Cancel</button>
+      <button type="button" id="share-unlock-submit" class="share-btn-submit">Unlock & Import</button>
+    </div>
+  </div>
+</div>
+
+<div id="share-success-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="share-success-title">
+  <div id="share-success-box">
+    <div id="share-success-header">
+      <div id="share-success-icon"><svg class="ico"><use href="#i-check"/></svg></div>
+      <div id="share-success-titles">
+        <h3 id="share-success-title">AnonDrop link ready</h3>
+        <div id="share-success-sub">Link copied to clipboard</div>
+      </div>
+      <button type="button" class="sp-icon-btn" id="share-success-close" aria-label="Close dialog"><svg class="ico"><use href="#i-close"/></svg></button>
+    </div>
+
+    <div id="share-success-content">
+      <div id="share-success-url" class="share-link-box"></div>
+      <span class="share-field-hint">Anyone with this link can import this playlist into Moonlight or download it in any browser.</span>
+    </div>
+
+    <div id="share-success-actions">
+      <button type="button" id="share-success-copy" class="share-btn-secondary">Copy link</button>
+      <button type="button" id="share-success-share" class="share-btn-secondary">Share...</button>
+      <button type="button" id="share-success-done" class="share-btn-submit">Done</button>
     </div>
   </div>
 </div>

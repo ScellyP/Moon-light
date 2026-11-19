@@ -1,30 +1,28 @@
-/* Moonlight — Playlist Sharing & AnonDrop anonymous integration (playlist-share.js)
+/* Moonlight — Playlist Sharing & AnonDrop Integration (playlist-share.js)
    - AnonDrop anonymous cloud integration: chunked upload & instant direct-download link (no login/accounts required).
-   - Filebin fallback link detection and download for backward compatibility.
-   - Share Playlist: packages songs, playlist metadata, and cover into an archive.
-   - Password-protected sharing: AES-256 encryption, password never leaked in link.
-   - Automatic playlist detection in Downloads tab: detects AnonDrop & Filebin links and imports.
+   - Dedicated Moonlight custom dialogs for Share, Unlock (password), and Success (copy & share link) actions.
+   - Streamed ZIP packaging of songs, playlist metadata, and covers.
+   - Password-protected sharing with AES-256-GCM encryption (password never stored or sent in URLs).
+   - Automatic shared playlist detection in Downloads tab: detects AnonDrop links and imports seamlessly.
    - Sharing settings: gated by playlistSharing and anonDropSharing toggles.
 */
 (function (root) {
   'use strict';
 
   var ANONDROP_REGEX = /https?:\/\/(?:www\.)?anondrop\.net\/([a-zA-Z0-9]+)(?:\/([^\s/?#]+))?/i;
-  var FILEBIN_REGEX = /https?:\/\/filebin\.net\/([a-zA-Z0-9_-]+)(?:\/([^\s/?#]+))?/i;
   var lastImportSource = '';
+  var activeShareKey = '';
+  var activeShareName = '';
+  var activeUnlockSource = '';
+  var activeShareUrl = '';
 
   function isAnonDropUrl(url) {
     if (!url || typeof url !== 'string') return false;
     return ANONDROP_REGEX.test(url.trim());
   }
 
-  function isFilebinUrl(url) {
-    if (!url || typeof url !== 'string') return false;
-    return FILEBIN_REGEX.test(url.trim());
-  }
-
   function isRecognizedShareUrl(url) {
-    return isAnonDropUrl(url) || isFilebinUrl(url);
+    return isAnonDropUrl(url);
   }
 
   function isSharingEnabled() {
@@ -39,14 +37,6 @@
     var a = (this && this.NovelAudio) || (typeof window !== 'undefined' ? window.NovelAudio : null) || (typeof global !== 'undefined' ? global.NovelAudio : null) || root.NovelAudio;
     if (a && typeof a.getSetting === 'function') {
       return a.getSetting('anonDropSharing') !== false;
-    }
-    return true;
-  }
-
-  function isFilebinEnabled() {
-    var a = (this && this.NovelAudio) || (typeof window !== 'undefined' ? window.NovelAudio : null) || (typeof global !== 'undefined' ? global.NovelAudio : null) || root.NovelAudio;
-    if (a && typeof a.getSetting === 'function') {
-      return a.getSetting('filebinSharing') !== false;
     }
     return true;
   }
@@ -96,29 +86,99 @@
     return '';
   }
 
-  function shareCurrentPlaylist(playlistKey, playlistName) {
+  function isOpen() {
+    if (typeof document === 'undefined') return false;
+    var d1 = document.getElementById('share-dialog-layer');
+    var d2 = document.getElementById('share-unlock-dialog-layer');
+    var d3 = document.getElementById('share-success-dialog-layer');
+    return (d1 && !d1.classList.contains('hidden')) ||
+           (d2 && !d2.classList.contains('hidden')) ||
+           (d3 && !d3.classList.contains('hidden'));
+  }
+
+  function close() {
+    closeShareDialog();
+    closeUnlockDialog(true);
+    closeSuccessDialog();
+  }
+
+  /* ---- Share Dialog ---- */
+  function openShareDialog(playlistKey, playlistName) {
     if (!isSharingEnabled()) {
       showToast('Playlist sharing is disabled in Settings');
       return;
     }
 
     var key = playlistKey || getPlaylistKey();
-    var name = playlistName || getPlaylistDisplayName() || key;
     if (!key || key === 'all' || key === '@liked' || key === '@recent') {
       showToast('No playlist selected to share');
       return;
     }
 
-    // Ask user for optional password
+    var rawName = playlistName || getPlaylistDisplayName() || key;
+    var cleanName = String(rawName).replace(/^(?:name:|list:)/, '').trim() || 'Playlist';
+    activeShareKey = key;
+    activeShareName = cleanName;
+
+    if (typeof document !== 'undefined' && document.getElementById('share-dialog-layer')) {
+      var count = 0;
+      try {
+        var sl = (typeof window !== 'undefined' ? window.SongLibrary : null)
+          || (typeof global !== 'undefined' ? global.SongLibrary : null)
+          || root.SongLibrary;
+        if (sl && typeof sl.getPlaylistSongs === 'function') {
+          var songs = sl.getPlaylistSongs(key);
+          if (Array.isArray(songs)) count = songs.length;
+        }
+      } catch (_) {}
+
+      var subText = cleanName;
+      if (count > 0) subText += ' • ' + count + (count === 1 ? ' song' : ' songs');
+      var subEl = document.getElementById('share-dialog-sub');
+      if (subEl) subEl.textContent = subText;
+
+      var passInput = document.getElementById('share-dialog-password');
+      if (passInput) passInput.value = '';
+
+      var anonAvailable = isAnonDropEnabled();
+      var anonCard = document.getElementById('share-method-anondrop-card');
+      var directCard = document.getElementById('share-method-direct-card');
+      var anonRadio = document.getElementById('share-method-anondrop');
+      var directRadio = document.getElementById('share-method-direct');
+
+      if (!anonAvailable) {
+        if (anonCard) anonCard.style.display = 'none';
+        if (directRadio) directRadio.checked = true;
+        if (directCard) directCard.classList.add('active');
+        if (anonCard) anonCard.classList.remove('active');
+      } else {
+        if (anonCard) anonCard.style.display = '';
+        if (anonRadio) anonRadio.checked = true;
+        if (anonCard) anonCard.classList.add('active');
+        if (directCard) directCard.classList.remove('active');
+      }
+
+      closeUnlockDialog(false);
+      closeSuccessDialog();
+      var layer = document.getElementById('share-dialog-layer');
+      if (layer) {
+        layer.classList.remove('hidden');
+        if (passInput) {
+          try { passInput.focus({ preventScroll: true }); } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    // Headless / browser fallback without custom DOM
     var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
     var password = '';
     if (promptFn) {
-      var passInput = promptFn('Set a password for playlist "' + name + '" (optional, leave blank for no password):', '');
-      if (passInput === null) return; // User cancelled
-      password = passInput.trim();
+      var passInputVal = promptFn('Set a password for playlist "' + cleanName + '" (optional, leave blank for no password):', '');
+      if (passInputVal === null) return;
+      password = passInputVal.trim();
     }
 
-    // Check if cloud sharing is preferred/available (AnonDrop primary, Filebin fallback)
     var method = 'direct';
     if (isAnonDropEnabled()) {
       var confirmFn = typeof window !== 'undefined' && window.confirm ? window.confirm : null;
@@ -128,25 +188,37 @@
       } else {
         method = 'anondrop';
       }
-    } else if (isFilebinEnabled()) {
-      var confirmFn = typeof window !== 'undefined' && window.confirm ? window.confirm : null;
-      if (confirmFn) {
-        var useFilebin = confirmFn('Share via Filebin cloud link?\n(Click OK for Filebin link [expires in 6 days], or Cancel to share file directly)');
-        if (useFilebin) method = 'filebin';
-      }
     }
 
     startShare(key, password, method);
   }
 
+  function closeShareDialog() {
+    if (typeof document === 'undefined') return;
+    var layer = document.getElementById('share-dialog-layer');
+    if (layer) layer.classList.add('hidden');
+  }
+
+  function submitShareDialog() {
+    if (typeof document === 'undefined') return;
+    var passInput = document.getElementById('share-dialog-password');
+    var password = passInput ? passInput.value.trim() : '';
+    var directRadio = document.getElementById('share-method-direct');
+    var method = (directRadio && directRadio.checked) ? 'direct' : 'anondrop';
+    var key = activeShareKey;
+    closeShareDialog();
+    startShare(key, password, method);
+  }
+
+  function shareCurrentPlaylist(playlistKey, playlistName) {
+    openShareDialog(playlistKey, playlistName);
+  }
+
   function startShare(playlistKey, password, method) {
     var b = root.AndroidBridge || (typeof window !== 'undefined' ? window.AndroidBridge : null);
-    var toastMsg = 'Packaging playlist files...';
-    if (method === 'anondrop') {
-      toastMsg = 'Packaging and uploading to AnonDrop (see notification for progress)...';
-    } else if (method === 'filebin') {
-      toastMsg = 'Packaging and uploading to Filebin (see notification for progress)...';
-    }
+    var toastMsg = method === 'anondrop'
+      ? 'Packaging and uploading to AnonDrop (see notification for progress)...'
+      : 'Packaging playlist files...';
     showToast(toastMsg);
 
     if (b && typeof b.sharePlaylistPackage === 'function') {
@@ -163,14 +235,7 @@
             success: true,
             method: 'anondrop',
             shareUrl: 'https://anondrop.net/mockid123',
-            isEncrypted: !!password,
-            songCount: 1
-          });
-        } else if (method === 'filebin') {
-          onPlaylistShareComplete({
-            success: true,
-            method: 'filebin',
-            shareUrl: 'https://filebin.net/mockbin123/' + encodeURIComponent(playlistKey) + '.moonlight',
+            playlistName: activeShareName || playlistKey,
             isEncrypted: !!password,
             songCount: 1
           });
@@ -179,12 +244,160 @@
             success: true,
             method: 'direct',
             filePath: '/storage/emulated/0/Download/' + encodeURIComponent(playlistKey) + '.moonlight',
+            playlistName: activeShareName || playlistKey,
             isEncrypted: !!password,
             songCount: 1
           });
         }
       }, 50);
     }
+  }
+
+  /* ---- Unlock Dialog (Password Entry) ---- */
+  function openUnlockDialog(source) {
+    activeUnlockSource = source || lastImportSource || '';
+
+    if (typeof document !== 'undefined' && document.getElementById('share-unlock-dialog-layer')) {
+      var passInput = document.getElementById('share-unlock-password');
+      if (passInput) passInput.value = '';
+
+      var subEl = document.getElementById('share-unlock-sub');
+      if (subEl) {
+        var srcLabel = activeUnlockSource;
+        if (srcLabel.length > 32) {
+          srcLabel = '...' + srcLabel.slice(-28);
+        }
+        subEl.textContent = srcLabel || 'Password required';
+      }
+
+      closeShareDialog();
+      closeSuccessDialog();
+      var layer = document.getElementById('share-unlock-dialog-layer');
+      if (layer) {
+        layer.classList.remove('hidden');
+        if (passInput) {
+          try { passInput.focus({ preventScroll: true }); } catch (_) {}
+        }
+      }
+      return;
+    }
+
+    // Headless / fallback prompt
+    var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
+    if (promptFn) {
+      var pass = promptFn('This shared playlist is encrypted. Enter password to unlock:', '');
+      if (pass !== null && pass.trim().length > 0) {
+        var ps = (typeof window !== 'undefined' ? window.PlaylistShare : null) || api;
+        (ps && ps.importFromUrl ? ps.importFromUrl : importFromUrl)(activeUnlockSource, pass.trim());
+        return;
+      }
+    }
+    showToast('Playlist import cancelled: password required');
+  }
+
+  function closeUnlockDialog(cancelled) {
+    if (typeof document === 'undefined') return;
+    var layer = document.getElementById('share-unlock-dialog-layer');
+    if (layer) layer.classList.add('hidden');
+    if (cancelled) {
+      showToast('Playlist import cancelled: password required');
+    }
+  }
+
+  function submitUnlockDialog() {
+    if (typeof document === 'undefined') return;
+    var passInput = document.getElementById('share-unlock-password');
+    var pass = passInput ? passInput.value.trim() : '';
+    if (!pass) {
+      showToast('Please enter a password');
+      if (passInput) {
+        try { passInput.focus({ preventScroll: true }); } catch (_) {}
+      }
+      return;
+    }
+    var source = activeUnlockSource;
+    closeUnlockDialog(false);
+    importFromUrl(source, pass);
+  }
+
+  /* ---- Success Dialog (AnonDrop Link Ready) ---- */
+  function openSuccessDialog(shareUrl, playlistName) {
+    activeShareUrl = shareUrl || '';
+    if (playlistName) activeShareName = String(playlistName).replace(/^(?:name:|list:)/, '');
+
+    // Copy to clipboard immediately
+    var nav = (typeof window !== 'undefined' ? window.navigator : null)
+      || (typeof navigator !== 'undefined' ? navigator : null);
+    if (activeShareUrl && nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+      nav.clipboard.writeText(activeShareUrl).catch(function () {});
+    }
+
+    if (typeof document !== 'undefined' && document.getElementById('share-success-dialog-layer')) {
+      var urlBox = document.getElementById('share-success-url');
+      if (urlBox) urlBox.textContent = activeShareUrl;
+
+      var subEl = document.getElementById('share-success-sub');
+      if (subEl) subEl.textContent = 'Link copied to clipboard';
+
+      closeShareDialog();
+      closeUnlockDialog(false);
+      var layer = document.getElementById('share-success-dialog-layer');
+      if (layer) layer.classList.remove('hidden');
+      return;
+    }
+
+    // Headless / fallback
+    showToast('AnonDrop link ready! Recipient can download without an account.');
+    var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
+    if (promptFn && activeShareUrl) {
+      promptFn('AnonDrop Share Link (copy & send):', activeShareUrl);
+    }
+  }
+
+  function closeSuccessDialog() {
+    if (typeof document === 'undefined') return;
+    var layer = document.getElementById('share-success-dialog-layer');
+    if (layer) layer.classList.add('hidden');
+  }
+
+  function copySuccessLink() {
+    if (!activeShareUrl) return;
+    var copyBtn = document.getElementById('share-success-copy');
+    var nav = (typeof window !== 'undefined' ? window.navigator : null)
+      || (typeof navigator !== 'undefined' ? navigator : null);
+    if (nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+      nav.clipboard.writeText(activeShareUrl).then(function () {
+        showToast('Share link copied to clipboard');
+      }).catch(function () {
+        showToast('Share link: ' + activeShareUrl);
+      });
+    } else {
+      showToast('Share link: ' + activeShareUrl);
+    }
+
+    if (copyBtn) {
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function () {
+        if (copyBtn) copyBtn.textContent = 'Copy link';
+      }, 1800);
+    }
+  }
+
+  function shareSuccessLink() {
+    if (!activeShareUrl) return;
+    var b = root.AndroidBridge || (typeof window !== 'undefined' ? window.AndroidBridge : null);
+    if (b && typeof b.shareText === 'function') {
+      b.shareText(activeShareUrl);
+      return;
+    }
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      navigator.share({
+        title: activeShareName || 'Shared playlist',
+        url: activeShareUrl
+      }).catch(function () {});
+      return;
+    }
+    copySuccessLink();
   }
 
   function importFromUrl(url, password) {
@@ -215,21 +428,7 @@
     var res = typeof data === 'string' ? JSON.parse(data) : data;
     if (res.success) {
       if (res.method === 'anondrop') {
-        var msg = 'AnonDrop link ready! Recipient can download without an account.';
-        if (res.isEncrypted) msg += ' Password protection active.';
-        showToast(msg);
-        var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
-        if (promptFn && res.shareUrl) {
-          promptFn('AnonDrop Share Link (copy & send):', res.shareUrl);
-        }
-      } else if (res.method === 'filebin') {
-        var msg = 'Filebin link ready! Note: Links expire in 6 days.';
-        if (res.isEncrypted) msg += ' Password protection active.';
-        showToast(msg);
-        var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
-        if (promptFn && res.shareUrl) {
-          promptFn('Filebin Share Link (copy & send):', res.shareUrl);
-        }
+        openSuccessDialog(res.shareUrl, res.playlistName);
       } else {
         showToast('Playlist package ready to share!');
       }
@@ -241,24 +440,15 @@
   function onPlaylistImportComplete(data) {
     var res = typeof data === 'string' ? JSON.parse(data) : data;
     if (res.requiresPassword) {
-      var promptFn = typeof window !== 'undefined' && window.prompt ? window.prompt : null;
-      if (promptFn) {
-        var pass = promptFn('This shared playlist is encrypted. Enter password to unlock:', '');
-        if (pass !== null && pass.trim().length > 0) {
-          var source = res.source || res.filePath || lastImportSource || '';
-          var ps = (typeof window !== 'undefined' ? window.PlaylistShare : null) || api;
-          (ps && ps.importFromUrl ? ps.importFromUrl : importFromUrl)(source, pass.trim());
-          return;
-        }
-      }
-      showToast('Playlist import cancelled: password required');
+      openUnlockDialog(res.source || res.filePath || lastImportSource);
       return;
     }
 
     if (res.success) {
-      var name = res.playlistName || 'Shared playlist';
+      var rawName = res.playlistName || 'Shared playlist';
+      var cleanName = String(rawName).replace(/^(?:name:|list:)/, '');
       var count = res.songCount || 0;
-      showToast('Imported "' + name + '" with ' + count + ' songs!');
+      showToast('Imported "' + cleanName + '" with ' + count + ' songs!');
       if (root.SpotifyUI && typeof root.SpotifyUI.refreshPlaylists === 'function') {
         root.SpotifyUI.refreshPlaylists();
       }
@@ -269,6 +459,8 @@
 
   function initUI() {
     if (typeof document === 'undefined') return;
+
+    // Album header share button
     var shareBtn = document.getElementById('sp-album-share');
     if (shareBtn && !shareBtn._shareBound) {
       shareBtn._shareBound = true;
@@ -277,20 +469,162 @@
         e.stopPropagation();
         var key = getPlaylistKey();
         var title = getPlaylistDisplayName();
-        shareCurrentPlaylist(key, title);
+        openShareDialog(key, title);
+      });
+    }
+
+    // Share dialog controls
+    var shareClose = document.getElementById('share-dialog-close');
+    var shareCancel = document.getElementById('share-dialog-cancel');
+    var shareSubmit = document.getElementById('share-dialog-submit');
+    var shareLayer = document.getElementById('share-dialog-layer');
+    var sharePass = document.getElementById('share-dialog-password');
+
+    if (shareClose && !shareClose._bound) {
+      shareClose._bound = true;
+      shareClose.addEventListener('click', closeShareDialog);
+    }
+    if (shareCancel && !shareCancel._bound) {
+      shareCancel._bound = true;
+      shareCancel.addEventListener('click', closeShareDialog);
+    }
+    if (shareSubmit && !shareSubmit._bound) {
+      shareSubmit._bound = true;
+      shareSubmit.addEventListener('click', submitShareDialog);
+    }
+    if (shareLayer && !shareLayer._bound) {
+      shareLayer._bound = true;
+      shareLayer.addEventListener('click', function (e) {
+        if (e.target === shareLayer) closeShareDialog();
+      });
+    }
+    if (sharePass && !sharePass._bound) {
+      sharePass._bound = true;
+      sharePass.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitShareDialog();
+        }
+      });
+    }
+
+    // Method selection cards
+    var anonCard = document.getElementById('share-method-anondrop-card');
+    var directCard = document.getElementById('share-method-direct-card');
+    var anonRadio = document.getElementById('share-method-anondrop');
+    var directRadio = document.getElementById('share-method-direct');
+
+    function syncMethodCards() {
+      if (anonRadio && anonRadio.checked) {
+        if (anonCard) anonCard.classList.add('active');
+        if (directCard) directCard.classList.remove('active');
+      } else if (directRadio && directRadio.checked) {
+        if (directCard) directCard.classList.add('active');
+        if (anonCard) anonCard.classList.remove('active');
+      }
+    }
+
+    if (anonRadio && !anonRadio._bound) {
+      anonRadio._bound = true;
+      anonRadio.addEventListener('change', syncMethodCards);
+    }
+    if (directRadio && !directRadio._bound) {
+      directRadio._bound = true;
+      directRadio.addEventListener('change', syncMethodCards);
+    }
+    if (anonCard && !anonCard._bound) {
+      anonCard._bound = true;
+      anonCard.addEventListener('click', function () {
+        if (anonRadio) { anonRadio.checked = true; syncMethodCards(); }
+      });
+    }
+    if (directCard && !directCard._bound) {
+      directCard._bound = true;
+      directCard.addEventListener('click', function () {
+        if (directRadio) { directRadio.checked = true; syncMethodCards(); }
+      });
+    }
+
+    // Unlock dialog controls
+    var unlockClose = document.getElementById('share-unlock-close');
+    var unlockCancel = document.getElementById('share-unlock-cancel');
+    var unlockSubmit = document.getElementById('share-unlock-submit');
+    var unlockLayer = document.getElementById('share-unlock-dialog-layer');
+    var unlockPass = document.getElementById('share-unlock-password');
+
+    if (unlockClose && !unlockClose._bound) {
+      unlockClose._bound = true;
+      unlockClose.addEventListener('click', function () { closeUnlockDialog(true); });
+    }
+    if (unlockCancel && !unlockCancel._bound) {
+      unlockCancel._bound = true;
+      unlockCancel.addEventListener('click', function () { closeUnlockDialog(true); });
+    }
+    if (unlockSubmit && !unlockSubmit._bound) {
+      unlockSubmit._bound = true;
+      unlockSubmit.addEventListener('click', submitUnlockDialog);
+    }
+    if (unlockLayer && !unlockLayer._bound) {
+      unlockLayer._bound = true;
+      unlockLayer.addEventListener('click', function (e) {
+        if (e.target === unlockLayer) closeUnlockDialog(true);
+      });
+    }
+    if (unlockPass && !unlockPass._bound) {
+      unlockPass._bound = true;
+      unlockPass.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitUnlockDialog();
+        }
+      });
+    }
+
+    // Success dialog controls
+    var successClose = document.getElementById('share-success-close');
+    var successDone = document.getElementById('share-success-done');
+    var successCopy = document.getElementById('share-success-copy');
+    var successShare = document.getElementById('share-success-share');
+    var successLayer = document.getElementById('share-success-dialog-layer');
+
+    if (successClose && !successClose._bound) {
+      successClose._bound = true;
+      successClose.addEventListener('click', closeSuccessDialog);
+    }
+    if (successDone && !successDone._bound) {
+      successDone._bound = true;
+      successDone.addEventListener('click', closeSuccessDialog);
+    }
+    if (successCopy && !successCopy._bound) {
+      successCopy._bound = true;
+      successCopy.addEventListener('click', copySuccessLink);
+    }
+    if (successShare && !successShare._bound) {
+      successShare._bound = true;
+      successShare.addEventListener('click', shareSuccessLink);
+    }
+    if (successLayer && !successLayer._bound) {
+      successLayer._bound = true;
+      successLayer.addEventListener('click', function (e) {
+        if (e.target === successLayer) closeSuccessDialog();
       });
     }
   }
 
   var api = {
     ANONDROP_REGEX: ANONDROP_REGEX,
-    FILEBIN_REGEX: FILEBIN_REGEX,
     isAnonDropUrl: isAnonDropUrl,
-    isFilebinUrl: isFilebinUrl,
     isRecognizedShareUrl: isRecognizedShareUrl,
     isSharingEnabled: isSharingEnabled,
     isAnonDropEnabled: isAnonDropEnabled,
-    isFilebinEnabled: isFilebinEnabled,
+    openShareDialog: openShareDialog,
+    closeShareDialog: closeShareDialog,
+    openUnlockDialog: openUnlockDialog,
+    closeUnlockDialog: closeUnlockDialog,
+    openSuccessDialog: openSuccessDialog,
+    closeSuccessDialog: closeSuccessDialog,
+    isOpen: isOpen,
+    close: close,
     shareCurrentPlaylist: shareCurrentPlaylist,
     startShare: startShare,
     importFromUrl: importFromUrl,
