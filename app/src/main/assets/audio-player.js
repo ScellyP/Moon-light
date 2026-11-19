@@ -484,8 +484,28 @@ window.NovelAudio = (function () {
       return out;
     },
 
-    // After a scan: move the copies out (see above). Quietly does nothing outside the Android app or when switched off.
-    removeDuplicates() {
+    _dupeQueue: [],
+    _dupeIndex: 0,
+    _dupeMovedCount: 0,
+
+    isDuplicateDialogOpen() {
+      const layer = typeof document !== 'undefined' && document.getElementById('dupe-dialog-layer');
+      return !!(layer && !layer.classList.contains('hidden'));
+    },
+
+    closeDuplicateDialog() {
+      const layer = typeof document !== 'undefined' && document.getElementById('dupe-dialog-layer');
+      if (layer) layer.classList.add('hidden');
+      this._dupeQueue = [];
+      this._dupeIndex = 0;
+      if (this._dupeMovedCount > 0 && window.SongMenu && window.SongMenu.toast) {
+        window.SongMenu.toast(this._dupeMovedCount === 1 ? 'Moved 1 duplicate song' : 'Moved ' + this._dupeMovedCount + ' duplicate songs');
+      }
+      this._dupeMovedCount = 0;
+    },
+
+    // After a scan: prompts the user before moving duplicate songs to Moonlight/Duplicates.
+    removeDuplicates(opts) {
       const b = window.AndroidBridge;
       if (!b || typeof b.songsMergeDuplicates !== 'function') return 0;
       if (state.features.appSettings && state.features.appSettings.removeDuplicates === false) return 0;     // switched off in Settings
@@ -493,18 +513,136 @@ window.NovelAudio = (function () {
       const found = this.findDuplicates(state.tracks);
       if (!found.length) return 0;
       const pairs = [];
-      found.forEach(g => g.drop.forEach(d => { if (d.id !== state.currentTrackId && pairs.length < 100) pairs.push({ keep: g.keep.path, drop: d.path, keepId: g.keep.id, dropId: d.id }); }));
+      found.forEach(g => g.drop.forEach(d => {
+        if (d.id !== state.currentTrackId && pairs.length < 100) {
+          const keepFolder = g.keep.playlist || (g.keep.path && g.keep.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
+          const dropFolder = d.playlist || (d.path && d.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
+          pairs.push({
+            keep: g.keep.path,
+            drop: d.path,
+            keepId: g.keep.id,
+            dropId: d.id,
+            title: g.keep.title || d.title || 'Unknown title',
+            artist: g.keep.artist || d.artist || '',
+            keepName: g.keep.path ? g.keep.path.split(/[\\/]/).pop() : (g.keep.title || ''),
+            dropName: d.path ? d.path.split(/[\\/]/).pop() : (d.title || ''),
+            keepFolder: keepFolder,
+            dropFolder: dropFolder,
+          });
+        }
+      }));
       if (!pairs.length) return 0;
-      let moved = [];
-      try { moved = JSON.parse(b.songsMergeDuplicates(JSON.stringify(pairs.map(p => ({ keep: p.keep, drop: p.drop })))) || '[]'); } catch (e) { moved = []; }
-      let count = 0;
-      pairs.forEach(p => { if (moved.indexOf(p.drop) !== -1) { this.mergeInto(p.dropId, p.keepId); count++; } });
-      if (count) {
-        Prefs.save();
-        AudioUI.render();
-        if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(count === 1 ? 'Removed 1 duplicate song' : 'Removed ' + count + ' duplicate songs');
+
+      // In non-browser / headless test environment or if autoConfirm is explicitly set
+      if (opts && opts.autoConfirm) {
+        let moved = [];
+        try { moved = JSON.parse(b.songsMergeDuplicates(JSON.stringify(pairs.map(p => ({ keep: p.keep, drop: p.drop })))) || '[]'); } catch (e) { moved = []; }
+        let count = 0;
+        pairs.forEach(p => { if (moved.indexOf(p.drop) !== -1) { this.mergeInto(p.dropId, p.keepId); count++; } });
+        if (count) {
+          Prefs.save();
+          AudioUI.render();
+          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(count === 1 ? 'Removed 1 duplicate song' : 'Removed ' + count + ' duplicate songs');
+        }
+        return count;
       }
-      return count;
+
+      this.promptDuplicates(pairs);
+      return pairs.length;
+    },
+
+    promptDuplicates(pairs) {
+      if (typeof document === 'undefined') return;
+      const layer = document.getElementById('dupe-dialog-layer');
+      if (!layer) return;
+
+      this._dupeQueue = pairs.slice();
+      this._dupeIndex = 0;
+      this._dupeMovedCount = 0;
+      if (window.SpotifyUI && window.SpotifyUI.syncTint) window.SpotifyUI.syncTint();
+      this._showCurrentDuplicate();
+    },
+
+    _showCurrentDuplicate() {
+      const layer = document.getElementById('dupe-dialog-layer');
+      if (!layer) return;
+      const q = this._dupeQueue;
+      const idx = this._dupeIndex;
+      if (!q || idx >= q.length) {
+        this.closeDuplicateDialog();
+        return;
+      }
+
+      const pair = q[idx];
+      const total = q.length;
+
+      const titleEl = document.getElementById('dupe-dialog-title');
+      const subEl = document.getElementById('dupe-dialog-sub');
+      const keepNameEl = document.getElementById('dupe-keep-name');
+      const keepLocEl = document.getElementById('dupe-keep-loc');
+      const dropNameEl = document.getElementById('dupe-drop-name');
+      const dropLocEl = document.getElementById('dupe-drop-loc');
+      const footerEl = document.getElementById('dupe-dialog-footer');
+
+      if (titleEl) {
+        titleEl.textContent = total === 1 ? 'Duplicate song found' : 'Duplicate song found (' + (idx + 1) + ' of ' + total + ')';
+      }
+      if (subEl) {
+        subEl.textContent = pair.title + (pair.artist ? ' \u2022 ' + pair.artist : '');
+      }
+      if (keepNameEl) keepNameEl.textContent = pair.keepName;
+      if (keepLocEl) keepLocEl.textContent = pair.keepFolder;
+      if (dropNameEl) dropNameEl.textContent = pair.dropName;
+      if (dropLocEl) dropLocEl.textContent = pair.dropFolder;
+
+      if (footerEl) {
+        footerEl.classList.toggle('hidden', total <= 1);
+      }
+
+      layer.classList.remove('hidden');
+    },
+
+    _handleDuplicateChoice(moveCurrent, moveAllRemaining) {
+      const b = window.AndroidBridge;
+      if (!b || typeof b.songsMergeDuplicates !== 'function') {
+        this.closeDuplicateDialog();
+        return;
+      }
+
+      if (moveAllRemaining) {
+        const remaining = this._dupeQueue.slice(this._dupeIndex);
+        let moved = [];
+        try { moved = JSON.parse(b.songsMergeDuplicates(JSON.stringify(remaining.map(p => ({ keep: p.keep, drop: p.drop })))) || '[]'); } catch (e) { moved = []; }
+        remaining.forEach(p => {
+          if (moved.indexOf(p.drop) !== -1) {
+            this.mergeInto(p.dropId, p.keepId);
+            this._dupeMovedCount++;
+          }
+        });
+        if (this._dupeMovedCount > 0) {
+          Prefs.save();
+          AudioUI.render();
+        }
+        this.closeDuplicateDialog();
+        return;
+      }
+
+      if (moveCurrent) {
+        const pair = this._dupeQueue[this._dupeIndex];
+        if (pair) {
+          let moved = [];
+          try { moved = JSON.parse(b.songsMergeDuplicates(JSON.stringify([{ keep: pair.keep, drop: pair.drop }])) || '[]'); } catch (e) { moved = []; }
+          if (moved.indexOf(pair.drop) !== -1) {
+            this.mergeInto(pair.dropId, pair.keepId);
+            this._dupeMovedCount++;
+            Prefs.save();
+            AudioUI.render();
+          }
+        }
+      }
+
+      this._dupeIndex++;
+      this._showCurrentDuplicate();
     },
 
     // A duplicate was moved away: everything that pointed at it points at the kept song (no list gets it twice).
@@ -2549,6 +2687,24 @@ window.NovelAudio = (function () {
         if (next) AudioEngine.play(next);
       });
 
+      // Duplicate confirmation dialog wiring
+      const dupeLayer = document.getElementById('dupe-dialog-layer');
+      const dupeKeep = document.getElementById('dupe-btn-keep');
+      const dupeMove = document.getElementById('dupe-btn-move');
+      const dupeKeepAll = document.getElementById('dupe-btn-keep-all');
+      const dupeMoveAll = document.getElementById('dupe-btn-move-all');
+
+      if (dupeKeep) dupeKeep.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(false, false));
+      if (dupeMove) dupeMove.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(true, false));
+      if (dupeKeepAll) dupeKeepAll.addEventListener('click', () => MediaLibrary.closeDuplicateDialog());
+      if (dupeMoveAll) dupeMoveAll.addEventListener('click', () => MediaLibrary._handleDuplicateChoice(false, true));
+
+      if (dupeLayer) {
+        dupeLayer.addEventListener('click', (e) => {
+          if (e.target === dupeLayer) MediaLibrary.closeDuplicateDialog();
+        });
+      }
+
       AudioUI.renderPlaylistOptions();
     },
 
@@ -3170,8 +3326,11 @@ window.NovelAudio = (function () {
     getTrackRecord(id) { return MediaLibrary.getTrack(id) || null; },
 
     // Copies of the same song (see MediaLibrary.removeDuplicates). Runs by itself after every scan; this runs it now.
-    removeDuplicates() { return MediaLibrary.removeDuplicates(); },
+    removeDuplicates(opts) { return MediaLibrary.removeDuplicates(opts); },
     findDuplicates() { return MediaLibrary.findDuplicates(state.tracks).map(g => ({ keep: g.keep.id, drop: g.drop.map(d => d.id) })); },
+    isDuplicateDialogOpen() { return MediaLibrary.isDuplicateDialogOpen(); },
+    closeDuplicateDialog() { return MediaLibrary.closeDuplicateDialog(); },
+    getDuplicateQueue() { return MediaLibrary._dupeQueue ? MediaLibrary._dupeQueue.slice() : []; },
 
     // The key of the playlist now shown in the Songs list, or '' for All songs / Liked / Recent (not editable).
     getActivePlaylistKey() {

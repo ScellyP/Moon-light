@@ -1358,6 +1358,76 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 #dialog-ok:hover { background: var(--accent-strong); }
 
+/* Duplicate confirmation dialog */
+#dupe-dialog-layer {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#dupe-dialog-layer.hidden { display: none; }
+#dupe-dialog-box {
+  width: 100%; max-width: 360px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+#dupe-dialog-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: color-mix(in srgb, var(--sp-accent, var(--accent)) 18%, transparent);
+  color: var(--sp-accent, var(--accent)); margin-bottom: 12px;
+}
+#dupe-dialog-icon .ico { width: 22px; height: 22px; }
+#dupe-dialog-title { margin: 0; font: 700 18px/1.25 var(--font-ui); color: var(--text); }
+#dupe-dialog-sub {
+  margin: 4px 0 14px; font: 600 13.5px/1.35 var(--font-ui);
+  color: var(--sp-accent, var(--accent)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#dupe-dialog-card {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+  display: flex; flex-direction: column; gap: 10px; text-align: left;
+}
+.dupe-card-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.dupe-badge {
+  flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; padding: 3px 7px; border-radius: 4px;
+}
+.dupe-badge-keep { background: color-mix(in srgb, #2ecc71 20%, transparent); color: #2ecc71; }
+.dupe-badge-drop { background: color-mix(in srgb, var(--danger, #e77a6a) 20%, transparent); color: var(--danger, #e77a6a); }
+.dupe-file-info { min-width: 0; display: flex; flex-direction: column; }
+.dupe-file-name { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dupe-file-loc { font-size: 11.5px; color: var(--sp-sub, var(--muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dupe-dialog-prompt { margin: 0 0 16px; font-size: 13.5px; line-height: 1.45; color: var(--sp-sub, var(--muted)); text-align: left; }
+#dupe-dialog-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#dupe-btn-keep, #dupe-btn-move {
+  min-height: 42px; border-radius: 999px; font: 700 13.5px/1 var(--font-ui); cursor: pointer;
+  transition: transform .15s ease, background-color .15s ease;
+}
+#dupe-btn-keep {
+  padding: 0 16px; border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+  background: none; color: var(--text);
+}
+#dupe-btn-keep:active { transform: scale(.96); }
+#dupe-btn-move {
+  padding: 0 18px; border: none;
+  background: var(--sp-accent, var(--accent)); color: var(--sp-ink, var(--accent-ink));
+}
+#dupe-btn-move:active { transform: scale(.96); }
+#dupe-dialog-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+.dupe-link-btn {
+  border: 0; background: none; color: var(--sp-sub, var(--muted));
+  font: 500 12px/1 var(--font-ui); cursor: pointer; padding: 4px;
+}
+.dupe-link-btn:hover { color: var(--text); }
+
 /* "Delete chapters" popup: asks for a chapter number (reader.js). Same look as the message dialog. */
 #delete-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -4176,6 +4246,39 @@ body.settings-open #srch-input { pointer-events: none; }
     <div id="dialog-icon"><svg class="ico"><use href="#i-info"/></svg></div>
     <p id="dialog-message"></p>
     <div id="dialog-actions"><button id="dialog-ok" type="button">Got it</button></div>
+  </div>
+</div>
+
+<div id="dupe-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="dupe-dialog-title">
+  <div id="dupe-dialog-box">
+    <div id="dupe-dialog-icon"><svg class="ico"><use href="#i-info"/></svg></div>
+    <h3 id="dupe-dialog-title">Duplicate song found</h3>
+    <div id="dupe-dialog-sub"></div>
+    <div id="dupe-dialog-card">
+      <div class="dupe-card-row">
+        <span class="dupe-badge dupe-badge-keep">Keep</span>
+        <div class="dupe-file-info">
+          <span id="dupe-keep-name" class="dupe-file-name"></span>
+          <span id="dupe-keep-loc" class="dupe-file-loc"></span>
+        </div>
+      </div>
+      <div class="dupe-card-row">
+        <span class="dupe-badge dupe-badge-drop">Duplicate</span>
+        <div class="dupe-file-info">
+          <span id="dupe-drop-name" class="dupe-file-name"></span>
+          <span id="dupe-drop-loc" class="dupe-file-loc"></span>
+        </div>
+      </div>
+    </div>
+    <p id="dupe-dialog-prompt">Is this song a duplicate? Move extra file to Moonlight/Duplicates?</p>
+    <div id="dupe-dialog-actions">
+      <button id="dupe-btn-keep" type="button">Keep both</button>
+      <button id="dupe-btn-move" type="button">Move duplicate</button>
+    </div>
+    <div id="dupe-dialog-footer" class="hidden">
+      <button id="dupe-btn-keep-all" type="button" class="dupe-link-btn">Keep all remaining</button>
+      <button id="dupe-btn-move-all" type="button" class="dupe-link-btn">Move all remaining</button>
+    </div>
   </div>
 </div>
 

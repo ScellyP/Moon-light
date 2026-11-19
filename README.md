@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.16.35-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.16.36-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -84,7 +84,7 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Song options menu** (the `⋮` next to any song): edit info, share, like, add to playlist, move/remove, add to queue, loop, delete.
 - **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
 - **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
-- **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) are merged after a scan. Extra copies are *moved* to `Moonlight/Duplicates`, never deleted, and it can be switched off in Settings.
+- **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. You can choose to *Keep both*, *Move duplicate* to `Moonlight/Duplicates`, or apply the choice to all remaining tracks. Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
 - **Share** a song's file (the mp3) through Android's share sheet, or just the link it was downloaded from.
 - **Delete** a song's file for good (after a confirmation), which is different from *Remove from this playlist*.
 

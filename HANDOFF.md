@@ -1,14 +1,40 @@
 # Moonlight Project — Daily Handoff & Session Summary
-**Date:** November 19, 2026 (17:05 IST)  
-**Current Version:** `v1.16.35`  
+**Date:** November 19, 2026 (17:35 IST)  
+**Current Version:** `v1.16.36`  
 **Current Branch:** `Testing`  
-**Remote Status:** Ahead by 1 commit (Ready for push pending user approval)
+**Remote Status:** Ahead by 2 commits (Ready for push pending user approval)
 
 ---
 
 ## 1. Executive Summary & Today's Accomplishments
 
-Today's session completed both Priority 1 and Priority 2 tasks identified in the previous handoff:
+Today's session completed the shared playlist import, system share sheet receiver, and interactive duplicate confirmation prompts:
+
+### **v1.16.36 — Interactive Duplicate Confirmation Before Moving Audio Files**
+1. **Interactive Prompt for Duplicate Audio Clean-up:**
+   - **Feature:** Previously, when library scans detected duplicate songs (matching title and artist, or identical source link), extra copies were silently and automatically moved in batch to `Moonlight/Duplicates`. The user requested an interactive confirmation prompt asking whether the song is a duplicate instead of moving them all automatically.
+   - **User Interface (`#dupe-dialog-layer` in `index.html`):**
+     - Designed a Spotify-themed modal dialog with dynamic colors (`dyn-colours`).
+     - Shows a warning icon, track title, and artist.
+     - Displays a comparison card contrasting the **Keep file** (original path) and the **Duplicate file** (path that would be moved).
+     - Prompts: *"Is this song a duplicate? Extra files are moved to Moonlight/Duplicates (never deleted)."*
+     - Provides action buttons:
+       - **Keep both** (`#dupe-keep-btn`): Retains both files in the library without moving anything.
+       - **Move duplicate** (`#dupe-move-btn`): Moves only the duplicate file to `Moonlight/Duplicates` and merges metadata.
+       - **Keep all remaining** (`#dupe-keep-all-btn`): Closes the dialog and skips moving all remaining duplicate pairs.
+       - **Move all remaining** (`#dupe-move-all-btn`): Moves all remaining detected duplicates in batch.
+   - **Queue & Decision Architecture (`audio-player.js`):**
+     - Replaced automatic batch moving in `MediaLibrary.removeDuplicates(opts)` with `promptDuplicates(pairs, onComplete)`.
+     - Maintains duplicate queue state (`_dupeQueue`, `_dupeIndex`, `_dupeMovedCount`).
+     - `_showCurrentDuplicate()` populates the UI with track details and location comparison.
+     - `_handleDuplicateChoice(moveCurrent, moveAllRemaining)` manages per-pair vs batch moves, calls `AndroidBridge.songsMergeDuplicates` on `[{ keep, drop }]`, merges song library records via `mergeInto`, and advances the queue.
+     - Exposed `promptDuplicates`, `isDuplicateDialogOpen`, and `closeDuplicateDialog` on `NovelAudio`.
+   - **Back Press & Keyboard Dismissal (`player-app.js`):**
+     - Updated Android system back-press handler (`window.handleBack`) and desktop `Escape` key listener to dismiss the duplicate dialog safely and retain remaining files.
+   - **Automated Tests (`tests/duplicates-confirmation.test.js`):**
+     - Dedicated test suite validating DOM structure, dynamic colors, queue stepping, per-song keep vs move decisions, bulk actions, and back/escape dismissal. (4/4 passing).
+
+---
 
 ### **v1.16.35 — Shared Playlist Source Links .txt File Import & System Share Sheet Receiver**
 1. **Shared Playlist Source Links `.txt` File Import:**
@@ -35,11 +61,12 @@ Today's session completed both Priority 1 and Priority 2 tasks identified in the
 
 | Repository | Path | Branch | Local Head | Remote Head | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Main Repo** | `S:\Projects\Moon-light` | `Testing` | `v1.16.35` | `847d8aa` | Clean, ahead by 1 commit |
-| **Patches** | `S:\Projects\Moon-light-Patches` | — | Patch 18 | — | Up to date |
+| **Main Repo** | `S:\Projects\Moon-light` | `Testing` | `v1.16.36` | `847d8aa` | Ready to commit |
+| **Patches** | `S:\Projects\Moon-light-Patches` | — | Patch 19 | — | Up to date |
 
 ### Patches Created
 - `18-txt-playlist-import-and-system-share-receiver.patch` (`v1.16.35`)
+- `19-duplicate-confirmation-prompt.patch` (`v1.16.36`)
 
 ---
 
@@ -48,33 +75,46 @@ Today's session completed both Priority 1 and Priority 2 tasks identified in the
 - `app/src/main/AndroidManifest.xml` — Added `android.intent.action.SEND` intent filter with `text/plain` and `singleTask`.
 - `app/src/main/java/com/scell/moonlight/MainActivity.kt` — Added `onShowFileChooser`, `fileChooserLauncher`, `onNewIntent`, `handleIncomingSendIntent`, and `onIncomingShareLink` page call.
 - `app/src/main/assets/song-download.js` — Added "Import playlist .txt" button, `parsePlaylistLinksText`, `startCustomPlaylistFlow`, and `root.onIncomingShareLink`.
-- `app/src/main/assets/version.js` — Bumped to `v1.16.35`.
-- `Agent.md` — Updated structure change log and implementation notes.
-- `README.md` — Updated download features documentation and version badge.
+- `app/src/main/assets/index.html` — Added `#dupe-dialog-layer` modal markup and Spotify-themed dynamic styling.
+- `app/src/main/assets/audio-player.js` — Added interactive duplicate queue prompt, choice handlers, and dialog methods.
+- `app/src/main/assets/player-app.js` — Updated back-press and Escape handlers to close the duplicate dialog and preserve files.
+- `app/src/main/assets/version.js` — Bumped to `v1.16.36`.
+- `Agent.md` — Updated structure change log and duplicate confirmation details.
+- `README.md` — Updated duplicate clean-up description and version badge (`v1.16.36`).
+- `tests/duplicates-confirmation.test.js` — New test suite for interactive duplicate confirmation (4/4 passed).
 - `tests/song-download.test.js` — Added test suites for playlist link text parsing, manifest/intent receiver wiring, and UI elements.
 
 ---
 
 ## 4. Test Verification Summary
 
-All automated test suites pass 100%:
+All 8 automated test suites pass 100%:
+- `node tests/duplicates-confirmation.test.js` — **4 / 4 passed**
 - `node tests/song-download.test.js` — **29 / 29 passed**
 - `node tests/player-app.test.js` — **8 / 8 passed**
 - `node tests/spotify-tabs.test.js` — **9 / 9 passed**
 - `node tests/playlist-share.test.js` — **6 / 6 passed**
 - `node tests/song-share.test.js` — **5 / 5 passed**
 - `node tests/song-share-link.test.js` — **4 / 4 passed**
+- `node tests/index-html.test.js` — **4 / 4 passed**
 
 ---
 
 ## 5. What Still Needs to Be Done (Pending & Next Steps)
 
 ### A. Immediate Verification on Device
-1. **Share from YouTube:**
+1. **Interactive Duplicate Prompt:**
+   - Place duplicate audio files in `/storage/emulated/0/Moonlight/Songs` or scan library with duplicates.
+   - Confirm `#dupe-dialog-layer` opens showing both file paths.
+   - Test "Keep both": verify neither file is moved.
+   - Test "Move duplicate": verify extra copy is moved to `Moonlight/Duplicates`.
+   - Test "Keep all remaining" and "Move all remaining".
+   - Test back button dismissal.
+2. **Share from YouTube:**
    - Open YouTube app or browser. Tap "Share" on any video.
    - Confirm **Moonlight** appears in the system share sheet.
    - Tap Moonlight: confirm Moonlight opens (or resumes), switches to the Downloads tab, and starts downloading.
-2. **Import Playlist `.txt`:**
+3. **Import Playlist `.txt`:**
    - Tap "Import playlist .txt" on the Downloads tab.
    - Confirm Android system file picker opens.
    - Select a `.txt` playlist file (or paste links containing `# name: ...`).
@@ -98,4 +138,4 @@ All automated test suites pass 100%:
    - **Multi-select in Add-songs picker:** allow checking multiple songs and adding them in batch instead of tapping one-by-one.
    - **Unavailable-song indicator:** distinct styling for songs in playlists whose underlying audio files have been deleted from storage.
 5. **Night Rule / Sleep Mode:**
-   - Night audio lock / wind-down timer integration that gradually fades out volume at scheduled bedtime hours.
+   - Configurable sleep timer with gradual audio fade-out.

@@ -58,7 +58,14 @@
   }
   dialogOk.addEventListener('click', closeDialog);
   dialogLayer.addEventListener('click', function (e) { if (e.target === dialogLayer) closeDialog(); });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && dialogOpen) closeDialog(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (dialogOpen) closeDialog();
+      else if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
+        window.NovelAudio.closeDuplicateDialog();
+      }
+    }
+  });
   window.alert = showMessage;
   // MainActivity.notifyError() calls this (storage access missing, scan failed ...).
   window.onFolderPickError = function (message) { showMessage(message); };
@@ -99,6 +106,10 @@
      asks for a second back press before it exits. ---- */
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
+    if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
+      window.NovelAudio.closeDuplicateDialog();
+      return true;
+    }
     // The song options sheet (the "..." menu, song-menu.js) is on top of everything it was opened from, so it goes first.
     if (window.SongDownload && window.SongDownload.closeCrop && window.SongDownload.closeCrop()) return true;
     if (window.PlaylistEditor && window.PlaylistEditor.isOpen()) { window.PlaylistEditor.close(); return true; }
