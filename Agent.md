@@ -459,6 +459,10 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.17.05 (2026-11-24) — Complete native download cancellation and ACTION_SEND stream intent support.**
+  1. *Complete Download Cancellation:* In `song-download.js`, updated `cancelAnyDownload()` and `onIncomingMoonlightFile()` to call `b.cancelSongDownload()` and `b.discardStagedSongs()`, ensuring running playlist batches halt child yt-dlp processes and clean up temporary files without leaving ghost processes.
+  2. *ACTION_SEND Stream Intent Support:* In `AndroidManifest.xml` and `MainActivity.kt`, added `ACTION_SEND` intent-filter for `application/x-moonlight` and stream URI resolution (`EXTRA_STREAM`), enabling Moonlight to automatically handle `.moonlight` files and playlist text when shared from other apps.
+
 - **v1.17.04 (2026-11-24) — Topbar download cancel button across all steps and Paste more immediate clipboard paste.**
   1. *Download Cancel Button:* Moved download cancel "X" button (`.dl-cancel-btn`) to the top right of the Downloads view header (`.sp-topbar`) next to `Download songs` in light grey (`#c8c8c8`), keeping it visible and accessible across all download steps to stop downloads, clean up staged files, and reset.
   2. *Paste More Clipboard Action:* Updated "Paste more" button on the completion screen to immediately read the clipboard and start downloading the link directly instead of resetting to an empty paste button.

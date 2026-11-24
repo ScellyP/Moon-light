@@ -486,12 +486,36 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingSendIntent(intent: Intent?) {
         if (intent == null || intent.action != Intent.ACTION_SEND) return
+
+        val streamUri = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }) ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+
+        if (streamUri != null) {
+            handleIncomingViewIntent(Intent(Intent.ACTION_VIEW, streamUri))
+            return
+        }
+
         val type = intent.type ?: return
         if (!type.startsWith("text/")) return
 
         val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             ?: return
+
+        if (sharedText.contains("# Moonlight playlist links") || sharedText.contains("# name:")) {
+            if (pageLoaded) {
+                runOnUiThread {
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(sharedText) + ", " + JSONObject.quote("Shared Playlist.moonlight"))
+                }
+            } else {
+                pendingIncomingMoonlightFile = Pair(sharedText, "Shared Playlist.moonlight")
+            }
+            return
+        }
 
         val match = Regex("""https?://\S+""").find(sharedText) ?: return
         val url = match.value.trim().trimEnd(')', ']', '>', '.', ',')

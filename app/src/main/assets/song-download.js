@@ -1622,7 +1622,11 @@
     if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
       root.SpotifyUI.setView('download');
     }
-    if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
+    if (pl) {
+      const b = bridge();
+      if (b && typeof b.cancelSongDownload === 'function') {
+        try { b.cancelSongDownload(); } catch (e) {}
+      }
       pl = null;
     }
     if (wizard && wizard.state) {
@@ -1638,7 +1642,11 @@
     if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
       root.SpotifyUI.setView('download');
     }
-    if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
+    if (pl) {
+      const b = bridge();
+      if (b && typeof b.cancelSongDownload === 'function') {
+        try { b.cancelSongDownload(); } catch (e) {}
+      }
       pl = null;
     }
     if (wizard && wizard.state) {
@@ -1756,6 +1764,7 @@
 
   function cancelAnyDownload() {
     let hadWork = false;
+    const b = bridge();
     if (pl) {
       hadWork = true;
       pl = null;
@@ -1767,6 +1776,10 @@
       } else {
         wizard.leave();
       }
+    }
+    if (hadWork && b) {
+      try { if (typeof b.cancelSongDownload === 'function') b.cancelSongDownload(); } catch (e) {}
+      try { if (typeof b.discardStagedSongs === 'function') b.discardStagedSongs(); } catch (e) {}
     }
     render();
     if (!hadWork && root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
