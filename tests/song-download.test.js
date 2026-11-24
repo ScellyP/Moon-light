@@ -426,11 +426,12 @@ check('System share receiver and intent wiring in AndroidManifest.xml and MainAc
   assert.ok(main.includes('fileChooserLauncher'), 'implements fileChooserLauncher for file chooser result');
 });
 
-check('Downloads tab UI contains Import playlist .txt button and file input', () => {
+check('Downloads tab UI contains Import playlist button and file input for .moonlight and .txt', () => {
   const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
-  assert.ok(js.includes('Import playlist .txt'), 'has Import playlist .txt button');
-  assert.ok(js.includes("fileInput.accept = '.txt,text/plain'"), 'file input accepts .txt and text/plain');
+  assert.ok(js.includes('Import playlist'), 'has Import playlist button');
+  assert.ok(js.includes('.moonlight') && js.includes('.txt'), 'file input accepts .moonlight and .txt');
   assert.ok(js.includes('root.onIncomingShareLink ='), 'defines window.onIncomingShareLink');
+  assert.ok(js.includes('root.onIncomingMoonlightFile ='), 'defines window.onIncomingMoonlightFile');
   assert.ok(js.includes('startCustomPlaylistFlow'), 'defines startCustomPlaylistFlow');
 });
 
@@ -494,6 +495,28 @@ check('Native progress wiring and UI styles agreement', () => {
   const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
   assert.ok(html.includes('.dl-bar.dl-determinate'), 'index.html contains .dl-bar.dl-determinate CSS');
   assert.ok(html.includes('.dl-sp-item-bar-fill'), 'index.html contains .dl-sp-item-bar-fill CSS');
+});
+
+check('Single-song download cancel button and .moonlight format handling', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
+  assert.ok(html.includes('.dl-cancel-btn'), 'index.html defines .dl-cancel-btn CSS');
+
+  const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+  assert.ok(js.includes('dl-cancel-btn'), 'song-download.js renders cancel button');
+  assert.ok(js.includes('wizard.leave()'), 'cancel button triggers wizard.leave');
+  assert.ok(js.includes('root.onIncomingMoonlightFile'), 'song-download.js handles onIncomingMoonlightFile');
+
+  const manifest = fs.readFileSync(path.join(__dirname, '../app/src/main/AndroidManifest.xml'), 'utf8');
+  assert.ok(manifest.includes('application/x-moonlight'), 'AndroidManifest handles application/x-moonlight');
+  assert.ok(manifest.includes('.moonlight'), 'AndroidManifest handles .moonlight files');
+
+  const mainKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
+  assert.ok(mainKt.includes('handleIncomingViewIntent'), 'MainActivity handles VIEW intents');
+  assert.ok(mainKt.includes('onIncomingMoonlightFile'), 'MainActivity calls onIncomingMoonlightFile');
+
+  const fgServiceKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/DownloadForegroundService.kt'), 'utf8');
+  assert.ok(fgServiceKt.includes('ACTION_CANCEL'), 'DownloadForegroundService defines ACTION_CANCEL');
+  assert.ok(fgServiceKt.includes('cancelHandler'), 'DownloadForegroundService exposes cancelHandler');
 });
 
 console.log(n + ' checks passed');

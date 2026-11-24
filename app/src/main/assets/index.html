@@ -2458,9 +2458,30 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #dl-stage[data-step="pl-resolving"] { justify-content: center; align-items: center; text-align: center; }
 .dl-pl-step { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; margin: auto 0; }
 .dl-pl-step .dl-hint, .dl-pl-step .dl-sub, .dl-pl-step .dl-title { text-align: center; align-self: center; }
-.dl-step { display: flex; flex-direction: column; align-items: center; width: 100%; animation: dlStepIn .24s var(--ease) both; }
+.dl-step { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; animation: dlStepIn .24s var(--ease) both; }
 .dl-step.dl-wide { align-items: stretch; }
 @keyframes dlStepIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.dl-cancel-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: 0;
+  padding: 8px;
+  cursor: pointer;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  line-height: 1;
+}
+.dl-cancel-btn .ico {
+  width: 22px;
+  height: 22px;
+  color: #ffffff;
+}
 
 /* Buttons: Spotify's pill, bold; bigger and a little brighter on hover, pressed in on tap. */
 .dl-primary, .dl-secondary {

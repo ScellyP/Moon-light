@@ -36,6 +36,12 @@ class DownloadForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_CANCEL) {
+            cancelHandler?.invoke()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         ensureChannels()
         startForeground(NOTIF_ID_FG, buildForegroundNotification())
         return START_STICKY
@@ -56,11 +62,19 @@ class DownloadForegroundService : Service() {
             this, 0, tapIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val cancelIntent = Intent(this, DownloadForegroundService::class.java).apply {
+            action = ACTION_CANCEL
+        }
+        val cancelPending = PendingIntent.getService(
+            this, 1, cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_FG)
             .setSmallIcon(R.drawable.ic_stat_music)
             .setContentTitle("Moonlight download running")
             .setContentText("Songs are downloading in the background.")
             .setContentIntent(tap)
+            .addAction(R.drawable.ic_stat_music, "Cancel", cancelPending)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -94,6 +108,9 @@ class DownloadForegroundService : Service() {
         const val CHANNEL_FG   = "moonlight_dl_fg"
         const val CHANNEL_SONG = "moonlight_dl_song"
         const val NOTIF_ID_FG  = 2010
+        const val ACTION_CANCEL = "com.scell.moonlight.action.CANCEL_DOWNLOAD"
+
+        var cancelHandler: (() -> Unit)? = null
 
         fun start(context: Context) {
             val intent = Intent(context, DownloadForegroundService::class.java)

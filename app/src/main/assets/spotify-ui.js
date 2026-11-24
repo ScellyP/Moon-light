@@ -1481,7 +1481,7 @@
     const a = window.NovelAudio;
     const toast = (m) => { if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(m); };
     if (!a || !a.sharePlaylistLinks) return;
-    const name = (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || 'all';
+    const name = (a._state && a._state.activePlaylist) || (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || (a.getActivePlaylistKey ? a.getActivePlaylistKey() : 'all') || 'all';
     const r = a.sharePlaylistLinks(name, getPlaylistTitle());
     if (r.ok) return;
     toast(r.error === 'none' ? (r.total ? 'None of these songs has a source link yet' : 'There are no songs here yet') : 'Could not open the share sheet');

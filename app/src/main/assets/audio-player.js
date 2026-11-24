@@ -2322,7 +2322,7 @@ window.NovelAudio = (function () {
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true },
   });
 
   /* ---- Duplicate song memory ----------------------------------------------------
@@ -3722,7 +3722,11 @@ window.NovelAudio = (function () {
        One link per line (the page each song was downloaded from, see Id3Tag.kt), notes start with #, so the same
        file can be read back by an import later. Songs without a source link are only counted. */
     getPlaylistLinksText(uiName, title) {
-      const tracks = this.getPlaylistTracks(uiName || 'all');
+      let raw = String(uiName || 'all');
+      let cleanKey = raw;
+      if (cleanKey.indexOf('name:') === 0) cleanKey = cleanKey.slice(5);
+      else if (cleanKey.indexOf('list:') === 0) cleanKey = '@list:' + cleanKey.slice(5);
+      const tracks = this.getPlaylistTracks(cleanKey);
       const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
       const seen = new Set(), body = [];
       let withLink = 0;
@@ -3735,9 +3739,10 @@ window.NovelAudio = (function () {
         const label = clean(t.title) + (t.artist ? ' - ' + clean(t.artist) : '');
         body.push('# ' + label, link, '');
       });
-      const name = clean(title) || 'Playlist';
+      const name = clean(title) || (cleanKey !== 'all' ? cleanKey.replace(/^@list:/, 'Playlist ') : 'Playlist');
       const head = ['# Moonlight playlist links', '# name: ' + name];
-      const info = uiName && uiName !== 'all' ? this.getPlaylistInfo(uiName.indexOf('@list:') === 0 ? 'list:' + uiName.slice(6) : 'name:' + uiName) : null;
+      const infoKey = cleanKey && cleanKey !== 'all' ? (cleanKey.indexOf('@list:') === 0 ? 'list:' + cleanKey.slice(6) : (cleanKey.indexOf('@') === 0 ? null : 'name:' + cleanKey)) : null;
+      const info = infoKey ? this.getPlaylistInfo(infoKey) : null;
       if (info && info.description) head.push('# description: ' + clean(info.description));
       head.push('# songs: ' + tracks.length + ' (' + seen.size + ' with a source link)', '# One link per line. Lines that start with # are notes.', '');
       return { text: head.concat(body).join('\n'), count: seen.size, total: tracks.length, name: name };
@@ -3929,9 +3934,12 @@ window.NovelAudio = (function () {
     // The songs of any playlist by the name used in the UI ('all', '@list:3', '@liked', 'Lo-fi'): the Songs-list order.
     getPlaylistTracks(name) {
       if (!name || name === 'all') return state.tracks.slice();
-      const virtual = AudioFeatures.selectionFor(name);
+      let key = String(name || '');
+      if (key.indexOf('name:') === 0) key = key.slice(5);
+      else if (key.indexOf('list:') === 0) key = '@list:' + key.slice(5);
+      const virtual = AudioFeatures.selectionFor(key);
       if (virtual) return virtual.map(id => MediaLibrary.getTrack(id)).filter(Boolean);
-      return MediaLibrary.tracksInPlaylist(name);
+      return MediaLibrary.tracksInPlaylist(key);
     },
 
     // The shuffle button: a NEW shuffle of the playlist now shown, played from the first song of that shuffle.

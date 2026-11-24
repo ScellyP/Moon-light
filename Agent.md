@@ -459,6 +459,13 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.17.02 (2026-11-24) — .moonlight format, background downloads, cancel button, and share fix.**
+  1. *Playlist Menu Share Fix:* Fixed playlist share button in `spotify-ui.js` and `audio-player.js` to correctly resolve active playlist key (`state.activePlaylist`, folder name, or curated playlist ID) and export source links.
+  2. *Download Indicator Stability:* Fixed download UI flickering between "downloading" and "loading" states by removing `emit()` full re-renders on progress ticks, updating metrics in-place, and preventing negative percentages from resetting active downloads.
+  3. *.moonlight File Format:* Updated playlist export to use `.moonlight` extension (`application/x-moonlight`). Registered `ACTION_VIEW` intent-filters in `AndroidManifest.xml` and wired `MainActivity` (`onCreate` / `onNewIntent`) and `song-download.js` (`onIncomingMoonlightFile`) to automatically open Downloads and start downloading tracks without requiring extra taps.
+  4. *Single-Song Cancel Button:* Added plain white top-right "X" button (`.dl-cancel-btn`) during single-song downloads, stopping the download and cleaning up partial staged files.
+  5. *Background Downloads:* Enabled background download execution for single songs using `DownloadForegroundService` with notification cancel action connected to `SongDownloader.cancel()`.
+
 - **v1.17.01 (2026-11-19) — Playlist header share button wiring to source links.**
   1. *Playlist Header Share Button:* In `spotify-ui.js`, wired the `#sp-album-share` header button (which was previously an empty placeholder returning immediately) to call `shareLinks()`. Tapping the share icon on any playlist header now invokes `NovelAudio.sharePlaylistLinks(name, title)` and opens Android's system share sheet with a text file (`.txt`) containing the playlist's source links.
   2. *Tests:* Updated `tests/playlist-header.test.js` to 5/5 passing checks verifying `#sp-album-share` is wired to `shareLinks()`.

@@ -442,9 +442,41 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingSendIntent(intent)
+        handleIncomingViewIntent(intent)
     }
 
     private var pendingIncomingShareLink: String? = null
+    private var pendingIncomingMoonlightFile: Pair<String, String>? = null
+
+    private fun handleIncomingViewIntent(intent: Intent?) {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: return
+        try {
+            val content = contentResolver.openInputStream(uri)?.use { stream ->
+                stream.reader(Charsets.UTF_8).readText()
+            } ?: return
+            var fileName = "Playlist.moonlight"
+            try {
+                contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIdx >= 0) fileName = cursor.getString(nameIdx) ?: fileName
+                    }
+                }
+            } catch (_: Exception) {
+                val last = uri.lastPathSegment
+                if (!last.isNullOrBlank()) fileName = last
+            }
+
+            if (pageLoaded) {
+                runOnUiThread {
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(content) + ", " + JSONObject.quote(fileName))
+                }
+            } else {
+                pendingIncomingMoonlightFile = Pair(content, fileName)
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun handleIncomingSendIntent(intent: Intent?) {
         if (intent == null || intent.action != Intent.ACTION_SEND) return
@@ -487,6 +519,7 @@ class MainActivity : ComponentActivity() {
         appUpdater.start()
         busyCheck = { songDownloader.isBusy() || appUpdater.isBusy() }
         handleIncomingSendIntent(intent)
+        handleIncomingViewIntent(intent)
         // Keeps updating the app while it is closed (see BackgroundUpdater.kt).
         BackgroundUpdater.schedule(applicationContext)
         // A few seconds after launch, so the check does not compete with the splash and the library scan.
@@ -600,6 +633,10 @@ class MainActivity : ComponentActivity() {
                 pendingIncomingShareLink?.let { link ->
                     pendingIncomingShareLink = null
                     callPage("onIncomingShareLink", JSONObject.quote(link))
+                }
+                pendingIncomingMoonlightFile?.let { (content, fileName) ->
+                    pendingIncomingMoonlightFile = null
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(content) + ", " + JSONObject.quote(fileName))
                 }
                 if (hasStoragePermission()) {
                     onStorageReady()
@@ -1457,17 +1494,18 @@ class MainActivity : ComponentActivity() {
                 dir.mkdirs()
                 dir.listFiles()?.forEach { try { it.delete() } catch (e: Exception) { /* an old copy may stay */ } }
                 val safe = fileName.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().take(60).ifEmpty { "playlist" }
-                val f = File(dir, "$safe.txt")
+                val f = File(dir, "$safe.moonlight")
                 f.writeText(text, Charsets.UTF_8)
                 val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
                 val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
+                    type = "application/x-moonlight"
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_TITLE, f.name)
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/x-moonlight", "text/plain", "*/*"))
                     clipData = ClipData.newRawUri(f.name, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                val chooser = Intent.createChooser(send, "Share playlist links")
+                val chooser = Intent.createChooser(send, "Share playlist")
                 runOnUiThread {
                     try { startActivity(chooser) } catch (e: Exception) { /* nothing can take it: nothing to open */ }
                 }

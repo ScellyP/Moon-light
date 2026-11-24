@@ -307,12 +307,13 @@
         const job = jobs[id];
         if (!job || !job.item) return null;
         const d = typeof data === 'string' ? JSON.parse(data) : (data || {});
-        if (typeof d.percent === 'number') job.item.percent = d.percent;
-        if (typeof d.eta === 'number') job.item.eta = d.eta;
-        if (d.speed != null) job.item.speed = String(d.speed);
-        if (d.downloaded != null) job.item.downloaded = String(d.downloaded);
-        if (d.total != null) job.item.total = String(d.total);
-        emit();
+        if (typeof d.percent === 'number' && d.percent >= 0) {
+          job.item.percent = Math.max(job.item.percent >= 0 ? job.item.percent : 0, d.percent);
+        }
+        if (typeof d.eta === 'number' && d.eta >= 0) job.item.eta = d.eta;
+        if (d.speed != null && d.speed !== '') job.item.speed = String(d.speed);
+        if (d.downloaded != null && d.downloaded !== '') job.item.downloaded = String(d.downloaded);
+        if (d.total != null && d.total !== '') job.item.total = String(d.total);
         return job.item;
       },
       // The native side answers here.
@@ -788,10 +789,10 @@
     const box = el('div', 'dl-step');
     box.appendChild(button('Click to paste', 'dl-primary dl-big', pasteFromClipboard));
 
-    // Hidden file picker for importing playlist source links (.txt)
+    // Hidden file picker for importing playlist source links (.moonlight / .txt)
     const fileInput = el('input');
     fileInput.type = 'file';
-    fileInput.accept = '.txt,text/plain';
+    fileInput.accept = '.moonlight,.txt,text/plain';
     fileInput.style.display = 'none';
     fileInput.setAttribute('aria-label', 'Import playlist text file');
     fileInput.addEventListener('change', (e) => {
@@ -800,7 +801,7 @@
       const reader = new FileReader();
       reader.onload = function (evt) {
         const fileContent = evt.target.result;
-        const fallbackTitle = (file.name || 'Playlist').replace(/\.[^.]+$/, '');
+        const fallbackTitle = (file.name || 'Playlist').replace(/\.moonlight$/i, '').replace(/\.[^.]+$/, '');
         const res = parsePlaylistLinksText(fileContent, fallbackTitle);
         if (res && res.links.length > 0) {
           startCustomPlaylistFlow(res.title, res.links);
@@ -818,7 +819,7 @@
     });
     box.appendChild(fileInput);
 
-    const importBtn = button('Import playlist .txt', 'dl-secondary dl-big', () => fileInput.click());
+    const importBtn = button('Import playlist .moonlight / .txt', 'dl-secondary dl-big', () => fileInput.click());
     importBtn.style.marginTop = '12px';
     box.appendChild(importBtn);
 
@@ -845,6 +846,18 @@
       box.appendChild(row);
       return box;
     }
+    // Cancel X button at top right
+    const cancelBtn = el('button', 'dl-cancel-btn');
+    cancelBtn.type = 'button';
+    cancelBtn.setAttribute('title', 'Cancel download');
+    cancelBtn.setAttribute('aria-label', 'Cancel download');
+    cancelBtn.innerHTML = '<svg class="ico"><use href="#i-close"/></svg>';
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      wizard.leave();
+    });
+    box.appendChild(cancelBtn);
+
     box.appendChild(el('span', 'dl-spinner'));
     const hasPct = item && typeof item.percent === 'number' && item.percent >= 0;
     const pct = hasPct ? Math.min(100, Math.max(0, Math.round(item.percent))) : null;
@@ -1088,7 +1101,7 @@
     b.fetchPlaylistInfo(jobId, url);
   }
 
-  function startCustomPlaylistFlow(title, links) {
+  function startCustomPlaylistFlow(title, links, autoStart) {
     if (!links || !links.length) {
       wizard.setMessage('No valid download links found.');
       render();
@@ -1103,7 +1116,11 @@
       done: 0,
       failed: 0,
     };
-    render();
+    if (autoStart) {
+      startPlaylistDownloads();
+    } else {
+      render();
+    }
   }
 
   // Max parallel yt-dlp processes for a playlist batch. More than 3 gives no speed benefit
@@ -1621,6 +1638,31 @@
     }
     takeClipboardText(url);
   };
+
+  // Called from native side (MainActivity) when a .moonlight file is opened
+  root.onIncomingMoonlightFile = function (content, fileName) {
+    if (!content) return;
+    if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
+      root.SpotifyUI.setView('download');
+    }
+    if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
+      pl = null;
+    }
+    if (wizard && wizard.state && wizard.state.step === 'done') {
+      wizard.again();
+    }
+    const fallbackTitle = (fileName || 'Playlist').replace(/\.moonlight$/i, '').replace(/\.[^.]+$/, '');
+    const res = parsePlaylistLinksText(content, fallbackTitle);
+    if (res && res.links && res.links.length > 0) {
+      startCustomPlaylistFlow(res.title || fallbackTitle, res.links, true);
+    } else {
+      if (wizard && typeof wizard.setMessage === 'function') {
+        wizard.setMessage('No valid download links found in ' + (fileName || 'file'));
+        render();
+      }
+    }
+  };
+  if (typeof window !== 'undefined') window.onIncomingMoonlightFile = root.onIncomingMoonlightFile;
 
   root.onSongDownloadProgress = function (jobId, data) {
     const d = typeof data === 'string' ? JSON.parse(data) : (data || {});

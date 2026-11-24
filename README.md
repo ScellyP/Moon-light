@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.17.01-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.17.02-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -86,16 +86,18 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
 - **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
 - **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. You can choose to *Keep both*, *Move duplicate* to `Moonlight/Duplicates`, or apply the choice to all remaining tracks. Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
-- **Share** a song's file (the mp3) through Android's share sheet, or just the link it was downloaded from.
+- **Share** a song's file (the mp3) or source link through Android's share sheet, and share playlists as `.moonlight` files with source links directly from the playlist header or menu.
 - **Delete** a song's file for good (after a confirmation), which is different from *Remove from this playlist*.
 
 ### Download songs
 - Paste links from the clipboard (up to 50 at a time); each becomes a queued song.
-- **Import playlist .txt files**: Import exported playlist link files directly via the "Import playlist .txt" file picker, or paste text with `# name:` headers to auto-name the playlist and stage all tracks.
+- **.moonlight files and playlist import**: Export and import playlists as `.moonlight` files containing track source links. Opening any `.moonlight` file launches Moonlight, opens Downloads, and starts downloading all tracks automatically without extra taps. You can also import existing `.txt` lists.
+- **Background downloads for single songs**: Single-song downloads continue running in the background via the foreground service, and can be cancelled from the persistent notification or in-app.
+- **Single-song download cancel button**: Tap the white "X" button at the top right of a running download to stop it immediately and clean up partial files.
 - **Download via Share**: Tap "Share" on any YouTube video or media link in other apps and choose Moonlight to instantly open the Downloads tab and resolve the song.
 - A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
 - Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
-- **Real-time per-song download progress**: Individual progress bars with exact percentage, download speed, downloaded size / total size, and ETA readout for both single songs and multi-track playlist downloads. Tracks clearly reflect queued, downloading, completed, and failed states, with an inline Retry button for any failed item without losing other downloads.
+- **Real-time per-song download progress**: Individual progress bars with exact percentage, download speed, downloaded size / total size, and ETA readout for both single songs and multi-track playlist downloads without UI flickering. Tracks clearly reflect queued, downloading, completed, and failed states, with an inline Retry button for any failed item without losing other downloads.
 - **Remembers what you downloaded** and warns *Already downloaded* even if the link is written differently.
 - **Duplicate-name detection** while you name a song, ignoring capitals, punctuation and tags like "(Official Video)".
 - **Crop the cover**: choose which square of the video's thumbnail becomes the song's cover art.

@@ -137,6 +137,13 @@ class SongDownloader(
     private val updateTried = AtomicBoolean(false)
     private val nightlyChecked = AtomicBoolean(false)
 
+    init {
+        DownloadForegroundService.cancelHandler = {
+            cancel()
+            try { File(STAGING_DIR).deleteRecursively() } catch (_: Exception) {}
+        }
+    }
+
     /** Gets the bundled Python/yt-dlp/ffmpeg unpacked in the background (a few seconds, once per install). */
     fun warmUp() {
         pool.execute { ensureEngine() }
@@ -422,17 +429,19 @@ class SongDownloader(
                         val info = parseYtDlpLine(line)
                         val finalPct = if (progress >= 0f) progress.toDouble() else info.percent
                         val finalEta = if (etaInSeconds >= 0L) etaInSeconds else info.eta
-                        val json = JSONObject().apply {
-                            put("jobId", jobId)
-                            put("percent", finalPct)
-                            put("eta", finalEta)
-                            put("speed", info.speed)
-                            put("downloaded", info.downloaded)
-                            put("total", info.total)
-                            put("status", "downloading")
-                        }.toString()
-                        main.post {
-                            onPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + json)
+                        if (finalPct >= 0.0 || info.speed.isNotEmpty() || info.downloaded.isNotEmpty()) {
+                            val json = JSONObject().apply {
+                                put("jobId", jobId)
+                                put("percent", finalPct)
+                                put("eta", finalEta)
+                                put("speed", info.speed)
+                                put("downloaded", info.downloaded)
+                                put("total", info.total)
+                                put("status", "downloading")
+                            }.toString()
+                            main.post {
+                                onPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + json)
+                            }
                         }
                     }
                 }
