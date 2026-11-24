@@ -459,6 +459,10 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.17.04 (2026-11-24) — Topbar download cancel button across all steps and Paste more immediate clipboard paste.**
+  1. *Download Cancel Button:* Moved download cancel "X" button (`.dl-cancel-btn`) to the top right of the Downloads view header (`.sp-topbar`) next to `Download songs` in light grey (`#c8c8c8`), keeping it visible and accessible across all download steps to stop downloads, clean up staged files, and reset.
+  2. *Paste More Clipboard Action:* Updated "Paste more" button on the completion screen to immediately read the clipboard and start downloading the link directly instead of resetting to an empty paste button.
+
 - **v1.17.03 (2026-11-24) — Version box update check UI, Moonlight intent reading fallback, and download race cleanup.**
   1. *Version Box Update Check:* In Settings menu footer, replaced the separate "Check for updates" button and separate auto-update switch row with a single styled version box (`#update-check.sd-version-box`) displaying Moonlight and the version badge. Tapping the box triggers update checking on tap, with `#update-bar` displaying status above it.
   2. *Moonlight Intent Scheme Fallback:* In `MainActivity.kt`, added safe direct file fallback when reading incoming `.moonlight` files via `file://` scheme URIs if ContentResolver stream open fails. In `playlistShareLinks`, sanitized file names to prevent double `.moonlight.moonlight` extensions.

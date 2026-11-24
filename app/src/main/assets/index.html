@@ -2463,24 +2463,28 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 @keyframes dlStepIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
 .dl-cancel-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
   background: transparent;
   border: 0;
   padding: 8px;
   cursor: pointer;
-  color: #ffffff;
+  color: #c8c8c8;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
-  line-height: 1;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .15s ease, background-color .15s ease, color .15s ease;
+}
+.dl-cancel-btn:active {
+  transform: scale(.9);
+  background-color: color-mix(in srgb, var(--text) 12%, transparent);
 }
 .dl-cancel-btn .ico {
   width: 22px;
   height: 22px;
-  color: #ffffff;
+  color: #c8c8c8;
 }
 
 /* Buttons: Spotify's pill, bold; bigger and a little brighter on hover, pressed in on tap. */
@@ -3663,7 +3667,7 @@ body.settings-open #srch-input { pointer-events: none; }
         <section id="sp-view-download" class="sp-view" aria-label="Download songs">
           <div class="sp-topbar">
             <h1>Download songs</h1>
-            <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
+            <button type="button" id="dl-cancel-btn" class="dl-cancel-btn sp-icon-btn" title="Cancel download" aria-label="Cancel download"><svg class="ico"><use href="#i-close"/></svg></button>
           </div>
           <div id="dl-body">
             <!-- One step at a time: song-download.js replaces this box's content as the steps go by. -->

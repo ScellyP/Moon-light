@@ -846,17 +846,6 @@
       box.appendChild(row);
       return box;
     }
-    // Cancel X button at top right
-    const cancelBtn = el('button', 'dl-cancel-btn');
-    cancelBtn.type = 'button';
-    cancelBtn.setAttribute('title', 'Cancel download');
-    cancelBtn.setAttribute('aria-label', 'Cancel download');
-    cancelBtn.innerHTML = '<svg class="ico"><use href="#i-close"/></svg>';
-    cancelBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      wizard.leave();
-    });
-    box.appendChild(cancelBtn);
 
     box.appendChild(el('span', 'dl-spinner'));
     const hasPct = item && typeof item.percent === 'number' && item.percent >= 0;
@@ -1062,7 +1051,10 @@
     mark.appendChild(icon('i-check'));
     box.appendChild(mark);
     box.appendChild(el('h2', 'dl-title', placed ? 'All done' : 'No songs were added'));
-    box.appendChild(button('Paste more', 'dl-primary', () => wizard.again()));
+    box.appendChild(button('Paste more', 'dl-primary', () => {
+      wizard.again();
+      pasteFromClipboard();
+    }));
     return box;
   }
 
@@ -1761,6 +1753,34 @@
   const closeTab = () => {
     if (isShown() && root.SpotifyUI && root.SpotifyUI.setView) root.SpotifyUI.setView('library');
   };
+
+  function cancelAnyDownload() {
+    let hadWork = false;
+    if (pl) {
+      hadWork = true;
+      pl = null;
+    }
+    if (wizard) {
+      if (wizard.state.step !== 'paste') {
+        hadWork = true;
+        wizard.leave();
+      } else {
+        wizard.leave();
+      }
+    }
+    render();
+    if (!hadWork && root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
+      root.SpotifyUI.setView('library');
+    }
+  }
+
+  const topCancelBtn = document.getElementById('dl-cancel-btn');
+  if (topCancelBtn) {
+    topCancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelAnyDownload();
+    });
+  }
 
   // Leaving the tab (another tab, the ✕, the panel closing) ends a run that is not finished.
   // The playlists and covers are re-read each time the tab comes into view.

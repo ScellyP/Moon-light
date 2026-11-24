@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.17.03-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.17.04-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -93,7 +93,8 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - Paste links from the clipboard (up to 50 at a time); each becomes a queued song.
 - **.moonlight files and playlist import**: Export and import playlists as `.moonlight` files containing track source links. Opening any `.moonlight` file launches Moonlight, opens Downloads, and starts downloading all tracks automatically without extra taps. You can also import existing `.txt` lists.
 - **Background downloads for single songs**: Single-song downloads continue running in the background via the foreground service, and can be cancelled from the persistent notification or in-app.
-- **Single-song download cancel button**: Tap the white "X" button at the top right of a running download to stop it immediately and clean up partial files.
+- **Download cancel button**: Tap the light grey "X" button at the top right next to the "Download songs" heading at any step to stop running downloads immediately, clean up partial files, and reset.
+- **Paste more on completion**: Tap "Paste more" on the completion screen to immediately paste and start downloading the link from your clipboard without having to tap "Paste link" again.
 - **Download via Share**: Tap "Share" on any YouTube video or media link in other apps and choose Moonlight to instantly open the Downloads tab and resolve the song.
 - A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
 - Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
