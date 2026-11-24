@@ -1,14 +1,25 @@
 # Moonlight Project — Daily Handoff & Session Summary
-**Date:** November 24, 2026 (21:30 IST)  
-**Current Version:** `v1.17.06`  
+**Date:** November 24, 2026 (23:45 IST)  
+**Current Version:** `v1.17.07`  
 **Current Branch:** `Testing`  
 **Remote Status:** Ready for commit and patch
 
 ---
 
-## 1. Executive Summary & Today's Accomplishments
+## 1. Executive Summary & Accomplishments
 
-Today's session completed: **Folder playlist sharing resolution, menu share button wiring, and duplicate choice memory (`v1.17.01`)**, following **Multi-select playlist picker checkboxes (`v1.17.00`)** and **AnonDrop anonymous playlist sharing (`v1.16.38`)**:
+### **v1.17.07 — Default .moonlight File Association & Simplified Import Playlist Button**
+1. **Default .moonlight File Association:**
+   - **Problem:** Tapping or opening a `.moonlight` playlist file in file managers or other apps did not offer or open Moonlight or Moonlight Testing by default.
+   - **Solution in `AndroidManifest.xml` & `MainActivity.kt`:**
+     - Registered explicit `ACTION_VIEW` intent-filters with `android:priority="100"` covering `content` and `file` schemes.
+     - Handled URIs with no MIME type (`type == null`), broad fallback types (`*/*`, `application/octet-stream`, `text/*`, `text/plain`), and explicit custom MIME `application/x-moonlight`.
+     - Specified both `android:pathSuffix=".moonlight"` and `android:pathPattern=".*\\.moonlight"`.
+     - Updated `handleIncomingViewIntent` in `MainActivity.kt` to check `intent.data` or fall back to `intent.clipData` (commonly used when Android file managers grant read permissions), read content across content and file schemes, decode file names with URL encoding protection, and route to `onIncomingMoonlightFile` in the web UI.
+2. **Simplified Import Playlist Button:**
+   - In Downloads (`app/src/main/assets/song-download.js`), changed the button label from `"Import playlist .moonlight / .txt"` to `"Import playlist"` and updated its accessibility aria-label.
+3. **Automated Testing:**
+   - Updated `tests/song-download.test.js` to 34/34 passing checks validating intent filters, clipData fallback, and UI button labels. All core test suites pass.
 
 ### **v1.17.01 — Folder Playlist Sharing, Menu Share Wiring & Duplicate Memory**
 1. **Folder Playlist Sharing Resolution (`name:<folder>`):**

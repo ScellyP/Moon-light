@@ -428,7 +428,9 @@ check('System share receiver and intent wiring in AndroidManifest.xml and MainAc
 
 check('Downloads tab UI contains Import playlist button and file input for .moonlight and .txt', () => {
   const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
-  assert.ok(js.includes('Import playlist'), 'has Import playlist button');
+  assert.ok(js.includes("button('Import playlist', 'dl-secondary dl-big'"), 'has Import playlist button');
+  assert.ok(!js.includes('Import playlist .moonlight / .txt'), 'old verbose button label is removed');
+  assert.ok(js.includes("setAttribute('aria-label', 'Import playlist')"), 'file input aria-label is Import playlist');
   assert.ok(js.includes('.moonlight') && js.includes('.txt'), 'file input accepts .moonlight and .txt');
   assert.ok(js.includes('root.onIncomingShareLink ='), 'defines window.onIncomingShareLink');
   assert.ok(js.includes('root.onIncomingMoonlightFile ='), 'defines window.onIncomingMoonlightFile');
@@ -509,14 +511,40 @@ check('Single-song download cancel button and .moonlight format handling', () =>
   const manifest = fs.readFileSync(path.join(__dirname, '../app/src/main/AndroidManifest.xml'), 'utf8');
   assert.ok(manifest.includes('application/x-moonlight'), 'AndroidManifest handles application/x-moonlight');
   assert.ok(manifest.includes('.moonlight'), 'AndroidManifest handles .moonlight files');
+  assert.ok(manifest.includes('android:priority="100"'), 'AndroidManifest sets priority 100 for default opening');
+  assert.ok(manifest.includes('android:pathPattern=".*\\\\.moonlight"'), 'AndroidManifest matches .moonlight pathPattern');
+  assert.ok(manifest.includes('android:pathSuffix=".moonlight"'), 'AndroidManifest matches .moonlight pathSuffix');
+  assert.ok(manifest.includes('android:mimeType="application/octet-stream"'), 'AndroidManifest matches octet-stream');
+  assert.ok(manifest.includes('android:mimeType="text/*"'), 'AndroidManifest matches text/*');
 
   const mainKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
   assert.ok(mainKt.includes('handleIncomingViewIntent'), 'MainActivity handles VIEW intents');
+  assert.ok(mainKt.includes('intent.clipData'), 'handleIncomingViewIntent reads from clipData fallback');
   assert.ok(mainKt.includes('onIncomingMoonlightFile'), 'MainActivity calls onIncomingMoonlightFile');
 
   const fgServiceKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/DownloadForegroundService.kt'), 'utf8');
   assert.ok(fgServiceKt.includes('ACTION_CANCEL'), 'DownloadForegroundService defines ACTION_CANCEL');
   assert.ok(fgServiceKt.includes('cancelHandler'), 'DownloadForegroundService exposes cancelHandler');
+});
+
+check('.moonlight default file association intent filters and intent.clipData resolution', () => {
+  const manifest = fs.readFileSync(path.join(__dirname, '../app/src/main/AndroidManifest.xml'), 'utf8');
+
+  // Verify filter with scheme="content" and no mimeType
+  const contentNoMimeRegex = /<intent-filter[^>]*android:priority="100"[^>]*>[\s\S]*?<data[^>]*android:scheme="content"[^>]*>[\s\S]*?<data[^>]*android:pathSuffix="\.moonlight"[^>]*>[\s\S]*?<\/intent-filter>/;
+  assert.ok(contentNoMimeRegex.test(manifest), 'manifest has priority 100 content filter with pathSuffix and no mimeType');
+
+  // Verify filter with scheme="file" and no mimeType
+  const fileNoMimeRegex = /<intent-filter[^>]*android:priority="100"[^>]*>[\s\S]*?<data[^>]*android:scheme="file"[^>]*>[\s\S]*?<data[^>]*android:pathSuffix="\.moonlight"[^>]*>[\s\S]*?<\/intent-filter>/;
+  assert.ok(fileNoMimeRegex.test(manifest), 'manifest has priority 100 file filter with pathSuffix and no mimeType');
+
+  // Verify filter with scheme="content", mimeType="*/*", pathPattern and pathSuffix
+  const contentMimeRegex = /<intent-filter[^>]*android:priority="100"[^>]*>[\s\S]*?<data[^>]*android:scheme="content"[^>]*>[\s\S]*?<data[^>]*android:mimeType="\*\/\*"[^>]*>[\s\S]*?<\/intent-filter>/;
+  assert.ok(contentMimeRegex.test(manifest), 'manifest has priority 100 content filter with */* mimeType');
+
+  const mainKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
+  assert.ok(mainKt.includes('val uri = intent.data ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return'), 'reads uri from data or clipData');
+  assert.ok(mainKt.includes('Uri.decode(fileName)'), 'decodes URL-encoded file names');
 });
 
 console.log(n + ' checks passed');

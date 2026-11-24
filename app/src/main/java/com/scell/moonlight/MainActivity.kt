@@ -450,10 +450,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingViewIntent(intent: Intent?) {
         if (intent == null || intent.action != Intent.ACTION_VIEW) return
-        val uri = intent.data ?: return
+        val uri = intent.data ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return
         try {
-            val content = if (uri.scheme == "file" && uri.path != null) {
-                try { File(uri.path!!).readText(Charsets.UTF_8) } catch (_: Exception) {
+            val content = if ((uri.scheme == "file" || uri.scheme == null) && (uri.path != null || uri.toString().startsWith("/"))) {
+                val filePath = uri.path ?: uri.toString()
+                try { File(filePath).readText(Charsets.UTF_8) } catch (_: Exception) {
                     contentResolver.openInputStream(uri)?.use { stream -> stream.reader(Charsets.UTF_8).readText() }
                 }
             } else {
@@ -473,6 +474,13 @@ class MainActivity : ComponentActivity() {
                 val last = uri.lastPathSegment
                 if (!last.isNullOrBlank()) fileName = last
             }
+            if (fileName == "Playlist.moonlight") {
+                val last = uri.lastPathSegment
+                if (!last.isNullOrBlank()) fileName = last
+            }
+            try {
+                fileName = Uri.decode(fileName)
+            } catch (_: Exception) {}
 
             if (pageLoaded) {
                 runOnUiThread {

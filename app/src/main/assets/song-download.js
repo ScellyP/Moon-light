@@ -794,7 +794,7 @@
     fileInput.type = 'file';
     fileInput.accept = '.moonlight,.txt,text/plain';
     fileInput.style.display = 'none';
-    fileInput.setAttribute('aria-label', 'Import playlist text file');
+    fileInput.setAttribute('aria-label', 'Import playlist');
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
@@ -819,7 +819,7 @@
     });
     box.appendChild(fileInput);
 
-    const importBtn = button('Import playlist .moonlight / .txt', 'dl-secondary dl-big', () => fileInput.click());
+    const importBtn = button('Import playlist', 'dl-secondary dl-big', () => fileInput.click());
     importBtn.style.marginTop = '12px';
     box.appendChild(importBtn);
 
