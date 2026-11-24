@@ -1,6 +1,6 @@
 # Moonlight Project — Daily Handoff & Session Summary
 **Date:** November 24, 2026 (21:30 IST)  
-**Current Version:** `v1.17.02`  
+**Current Version:** `v1.17.03`  
 **Current Branch:** `Testing`  
 **Remote Status:** Ready for commit and patch
 

@@ -1633,8 +1633,9 @@
     if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
       pl = null;
     }
-    if (wizard && wizard.state && wizard.state.step === 'done') {
-      wizard.again();
+    if (wizard && wizard.state) {
+      if (wizard.state.step === 'done') wizard.again();
+      else if (wizard.state.step !== 'paste') wizard.leave();
     }
     takeClipboardText(url);
   };
@@ -1648,8 +1649,9 @@
     if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
       pl = null;
     }
-    if (wizard && wizard.state && wizard.state.step === 'done') {
-      wizard.again();
+    if (wizard && wizard.state) {
+      if (wizard.state.step === 'done') wizard.again();
+      else if (wizard.state.step !== 'paste') wizard.leave();
     }
     const fallbackTitle = (fileName || 'Playlist').replace(/\.moonlight$/i, '').replace(/\.[^.]+$/, '');
     const res = parsePlaylistLinksText(content, fallbackTitle);

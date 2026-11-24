@@ -3213,9 +3213,58 @@ html, body { overflow: hidden; }
 .sd-foot { flex-shrink: 0; padding: 12px 20px calc(var(--nav-bar-height, 0px) + 14px); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, var(--panel-2)); }
 .sd-foot #update-bar { margin: 0 0 8px; }
 .sd-foot #update-auto-row { margin: 0; font-size: 14.5px; color: var(--text); cursor: pointer; }
-.sd-version-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 6px; }
-/* The old reader-app footer style gave the version a top line and padding: not wanted inside the menu. */
-.sd-foot #app-version { margin: 0; padding: 0; border: 0; text-align: left; font-size: 13px; letter-spacing: 0; color: var(--faint); cursor: default; }
+.sd-foot #update-auto-row.hidden { display: none !important; }
+.sd-version-row { display: flex; align-items: center; width: 100%; padding-top: 4px; }
+#update-check.sd-version-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+}
+#update-check.sd-version-box:active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+  border-color: var(--accent-line);
+  transform: scale(.985);
+}
+.sd-version-box-meta {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 2px;
+}
+.sd-version-box-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13.5px;
+}
+.sd-version-box-hint {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.sd-foot #app-version {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent-strong, var(--text));
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  border: 1px solid var(--accent-line, var(--border));
+  cursor: pointer;
+}
 .sd-btn { padding: 9px 14px; min-height: 40px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-strong); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .sd-btn:active { background: var(--accent); color: var(--accent-ink); }
 body.settings-open #sp-views { pointer-events: none; }
@@ -3779,13 +3828,18 @@ body.settings-open #srch-input { pointer-events: none; }
         <div id="update-progress" class="hidden"><div id="update-progress-fill"></div></div>
         <button id="update-action" type="button" class="hidden"></button>
       </div>
-      <label id="update-auto-row" class="sd-switch" for="update-auto">
+      <label id="update-auto-row" class="sd-switch hidden" for="update-auto" style="display:none;">
         <span class="sd-switch-text">Update automatically<small>Checks in the background and installs new versions.</small></span>
         <input type="checkbox" id="update-auto" checked>
       </label>
       <div class="sd-version-row">
-        <span id="app-version"></span>
-        <button type="button" id="update-check" class="sd-btn">Check for updates</button>
+        <button type="button" id="update-check" class="sd-version-box" aria-label="Current version, tap to check for updates">
+          <span class="sd-version-box-meta">
+            <span class="sd-version-box-title">Moonlight</span>
+            <span class="sd-version-box-hint">Tap to check for updates</span>
+          </span>
+          <span id="app-version"></span>
+        </button>
       </div>
 
     </footer>

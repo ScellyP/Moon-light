@@ -452,8 +452,14 @@ class MainActivity : ComponentActivity() {
         if (intent == null || intent.action != Intent.ACTION_VIEW) return
         val uri = intent.data ?: return
         try {
-            val content = contentResolver.openInputStream(uri)?.use { stream ->
-                stream.reader(Charsets.UTF_8).readText()
+            val content = if (uri.scheme == "file" && uri.path != null) {
+                try { File(uri.path!!).readText(Charsets.UTF_8) } catch (_: Exception) {
+                    contentResolver.openInputStream(uri)?.use { stream -> stream.reader(Charsets.UTF_8).readText() }
+                }
+            } else {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.reader(Charsets.UTF_8).readText()
+                }
             } ?: return
             var fileName = "Playlist.moonlight"
             try {
@@ -1494,7 +1500,8 @@ class MainActivity : ComponentActivity() {
                 dir.mkdirs()
                 dir.listFiles()?.forEach { try { it.delete() } catch (e: Exception) { /* an old copy may stay */ } }
                 val safe = fileName.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().take(60).ifEmpty { "playlist" }
-                val f = File(dir, "$safe.moonlight")
+                val clean = safe.removeSuffix(".moonlight")
+                val f = File(dir, "$clean.moonlight")
                 f.writeText(text, Charsets.UTF_8)
                 val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
                 val send = Intent(Intent.ACTION_SEND).apply {

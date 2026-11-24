@@ -459,6 +459,11 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.17.03 (2026-11-24) — Version box update check UI, Moonlight intent reading fallback, and download race cleanup.**
+  1. *Version Box Update Check:* In Settings menu footer, replaced the separate "Check for updates" button and separate auto-update switch row with a single styled version box (`#update-check.sd-version-box`) displaying Moonlight and the version badge. Tapping the box triggers update checking on tap, with `#update-bar` displaying status above it.
+  2. *Moonlight Intent Scheme Fallback:* In `MainActivity.kt`, added safe direct file fallback when reading incoming `.moonlight` files via `file://` scheme URIs if ContentResolver stream open fails. In `playlistShareLinks`, sanitized file names to prevent double `.moonlight.moonlight` extensions.
+  3. *Download Race Cleanup:* In `song-download.js`, cancel active single-song downloads cleanly on incoming `.moonlight` file arrival to avoid job collisions, and deduplicated click handlers on child version element.
+
 - **v1.17.02 (2026-11-24) — .moonlight format, background downloads, cancel button, and share fix.**
   1. *Playlist Menu Share Fix:* Fixed playlist share button in `spotify-ui.js` and `audio-player.js` to correctly resolve active playlist key (`state.activePlaylist`, folder name, or curated playlist ID) and export source links.
   2. *Download Indicator Stability:* Fixed download UI flickering between "downloading" and "loading" states by removing `emit()` full re-renders on progress ticks, updating metrics in-place, and preventing negative percentages from resetting active downloads.

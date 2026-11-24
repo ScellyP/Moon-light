@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.17.02-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.17.03-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -118,7 +118,7 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - Optimised for large libraries (indexed lookups, off-screen rows skipped by the renderer).
 
 ### Settings menu
-Swipe right on Home (or tap the gear) for a drawer with playback options (normalisation, crossfade, Bluetooth auto-start), appearance options (twinkling stars, cover colours) and the update controls.
+Swipe right on Home (or tap the gear) for a drawer with playback options (normalisation, crossfade, Bluetooth auto-start), appearance options (twinkling stars, cover colours) and the current version box that checks for updates on tap.
 
 ### Updates
 - Checks this repo's **GitHub Releases** on start and in the background about every 6 hours (Wi-Fi only), with no Firebase or server needed.

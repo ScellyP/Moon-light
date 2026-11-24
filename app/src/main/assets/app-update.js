@@ -119,7 +119,7 @@
   }
   var checkBtn = document.getElementById('update-check');
   if (checkBtn) checkBtn.addEventListener('click', checkNow);
-  if (versionEl) {
+  if (versionEl && (!checkBtn || !checkBtn.contains(versionEl))) {
     versionEl.addEventListener('click', checkNow);
     versionEl.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); checkNow(); }
