@@ -270,9 +270,9 @@ check('the song being played is marked', () => {
 /* ---------------------------------------------------------------- the page structure */
 const body = HTML.slice(HTML.indexOf('<body'));
 
-check('the Search tab sits second in the bottom bar and has its view, input and chips', () => {
+check('the Search tab sits in the middle of the bottom bar and has its view, input and chips', () => {
   const nav = [...body.matchAll(/data-sp-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepStrictEqual(nav, ['library', 'search', 'album', 'track', 'download']);
+  assert.deepStrictEqual(nav, ['library', 'album', 'search', 'track', 'download']);
   ['sp-view-search', 'srch-input', 'srch-body', 'srch-clear', 'srch-chips'].forEach((id) => assert.ok(body.includes('id="' + id + '"'), id));
   ['all', 'songs', 'playlists', 'artists'].forEach((f) => assert.ok(body.includes('data-srch-filter="' + f + '"'), f));
   assert.ok(/#audio-panel\[data-view="search"\]/.test(HTML));

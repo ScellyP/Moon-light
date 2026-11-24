@@ -3754,8 +3754,8 @@ body.settings-open #srch-input { pointer-events: none; }
       <!-- ============ Bottom navigation ============ -->
       <nav id="sp-nav" aria-label="Music navigation">
         <button type="button" data-sp-view="library"><svg class="ico"><use href="#sp-home"/></svg><span>Home</span></button>
-        <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="album"><svg class="ico"><use href="#i-moon-music"/></svg><span>Songs</span></button>
+        <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="track"><svg class="ico"><use href="#i-headphones"/></svg><span>Now playing</span></button>
         <button type="button" data-sp-view="download"><svg class="ico"><use href="#i-download"/></svg><span>Download</span></button>
       </nav>
@@ -3785,7 +3785,8 @@ body.settings-open #srch-input { pointer-events: none; }
               <button type="button" data-sp-sleep="60">60 min</button>
               <button type="button" data-sp-sleep="-1">End of track</button>
             </div>
-            <button type="button" data-sp-act="rescan"><svg class="ico"><use href="#i-refresh"/></svg><span>Scan the sky</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="sharesong"><svg class="ico"><use href="#i-share"/></svg><span>Share song</span></button>
+            <button type="button" class="sp-pl-only" data-sp-act="rescan"><svg class="ico"><use href="#i-refresh"/></svg><span>Scan the sky</span></button>
           </div>
           <button type="button" id="sp-sheet-close" data-sp-sheet-close>Close</button>
         </div>

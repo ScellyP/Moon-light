@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(assets, f), 'utf8');
 let n = 0;
 function check(name, fn) { fn(); n++; console.log('ok -', name); }
 
-const ORDER = ['library', 'search', 'album', 'track', 'download'];     // Home, Search, Songs, Now playing, Download
+const ORDER = ['library', 'album', 'search', 'track', 'download'];     // Home, Songs, Search, Now playing, Download
 
 check('stepping through the tabs follows the order of the bottom bar', () => {
   const t = boot();
@@ -38,7 +38,7 @@ check('stepping works from any tab, including a jump made by tapping the bottom 
   const t = boot();
   window.SpotifyUI.setView('track');
   assert.strictEqual(window.SpotifyUI.stepView(-1), true);
-  assert.strictEqual(t.view(), 'album');
+  assert.strictEqual(t.view(), 'search');
   window.SpotifyUI.setView('download');
   assert.strictEqual(window.SpotifyUI.stepView(-1), true);
   assert.strictEqual(t.view(), 'track');
@@ -50,7 +50,7 @@ check('the bottom bar lists the tabs in that same order, Download last, and each
   const buttons = [...nav.matchAll(/data-sp-view="(\w+)"/g)].map((m) => m[1]);
   assert.deepStrictEqual(buttons, ORDER);
   buttons.forEach((v) => assert.ok(html.includes('id="sp-view-' + v + '"'), 'no view for ' + v));
-  assert.ok(new RegExp("const VIEWS = \\['library', 'search', 'album', 'track', 'download'\\]").test(read('spotify-ui.js')));
+  assert.ok(new RegExp("const VIEWS = \\['library', 'album', 'search', 'track', 'download'\\]").test(read('spotify-ui.js')));
 });
 
 check('the bottom bar also shows on Now playing (only the mini player is hidden there)', () => {

@@ -317,7 +317,7 @@
      Constants & element references
      ======================================================================= */
 
-  const VIEWS = ['library', 'search', 'album', 'track', 'download'];   // the order of the bottom bar, and of swiping
+  const VIEWS = ['library', 'album', 'search', 'track', 'download'];   // the order of the bottom bar, and of swiping
   const ENTER_ANIMATION_MS = 900;
   const PROGRESS_INTERVAL_MS = 400;
 
@@ -619,6 +619,17 @@
       case 'sleep':
         if (el.sleepOptions) el.sleepOptions.classList.toggle('hidden');
         break;
+
+      case 'sharesong': {
+        // Shares the song playing now: the audio file itself (not its link, not a playlist file).
+        const a = window.NovelAudio;
+        const id = a && a.getCurrentTrackId ? a.getCurrentTrackId() : null;
+        closeSheet();
+        let ok = false;
+        try { ok = !!(id && a.shareSong && a.shareSong(id)); } catch (e) { ok = false; }
+        if (!ok && window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Could not share this song');
+        break;
+      }
 
       case 'rescan':
         clickIfPresent(el.scan);
