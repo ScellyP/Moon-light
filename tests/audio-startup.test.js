@@ -104,4 +104,35 @@ check('a bridge without the Bluetooth call (older app build) just does not autop
   assert.strictEqual(t.state.currentTrackId, TRACKS[1].id);   // the song still comes back
 });
 
+check('active background playback is preserved on reopen instead of starting a new song', () => {
+  const t = launch({ saved: { lastTrackId: TRACKS[0].id }, bluetooth: true });
+  window.onNativeAudioActive({ active: true, path: TRACKS[2].path, playing: true, positionSec: 42.5, durationSec: 102 });
+  t.nativeReady(); t.scanFinished();
+  assert.strictEqual(t.state.currentTrackId, TRACKS[2].id);
+  assert.strictEqual(t.state.playing, true);
+  assert.strictEqual(t.state.positionSec, 42.5);
+  assert.strictEqual(t.state.durationSec, 102);
+  assert.deepStrictEqual(t.calls, []); // does not start or load a new song
+});
+
+check('active background playback reported after scan syncs immediately', () => {
+  const t = launch({ saved: { lastTrackId: TRACKS[0].id }, bluetooth: false });
+  t.nativeReady(); t.scanFinished();
+  window.onNativeAudioActive({ active: true, path: TRACKS[1].path, playing: true, positionSec: 15, durationSec: 101 });
+  assert.strictEqual(t.state.currentTrackId, TRACKS[1].id);
+  assert.strictEqual(t.state.playing, true);
+  assert.strictEqual(t.state.positionSec, 15);
+});
+
+check('autoplay blacklist prevents blacklisted playlist from starting on Bluetooth connect', () => {
+  const sleepTracks = [
+    { id: '/Novel/Audio/s1.mp3', path: '/Novel/Audio/s1.mp3', title: 'Sleep 1', durationSec: 100, playlist: 'Sleep', playlists: ['Sleep'] },
+  ];
+  const t = launch({ saved: { lastTrackId: sleepTracks[0].id, activePlaylist: 'Sleep' }, bluetooth: true });
+  t.app.toggleAutoplayBlacklist('Sleep');
+  assert.strictEqual(t.app.isPlaylistAutoplayBlacklisted('Sleep'), true);
+  t.nativeReady(); t.scanFinished(sleepTracks);
+  assert.deepStrictEqual(t.calls, []); // blocked by blacklist!
+});
+
 finish();

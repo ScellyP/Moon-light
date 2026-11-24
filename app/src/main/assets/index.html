@@ -1162,6 +1162,66 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 .dupe-link-btn:hover { color: var(--text); }
 
+/* Autoplay blacklist dialog */
+#blacklist-dialog-layer {
+  position: fixed; inset: 0; z-index: 310;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#blacklist-dialog-layer.hidden { display: none; }
+#blacklist-dialog-box {
+  width: 100%; max-width: 380px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+.bl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.bl-head-title h3 { margin: 0; font: 700 18px/1.25 var(--font-ui); color: var(--text); }
+.bl-hint { margin: 4px 0 0; font-size: 12.5px; line-height: 1.35; color: var(--sp-sub, var(--muted)); }
+.bl-close-btn {
+  background: none; border: none; font-size: 24px; line-height: 1; color: var(--sp-sub, var(--muted));
+  cursor: pointer; padding: 0 4px;
+}
+.bl-close-btn:hover { color: var(--text); }
+.bl-list {
+  flex: 1 1 auto; overflow-y: auto; margin: 8px 0 16px; display: flex; flex-direction: column; gap: 6px;
+  max-height: 50vh; -webkit-overflow-scrolling: touch;
+}
+.bl-item {
+  display: flex; align-items: center; justify-content: space-between; padding: 10px 12px;
+  background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 10px; cursor: pointer;
+  transition: background-color .15s ease;
+}
+.bl-item:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.bl-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bl-item-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-item-count { font-size: 11.5px; color: var(--sp-sub, var(--muted)); }
+.bl-checkbox {
+  width: 20px; height: 20px; border-radius: 4px; border: 2px solid var(--sp-sub, var(--muted));
+  display: flex; align-items: center; justify-content: center; flex: none; transition: background .15s, border-color .15s;
+}
+.bl-checkbox.checked {
+  background: var(--sp-accent, var(--accent)); border-color: var(--sp-accent, var(--accent));
+}
+.bl-checkbox.checked::after {
+  content: ''; display: block; width: 5px; height: 9px;
+  border: solid var(--sp-ink, #000); border-width: 0 2px 2px 0;
+  transform: rotate(45deg); margin-top: -2px;
+}
+.bl-empty { padding: 20px; text-align: center; color: var(--sp-sub, var(--muted)); font-size: 13.5px; }
+.bl-actions { display: flex; justify-content: flex-end; }
+.bl-btn-done {
+  min-height: 40px; padding: 0 22px; border-radius: 999px; border: none;
+  background: var(--sp-accent, var(--accent)); color: var(--sp-ink, #000);
+  font: 700 13.5px/1 var(--font-ui); cursor: pointer;
+  transition: transform .15s ease, opacity .15s ease;
+}
+.bl-btn-done:active { transform: scale(.96); }
+
 /* "Delete chapters" popup: asks for a chapter number (reader.js). Same look as the message dialog. */
 #delete-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -3769,6 +3829,10 @@ body.settings-open #srch-input { pointer-events: none; }
           <span class="sd-switch-text">Play when Bluetooth connects<small>Starts the music when you open the app with headphones, a speaker or a car connected.</small></span>
           <input type="checkbox" id="set-bt" checked>
         </label>
+        <div class="sd-account" id="autoplay-blacklist-row">
+          <span class="sd-switch-text">Autoplay blacklist<small id="autoplay-blacklist-status">No playlists blacklisted</small><small>Choose playlists that should never start automatically on connect.</small></span>
+          <button type="button" id="autoplay-blacklist-btn" class="sd-btn">Manage</button>
+        </div>
       </section>
 
       <section class="sd-group" aria-labelledby="sd-downloads">
@@ -3887,6 +3951,22 @@ body.settings-open #srch-input { pointer-events: none; }
     <div id="dupe-dialog-footer" class="hidden">
       <button id="dupe-btn-keep-all" type="button" class="dupe-link-btn">Keep all remaining</button>
       <button id="dupe-btn-move-all" type="button" class="dupe-link-btn">Move all remaining</button>
+    </div>
+  </div>
+</div>
+
+<div id="blacklist-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="blacklist-dialog-title">
+  <div id="blacklist-dialog-box">
+    <div class="bl-head">
+      <div class="bl-head-title">
+        <h3 id="blacklist-dialog-title">Autoplay Blacklist</h3>
+        <p class="bl-hint">Playlists checked below will never start automatically on connect.</p>
+      </div>
+      <button type="button" id="blacklist-dialog-close" class="bl-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div id="blacklist-dialog-list" class="bl-list"></div>
+    <div class="bl-actions">
+      <button type="button" id="blacklist-dialog-done" class="bl-btn-done">Done</button>
     </div>
   </div>
 </div>

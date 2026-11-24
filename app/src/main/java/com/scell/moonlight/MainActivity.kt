@@ -681,7 +681,10 @@ class MainActivity : ComponentActivity() {
                 // callback hit a page that had no handler yet and was
                 // silently dropped (leaving the player on the WebView
                 // fallback engine). Re-announce it now.
-                if (mediaController != null) callPage("onNativeAudioReady")
+                if (mediaController != null) {
+                    callPage("onNativeAudioReady")
+                    syncNativePlaybackState()
+                }
             }
         }
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
@@ -822,6 +825,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 callPage("onNativeAudioReady")
+                syncNativePlaybackState()
             } catch (e: Exception) {
                 // Native engine unavailable (e.g. the service failed to
                 // bind) — audio-player.js's LocalAudioEngine keeps
@@ -830,6 +834,30 @@ class MainActivity : ComponentActivity() {
                 // error since local playback still works fine.
             }
         }, MoreExecutors.directExecutor())
+    }
+
+    private fun syncNativePlaybackState() {
+        val controller = mediaController ?: return
+        val item = controller.currentMediaItem
+        val path = item?.mediaId ?: ""
+        val isPlaying = controller.isPlaying
+        val state = controller.playbackState
+        val isLoaded = state == Player.STATE_READY || state == Player.STATE_BUFFERING
+        if (path.isNotEmpty() && (isPlaying || isLoaded)) {
+            val posSec = (controller.currentPosition.coerceAtLeast(0L)) / 1000.0
+            val durSec = (controller.duration.coerceAtLeast(0L)) / 1000.0
+            val json = JSONObject().apply {
+                put("active", true)
+                put("path", path)
+                put("playing", isPlaying)
+                put("positionSec", posSec)
+                put("durationSec", durSec)
+            }.toString()
+            runOnUiThread {
+                callPage("onNativeAudioActive", JSONObject.quote(json))
+                if (isPlaying) startProgressUpdates()
+            }
+        }
     }
 
     /**
@@ -1171,6 +1199,7 @@ class MainActivity : ComponentActivity() {
         appUpdater.onResume()
         // Push the current position right away (the poll may have been in slow mode).
         if (mediaController?.isPlaying == true) startProgressUpdates()
+        syncNativePlaybackState()
         keepScreenAwake()
         if (::webView.isInitialized && !webViewGone) {
             webView.onResume()

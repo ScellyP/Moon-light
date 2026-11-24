@@ -154,7 +154,7 @@
     }, ms + 40);
   }
 
-  function open() { refreshYouTube(); if (progress < 1 || !settled) settleTo(1, 0); }
+  function open() { refreshYouTube(); refreshBlacklist(); if (progress < 1 || !settled) settleTo(1, 0); }
   function close() { if (progress > 0 || layer.classList.contains('is-open')) { settled = false; settleTo(0, 0); } }
   function isOpen() { return layer.classList.contains('is-open') && progress > 0; }
 
@@ -326,6 +326,24 @@
     if (message && root.SongMenu && root.SongMenu.toast) root.SongMenu.toast(message);
   };
   refreshYouTube();
+
+  /* ---- Autoplay playlist blacklist ---- */
+  var blBtn = document.getElementById('autoplay-blacklist-btn');
+  var blStatus = document.getElementById('autoplay-blacklist-status');
+  function refreshBlacklist() {
+    if (!blStatus) return;
+    if (root.NovelAudio && root.NovelAudio.getBlacklistStatusText) {
+      blStatus.textContent = root.NovelAudio.getBlacklistStatusText();
+    }
+  }
+  if (blBtn) {
+    blBtn.addEventListener('click', function () {
+      if (root.NovelAudio && root.NovelAudio.openBlacklistDialog) {
+        root.NovelAudio.openBlacklistDialog();
+      }
+    });
+  }
+  refreshBlacklist();
 
   setProgress(0);
   root.SettingsMenu = { open: open, close: close, isOpen: isOpen };

@@ -110,6 +110,10 @@
       window.NovelAudio.closeDuplicateDialog();
       return true;
     }
+    if (window.NovelAudio && window.NovelAudio.isBlacklistDialogOpen && window.NovelAudio.isBlacklistDialogOpen()) {
+      window.NovelAudio.closeBlacklistDialog();
+      return true;
+    }
     // The song options sheet (the "..." menu, song-menu.js) is on top of everything it was opened from, so it goes first.
     if (window.SongDownload && window.SongDownload.closeCrop && window.SongDownload.closeCrop()) return true;
     if (window.PlaylistEditor && window.PlaylistEditor.isOpen()) { window.PlaylistEditor.close(); return true; }

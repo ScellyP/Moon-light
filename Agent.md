@@ -459,6 +459,10 @@ reader's); a night rule (see the open question above).
 a renamed class, a new bridge method, a moved responsibility, a new workflow step, a changed contract between page and native),
 add a line here in the same change: **date, what changed, and why**. Newest first. Behaviour-only fixes do not need a line.
 
+- **v1.17.06 (2026-11-24) — Background playback continuity on app reopen and autoplay playlist blacklist.**
+  1. *Background Playback Continuity:* When Moonlight is cleared from recents while `PlaybackService` continues playing in the background, reopening the app reconnects to `mediaController`, retrieves the active track, position, duration, and playing state via `syncNativePlaybackState()` and `onNativeAudioActive()`. `audio-player.js` synchronizes the active song and progress, marks `StartupPlayback.done = true`, and sets `NativeAudioEngine._loadedTrackId` to prevent restarting or jumping to track zero or a shuffle song.
+  2. *Autoplay Playlist Blacklist:* Added an autoplay playlist blacklist feature in Settings (`#autoplay-blacklist-row`) and `#blacklist-dialog-layer` modal (supporting dynamic cover colours). Users can exclude specific playlists from automatically starting when Bluetooth or headphones connect. `StartupPlayback._tryStart()` respects the blacklist for the active playlist and for tracks belonging exclusively to blacklisted playlists.
+
 - **v1.17.05 (2026-11-24) — Complete native download cancellation and ACTION_SEND stream intent support.**
   1. *Complete Download Cancellation:* In `song-download.js`, updated `cancelAnyDownload()` and `onIncomingMoonlightFile()` to call `b.cancelSongDownload()` and `b.discardStagedSongs()`, ensuring running playlist batches halt child yt-dlp processes and clean up temporary files without leaving ghost processes.
   2. *ACTION_SEND Stream Intent Support:* In `AndroidManifest.xml` and `MainActivity.kt`, added `ACTION_SEND` intent-filter for `application/x-moonlight` and stream URI resolution (`EXTRA_STREAM`), enabling Moonlight to automatically handle `.moonlight` files and playlist text when shared from other apps.

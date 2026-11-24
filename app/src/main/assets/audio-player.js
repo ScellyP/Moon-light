@@ -222,6 +222,37 @@ window.NovelAudio = (function () {
       fns.forEach((fn) => { try { fn(); } catch (e) { /* one listener must not stop the others */ } });
     },
 
+    // Synchronises player state with an ongoing background playback session
+    _syncActiveTrack(active) {
+      if (!active || !active.path || !Array.isArray(state.tracks) || !state.tracks.length) return;
+      const norm = (p) => (p || '').replace(/\\/g, '/').toLowerCase();
+      const target = norm(active.path);
+      const track = state.tracks.find(t => norm(t.path) === target) || state.tracks.find(t => t.id === active.path);
+      if (!track) return;
+
+      state.currentTrackId = track.id;
+      NativeAudioEngine._loadedTrackId = track.id;
+      if (typeof active.playing === 'boolean') state.playing = active.playing;
+      if (typeof active.positionSec === 'number') state.positionSec = active.positionSec;
+      state.durationSec = (typeof active.durationSec === 'number' && active.durationSec > 0)
+        ? active.durationSec
+        : (track.durationSec || 0);
+
+      StartupPlayback.done = true;
+      AudioEngine = NativeAudioEngine;
+
+      if (!this.currentSelectionIds().includes(track.id)) {
+        state.activePlaylist = 'all';
+      }
+      const ids = this.currentSelectionIds();
+      PlaybackQueue.buildFrom(ids);
+      PlaybackQueue.jumpTo(track.id);
+
+      AudioUI.render();
+      AudioFeatures.emit('engineChanged', NativeAudioEngine);
+      AudioFeatures.emit('trackStart', track);
+    },
+
     /* Called by the native side with the scan result. Each track may
      * carry a `playlist` field (the name of the subfolder it lives in
      * under Audio/, or null/undefined for a file directly in Audio/ —
@@ -282,18 +313,19 @@ window.NovelAudio = (function () {
         } catch (e) { /* non-fatal */ }
       }
 
-      // First scan after launch: bring back the song that was playing when the app was last
-      // closed. It becomes the current song (shown in the player, and what Play starts) but is
-      // not started here, and like every track it starts from the beginning, not where it was
-      // left. If it is no longer in the selected playlist, fall back to the whole library.
-      // With shuffle on, the remembered song is NOT brought back: it would be the first song of every
-      // launch. The shuffle round picks a song that has not been played yet instead (see below).
-      const remembered = !state.shuffle && !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
-      if (remembered) {
-        state.currentTrackId = remembered.id;
-        state.durationSec = remembered.durationSec || 0;
-        state.positionSec = 0;
-        if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
+      // First scan after launch: if native playback is already active in the background,
+      // sync with that playing song instead of resetting or picking a new track.
+      if (state.pendingActivePlayback) {
+        this._syncActiveTrack(state.pendingActivePlayback);
+        state.pendingActivePlayback = null;
+      } else {
+        const remembered = !state.shuffle && !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
+        if (remembered) {
+          state.currentTrackId = remembered.id;
+          state.durationSec = remembered.durationSec || 0;
+          state.positionSec = 0;
+          if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
+        }
       }
 
       try { this.relinkMovedIds(); } catch (e) { /* a failed relink only leaves old entries unavailable */ }
@@ -318,7 +350,7 @@ window.NovelAudio = (function () {
         PlaybackQueue.jumpTo(currentId);
       }
       // Shuffle on and nothing loaded yet (a fresh launch): get the next unplayed song ready (not started).
-      if (state.shuffle && !currentId && PlaybackQueue.current()) {
+      if (state.shuffle && !currentId && !state.currentTrackId && PlaybackQueue.current()) {
         const first = this.getTrack(PlaybackQueue.current());
         if (first) {
           state.currentTrackId = first.id;
@@ -2334,6 +2366,32 @@ window.NovelAudio = (function () {
     persistKeys: ['ignoredPairs'],
   });
 
+  /* ---- Autoplay playlist blacklist ----------------------------------------------
+     Playlists that the user excluded from starting automatically on connect. */
+  AudioFeatures.register({
+    id: 'autoplayBlacklist', label: 'Autoplay playlist blacklist', status: 'working',
+    defaults: { keys: [] },
+    persistKeys: ['keys'],
+    isBlacklisted(key) {
+      if (!key) return false;
+      const clean = String(key).trim();
+      const keys = (state.features.autoplayBlacklist && state.features.autoplayBlacklist.keys) || [];
+      return keys.includes(clean);
+    },
+    toggle(key) {
+      if (!key) return;
+      const clean = String(key).trim();
+      const keys = (state.features.autoplayBlacklist.keys = state.features.autoplayBlacklist.keys || []);
+      const idx = keys.indexOf(clean);
+      if (idx === -1) keys.push(clean);
+      else keys.splice(idx, 1);
+      Prefs.save();
+    },
+    getBlacklist() {
+      return ((state.features.autoplayBlacklist && state.features.autoplayBlacklist.keys) || []).slice();
+    }
+  });
+
   /* ---- Remember the last song ---------------------------------------------------
      Every time a track starts, the audio prefs are saved with it as `lastTrackId`
      (see Prefs.save), so the next launch can bring that song back. */
@@ -2769,6 +2827,19 @@ window.NovelAudio = (function () {
         });
       }
 
+      // Autoplay blacklist dialog wiring
+      const blLayer = document.getElementById('blacklist-dialog-layer');
+      const blClose = document.getElementById('blacklist-dialog-close');
+      const blDone = document.getElementById('blacklist-dialog-done');
+      if (blClose) blClose.addEventListener('click', () => AudioUI.closeBlacklistDialog());
+      if (blDone) blDone.addEventListener('click', () => AudioUI.closeBlacklistDialog());
+      if (blLayer) {
+        blLayer.addEventListener('click', (e) => {
+          if (e.target === blLayer) AudioUI.closeBlacklistDialog();
+        });
+      }
+      AudioUI.updateBlacklistStatus();
+
       AudioUI.renderPlaylistOptions();
     },
 
@@ -3158,6 +3229,86 @@ window.NovelAudio = (function () {
       syncSliderFill(els.seek);
     },
 
+    isBlacklistDialogOpen() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      return !!(layer && !layer.classList.contains('hidden'));
+    },
+
+    closeBlacklistDialog() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      if (layer) layer.classList.add('hidden');
+      this.updateBlacklistStatus();
+    },
+
+    getBlacklistStatusText() {
+      const keys = (AudioFeatures.autoplayBlacklist && AudioFeatures.autoplayBlacklist.getBlacklist()) || [];
+      if (!keys.length) return 'No playlists blacklisted';
+      return keys.length === 1 ? '1 playlist blacklisted' : keys.length + ' playlists blacklisted';
+    },
+
+    updateBlacklistStatus() {
+      const el = typeof document !== 'undefined' && document.getElementById('autoplay-blacklist-status');
+      if (el) el.textContent = this.getBlacklistStatusText();
+    },
+
+    openBlacklistDialog() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      if (!layer) return;
+      this.renderBlacklistDialog();
+      layer.classList.remove('hidden');
+    },
+
+    renderBlacklistDialog() {
+      const listEl = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      const bl = AudioFeatures.autoplayBlacklist;
+      const names = AudioUI._playlistNames().filter(n => n !== 'all');
+
+      if (!names.length) {
+        const empty = document.createElement('div');
+        empty.className = 'bl-empty';
+        empty.textContent = 'No playlists found';
+        listEl.appendChild(empty);
+        return;
+      }
+
+      names.forEach((name) => {
+        const item = document.createElement('div');
+        item.className = 'bl-item';
+
+        const info = document.createElement('div');
+        info.className = 'bl-item-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'bl-item-name';
+        nameSpan.textContent = playlistLabel(name);
+
+        const countSpan = document.createElement('span');
+        countSpan.className = 'bl-item-count';
+        const cnt = AudioUI._playlistCount(name);
+        countSpan.textContent = cnt === 1 ? '1 song' : cnt + ' songs';
+
+        info.appendChild(nameSpan);
+        info.appendChild(countSpan);
+
+        const check = document.createElement('div');
+        check.className = 'bl-checkbox' + (bl.isBlacklisted(name) ? ' checked' : '');
+
+        item.appendChild(info);
+        item.appendChild(check);
+
+        item.addEventListener('click', () => {
+          bl.toggle(name);
+          check.classList.toggle('checked', bl.isBlacklisted(name));
+          this.updateBlacklistStatus();
+        });
+
+        listEl.appendChild(item);
+      });
+    },
+
     render() {
       if (!els.panel) return;
 
@@ -3344,7 +3495,23 @@ window.NovelAudio = (function () {
       let connected = false;
       try { connected = !!bridge.isBluetoothAudioConnected(); } catch (e) { /* treat as not connected */ }
       const id = state.currentTrackId || PlaybackQueue.current();
-      if (connected && id) AudioEngine.play(id);
+      if (!connected || !id) return;
+
+      const bl = AudioFeatures.autoplayBlacklist;
+      if (bl && bl.isBlacklisted) {
+        if (bl.isBlacklisted(state.activePlaylist)) return;
+        if (state.activePlaylist === 'all') {
+          const t = MediaLibrary.getTrack(id);
+          if (t) {
+            const names = MediaLibrary._namesOf(t);
+            if (names.length > 0 && names.every(n => bl.isBlacklisted(n))) {
+              return;
+            }
+          }
+        }
+      }
+
+      AudioEngine.play(id);
     },
   };
 
@@ -3399,6 +3566,17 @@ window.NovelAudio = (function () {
     ignoreDuplicatePair(a, b) { MediaLibrary.ignoreDuplicatePair(a, b); },
     ignoreRemainingDuplicates() { MediaLibrary.ignoreRemainingDuplicates(); },
     clearIgnoredDuplicates() { MediaLibrary.clearIgnoredDuplicates(); },
+    isBlacklistDialogOpen() { return AudioUI.isBlacklistDialogOpen(); },
+    closeBlacklistDialog() { AudioUI.closeBlacklistDialog(); },
+    openBlacklistDialog() { AudioUI.openBlacklistDialog(); },
+    getBlacklistStatusText() { return AudioUI.getBlacklistStatusText(); },
+    updateBlacklistStatus() { AudioUI.updateBlacklistStatus(); },
+    isPlaylistAutoplayBlacklisted(k) { return AudioFeatures.autoplayBlacklist.isBlacklisted(k); },
+    toggleAutoplayBlacklist(k) {
+      AudioFeatures.autoplayBlacklist.toggle(k);
+      AudioUI.updateBlacklistStatus();
+    },
+    getAutoplayBlacklist() { return AudioFeatures.autoplayBlacklist.getBlacklist(); },
     getIgnoredDuplicates() {
       const st = state.features.duplicates;
       return (st && Array.isArray(st.ignoredPairs)) ? st.ignoredPairs.slice() : [];
@@ -4027,6 +4205,14 @@ window.NovelAudio = (function () {
     _nativeOnError(message) { NativeAudioEngine.onError(message); },
     _nativeOnSkipNext() { NativeAudioEngine.onSkipNext(); },
     _nativeOnSkipPrevious() { NativeAudioEngine.onSkipPrevious(); },
+    _nativeOnActive(data) {
+      if (!data || !data.active) return;
+      if (state.tracks && state.tracks.length > 0) {
+        MediaLibrary._syncActiveTrack(data);
+      } else {
+        state.pendingActivePlayback = data;
+      }
+    },
 
     /* Called by the reading-session timer when a break overlay appears.
      * Pauses playback and remembers that it was *we* who paused, so
@@ -4084,6 +4270,16 @@ window.onAudioListed = function (tracksJson) {
     window.NovelAudio.onAudioListed(tracks);
   } catch (e) {
     console.error('Failed to parse audio list', e);
+  }
+};
+
+// Fired when the native engine reports an already-active background playback session.
+window.onNativeAudioActive = function (json) {
+  try {
+    const data = typeof json === 'string' ? JSON.parse(json) : json;
+    window.NovelAudio._nativeOnActive(data);
+  } catch (e) {
+    console.error('Failed to parse native active audio', e);
   }
 };
 
