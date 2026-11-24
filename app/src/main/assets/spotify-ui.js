@@ -142,6 +142,8 @@
     const pixels = imgData.data;
 
     let chromSumR = 0, chromSumG = 0, chromSumB = 0, chromWeight = 0;
+    let chromCount = 0, chromSatSum = 0;
+    let neutSumR = 0, neutSumG = 0, neutSumB = 0, neutCount = 0;
     let genSumR = 0, genSumG = 0, genSumB = 0, genCount = 0;
 
     for (let i = 0; i < pixels.length; i += 4) {
@@ -158,6 +160,8 @@
 
       // Chromatic candidate: visible colour (not extreme pitch black, not blown-out white)
       if (saturation >= 0.10 && lightness >= 0.05 && lightness <= 0.98) {
+        chromCount++;
+        chromSatSum += saturation;
         // Taper gently at extreme borders so light colours & pastels keep strong presence
         const lightFactor = Math.max(0, 1 - Math.pow(Math.abs(lightness - 0.5) * 1.85, 4));
         const satFactor = Math.sqrt(saturation);
@@ -168,17 +172,33 @@
           chromSumB += b * weight;
           chromWeight += weight;
         }
+      } else {
+        // Neutral pixel: black, white or grey (the "background" of many covers)
+        neutSumR += r;
+        neutSumG += g;
+        neutSumB += b;
+        neutCount++;
       }
     }
 
     if (genCount === 0) return null; // completely transparent
 
-    // If chromatic pixels are present, use the weighted chromatic colour:
-    if (chromWeight >= 0.4) {
+    // Does colour really dominate the cover? Judged by AREA, so a black cover with a thin
+    // coloured border (e.g. black square + maroon side bars) is treated as black, not as that
+    // colour. A smaller coloured area still wins when it is vivid (a bright subject on black).
+    const chromFraction = chromCount / genCount;
+    const chromAvgSat = chromCount ? chromSatSum / chromCount : 0;
+    const colourDominates = chromFraction >= 0.5 || (chromFraction >= 0.2 && chromAvgSat >= 0.5);
+
+    if (chromWeight >= 0.4 && (colourDominates || neutCount === 0)) {
       return [chromSumR / chromWeight, chromSumG / chromWeight, chromSumB / chromWeight];
     }
 
-    // Otherwise, represent the cover's actual neutral / grey / monochrome shade:
+    // Otherwise the cover is mostly black / white / grey: use the average of those pixels only,
+    // so the small coloured part does not tint it.
+    if (neutCount > 0) {
+      return [neutSumR / neutCount, neutSumG / neutCount, neutSumB / neutCount];
+    }
     return [genSumR / genCount, genSumG / genCount, genSumB / genCount];
   }
 
