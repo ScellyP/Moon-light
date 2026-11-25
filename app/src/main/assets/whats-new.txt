@@ -1,0 +1,10 @@
+// What's New in Moonlight (supports Markdown: # / ## headings, - bullets, **bold**, *italic*, `code`)
+// Lines starting with // are ignored as comments.
+
+## Highlights
+- **Dynamic notification colours** that match your playing cover art or active theme
+- **Background & resumable downloads** — single-song and playlist downloads keep running across tab switches and app restarts
+
+## Improvements
+- **Sharper moon phase badge** with a crisp circular ring and automatic hourly updates from system time
+- **Cleaner search history** — Search now keeps only your latest 3 recent searches

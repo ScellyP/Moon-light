@@ -1092,6 +1092,66 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 #dialog-ok:hover { background: var(--accent-strong); }
 
+/* What's New popup (shown once after an update, reads whats-new.txt) */
+#whatsnew-dialog-layer {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#whatsnew-dialog-layer.hidden { display: none; }
+#whatsnew-dialog-box {
+  width: 100%; max-width: 360px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+.wn-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.wn-icon {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: color-mix(in srgb, var(--sp-accent, var(--accent)) 18%, transparent);
+  color: var(--sp-accent, var(--accent));
+}
+.wn-icon .ico { width: 20px; height: 20px; }
+#whatsnew-dialog-title { margin: 0; font: 700 18px/1.2 var(--font-ui); color: var(--text); }
+#whatsnew-dialog-version {
+  display: inline-block; margin-top: 2px;
+  font: 600 12px/1.2 var(--font-ui); letter-spacing: .04em;
+  color: var(--sp-accent, var(--accent));
+}
+#whatsnew-dialog-version.hidden { display: none; }
+#whatsnew-dialog-list {
+  margin: 0 0 18px;
+  max-height: 52vh; overflow-y: auto;
+  font-size: 13.5px; line-height: 1.5; color: var(--text);
+}
+.wn-heading { margin: 12px 0 6px; font-weight: 700; color: var(--sp-accent, var(--accent)); }
+.wn-heading:first-child { margin-top: 0; }
+.wn-h1 { font-size: 15px; }
+.wn-h2 { font-size: 13.5px; letter-spacing: .02em; text-transform: uppercase; }
+.wn-h3 { font-size: 13px; opacity: .9; }
+.wn-ul { margin: 0 0 10px; padding-left: 18px; }
+.wn-ul:last-child { margin-bottom: 0; }
+.wn-ul li { margin-bottom: 6px; }
+.wn-ul li:last-child { margin-bottom: 0; }
+.wn-p { margin: 0 0 8px; }
+.wn-p:last-child { margin-bottom: 0; }
+#whatsnew-dialog-list code {
+  padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-size: 12.5px;
+}
+.wn-actions { display: flex; justify-content: flex-end; }
+#whatsnew-dialog-ok {
+  padding: 10px 22px; background: var(--sp-accent, var(--accent)); color: var(--accent-ink, #0b0d12);
+  border: none; border-radius: 999px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+#whatsnew-dialog-ok:hover { background: var(--accent-strong); }
+
 /* Duplicate confirmation dialog */
 #dupe-dialog-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -3954,6 +4014,20 @@ body.settings-open #srch-input { pointer-events: none; }
   </div>
 </div>
 
+<div id="whatsnew-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="whatsnew-dialog-title">
+  <div id="whatsnew-dialog-box">
+    <div class="wn-head">
+      <div class="wn-icon"><svg class="ico"><use href="#i-info"/></svg></div>
+      <div>
+        <h3 id="whatsnew-dialog-title">What’s New</h3>
+        <span id="whatsnew-dialog-version"></span>
+      </div>
+    </div>
+    <div id="whatsnew-dialog-list"></div>
+    <div class="wn-actions"><button id="whatsnew-dialog-ok" type="button">Got it</button></div>
+  </div>
+</div>
+
 <div id="dupe-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="dupe-dialog-title">
   <div id="dupe-dialog-box">
     <div id="dupe-dialog-icon"><svg class="ico"><use href="#i-info"/></svg></div>
@@ -4096,6 +4170,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="song-download.js"></script>
 <script src="moon-phase.js"></script>
 <script src="moon-theme.js"></script>
+<script src="whats-new.js"></script>
 <script src="player-app.js"></script>
 <script src="settings-menu.js"></script>
 <script src="song-backup.js"></script>

@@ -93,14 +93,14 @@ check('highlight marks what was typed, ignoring case and accents', () => {
   assert.strictEqual(joined(S.highlight('', ['a'])), '');
 });
 
-check('recent searches: newest first, no repeats, at most 8', () => {
+check('recent searches: newest first, no repeats, at most 3', () => {
   let list = [];
-  ['rain', 'halo', 'Rain ', 'a', 'b', 'c', 'd', 'e', 'f', 'g'].forEach((q) => { list = S.addRecentSearch(list, q, 8); });
-  assert.strictEqual(list.length, 8);
-  assert.strictEqual(list[0], 'g');
+  ['rain', 'halo', 'Rain ', 'a', 'b', 'c', 'd'].forEach((q) => { list = S.addRecentSearch(list, q); });
+  assert.strictEqual(list.length, 3);
+  assert.deepStrictEqual(list, ['d', 'c', 'b']);
   assert.ok(!list.includes('halo'), 'the oldest dropped off');
-  assert.deepStrictEqual(S.addRecentSearch(['x'], '   ', 8), ['x']);
-  assert.deepStrictEqual(S.addRecentSearch(['Rain', 'x'], 'rain', 8), ['rain', 'x']);
+  assert.deepStrictEqual(S.addRecentSearch(['x'], '   ', 3), ['x']);
+  assert.deepStrictEqual(S.addRecentSearch(['Rain', 'x'], 'rain', 3), ['rain', 'x']);
 });
 
 check('5000 songs search in well under a second', () => {

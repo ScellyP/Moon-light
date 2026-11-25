@@ -281,12 +281,14 @@
     return pieces;
   }
 
+  const RECENT_MAX = 3;
+
   // The recent searches list: newest first, no repeats (ignoring case), at most [max].
   function addRecentSearch(list, text, max) {
     const t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
     if (!t) return list.slice();
     const key = normalizeText(t);
-    return [t].concat(list.filter((x) => normalizeText(x) !== key)).slice(0, max || 8);
+    return [t].concat(list.filter((x) => normalizeText(x) !== key)).slice(0, max || RECENT_MAX);
   }
 
   const api = { searchLibrary: searchLibrary, indexTracks: indexTracks, highlight: highlight, addRecentSearch: addRecentSearch,
@@ -321,7 +323,7 @@
   let indexLen = -1;
   let indexRev = -1;
   let recent = [];
-  try { recent = JSON.parse(root.localStorage.getItem(RECENT_KEY) || '[]').filter((x) => typeof x === 'string').slice(0, 8); } catch (e) { recent = []; }
+  try { recent = JSON.parse(root.localStorage.getItem(RECENT_KEY) || '[]').filter((x) => typeof x === 'string').slice(0, RECENT_MAX); } catch (e) { recent = []; }
 
   const audio = () => root.NovelAudio || null;
   const ui = () => root.SpotifyUI || null;
@@ -343,7 +345,7 @@
   }
 
   function saveRecent() { try { root.localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch (e) { /* non-fatal */ } }
-  function rememberQuery(text) { recent = addRecentSearch(recent, text, 8); saveRecent(); }
+  function rememberQuery(text) { recent = addRecentSearch(recent, text, RECENT_MAX); saveRecent(); }
 
   function tracks() {
     const a = audio();

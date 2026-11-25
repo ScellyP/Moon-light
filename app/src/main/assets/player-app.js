@@ -141,6 +141,10 @@
      asks for a second back press before it exits. ---- */
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
+    if (window.WhatsNew && window.WhatsNew.isOpen && window.WhatsNew.isOpen()) {
+      window.WhatsNew.close();
+      return true;
+    }
     if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
       window.NovelAudio.closeDuplicateDialog();
       return true;
@@ -174,4 +178,5 @@
   /* ---- start ---- */
   if (window.NovelAudio && window.NovelAudio.init) window.NovelAudio.init();
   if (window.NovelAudio && window.NovelAudio.onPanelOpened) window.NovelAudio.onPanelOpened();
+  if (window.WhatsNew && window.WhatsNew.checkAndShow) window.WhatsNew.checkAndShow();
 })();
