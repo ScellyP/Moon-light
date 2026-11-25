@@ -832,8 +832,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                callPage("onNativeAudioReady")
+                // Report a song that is already playing in the background FIRST, then announce the native player.
+                // The other way round, the page could start "the remembered song" (Bluetooth auto start) the moment it
+                // hears "ready", over the song that was still playing, before it had been told about that song.
                 syncNativePlaybackState()
+                callPage("onNativeAudioReady")
             } catch (e: Exception) {
                 // Native engine unavailable (e.g. the service failed to
                 // bind) — audio-player.js's LocalAudioEngine keeps

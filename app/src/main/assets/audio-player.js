@@ -573,6 +573,13 @@ window.NovelAudio = (function () {
       return !!(layer && !layer.classList.contains('hidden'));
     },
 
+    // Closing the dialog without choosing (tap outside, Back) is "keep the rest as they are": they are remembered, so the
+    // same songs are not asked about again at every launch. Nothing is moved or deleted.
+    dismissDuplicateDialog() {
+      if (this._dupeQueue.length && this._dupeIndex < this._dupeQueue.length) this.ignoreRemainingDuplicates();
+      else this.closeDuplicateDialog();
+    },
+
     closeDuplicateDialog() {
       const layer = typeof document !== 'undefined' && document.getElementById('dupe-dialog-layer');
       if (layer) layer.classList.add('hidden');
@@ -595,7 +602,11 @@ window.NovelAudio = (function () {
       const pairs = [];
       found.forEach(g => g.drop.forEach(d => {
         if (d.id !== state.currentTrackId && pairs.length < 100) {
-          if (this.isDuplicateIgnored(g.keep.path || g.keep.id, d.path || d.id)) return;
+          // "Keep both" is remembered per pair, but which copy of a group counts as the one to keep can change from
+          // one launch to the next (the song playing, a like, a playlist...). So a copy you already reviewed against
+          // ANY other copy of its group stays reviewed; otherwise a group of 3 would be flagged again at every launch.
+          const members = [g.keep].concat(g.drop);
+          if (members.some(m => m !== d && this.isDuplicateIgnored(m.path || m.id, d.path || d.id))) return;
           const keepFolder = g.keep.playlist || (g.keep.path && g.keep.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           const dropFolder = d.playlist || (d.path && d.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           pairs.push({
@@ -698,6 +709,8 @@ window.NovelAudio = (function () {
           if (moved.indexOf(p.drop) !== -1) {
             this.mergeInto(p.dropId, p.keepId);
             this._dupeMovedCount++;
+          } else {
+            this.ignoreDuplicatePair(p.keep || p.keepId, p.drop || p.dropId);      // could not be moved: leave it alone from now on
           }
         });
         if (this._dupeMovedCount > 0) {
@@ -718,6 +731,10 @@ window.NovelAudio = (function () {
             this._dupeMovedCount++;
             Prefs.save();
             AudioUI.render();
+          } else {
+            // The file could not be moved (it stays where it is): do not ask about it again at every launch.
+            this.ignoreDuplicatePair(pair.keep || pair.keepId, pair.drop || pair.dropId);
+            if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Could not move that song, so it was left where it is');
           }
         }
       } else {
@@ -2894,7 +2911,7 @@ window.NovelAudio = (function () {
 
       if (dupeLayer) {
         dupeLayer.addEventListener('click', (e) => {
-          if (e.target === dupeLayer) MediaLibrary.closeDuplicateDialog();
+          if (e.target === dupeLayer) MediaLibrary.dismissDuplicateDialog();
         });
       }
 
@@ -3812,7 +3829,7 @@ window.NovelAudio = (function () {
     removeDuplicates(opts) { return MediaLibrary.removeDuplicates(opts); },
     findDuplicates() { return MediaLibrary.findDuplicates(state.tracks).map(g => ({ keep: g.keep.id, drop: g.drop.map(d => d.id) })); },
     isDuplicateDialogOpen() { return MediaLibrary.isDuplicateDialogOpen(); },
-    closeDuplicateDialog() { return MediaLibrary.closeDuplicateDialog(); },
+    closeDuplicateDialog() { return MediaLibrary.dismissDuplicateDialog(); },       // used by Back: counts as "keep the rest"
     getDuplicateQueue() { return MediaLibrary._dupeQueue ? MediaLibrary._dupeQueue.slice() : []; },
     isDuplicateIgnored(a, b) { return MediaLibrary.isDuplicateIgnored(a, b); },
     ignoreDuplicatePair(a, b) { MediaLibrary.ignoreDuplicatePair(a, b); },
@@ -4459,6 +4476,9 @@ window.NovelAudio = (function () {
     _nativeOnSkipPrevious() { NativeAudioEngine.onSkipPrevious(); },
     _nativeOnActive(data) {
       if (!data || !data.active) return;
+      // A song is already loaded in the background player (the app was swiped away or reopened while it played or
+      // was paused): it keeps going, and the start-up auto play must never replace it with another song.
+      StartupPlayback.done = true;
       if (state.tracks && state.tracks.length > 0) {
         MediaLibrary._syncActiveTrack(data);
       } else {
