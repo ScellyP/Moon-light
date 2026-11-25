@@ -1,14 +1,14 @@
 // What's New in Moonlight (supports Markdown: # / ## headings, - bullets, **bold**, *italic*, `code`)
 // Lines starting with // are ignored as comments.
 
+## What's New in v1.19.10
+
 ## Highlights
+- **Personalised Home greeting** — the app now shows your name right on the home page
+- **Name input polish** — left-aligned, capped at 16 characters for a cleaner look
+
+## Previous highlights
 - **Dynamic notification colours** that match your playing cover art or active theme
 - **Background & resumable downloads** — single-song and playlist downloads keep running across tab switches and app restarts
-- **Names** The app now remembers your name locally no data is send out or used and is just displayed in home 
-page 
-- **Better slide animations** The slide now uses a new transition effect instead of just switching slides directly now you have more control over switching tabs swiping thingy
-- **Dock changes** Moved the search to the middle. *This will be changed in the next patch where the dock positions will be made customisable in settings.* 
-  
-## Improvements
-- **Sharper moon phase badge** with a crisp circular ring and automatic hourly updates from system time
-- **Cleaner search history** — Search now keeps only your latest 3 recent searches
+- **Better slide animations** with more control over tab switching
+- **Dock changes** — Search moved to the middle
