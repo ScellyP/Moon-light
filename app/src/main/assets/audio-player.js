@@ -2080,20 +2080,36 @@ window.NovelAudio = (function () {
 
   /* ---- A-B repeat -------------------------------------------------------
      Loops the section between two points of the current track. Works on
-     both engines through AudioEngine.seek(). Resolution is the engine's
-     progress rate (~4 Hz local, ~2 Hz native), so the loop can overshoot B
-     by up to half a second; a frame-accurate loop would need a native
-     ClippingMediaSource. Cleared whenever a new track starts. UI: the A / B
+     both engines through AudioEngine.seek(). The engine reports progress at
+     ~4 Hz (local) / ~2 Hz (native); when B falls before the next report a timer
+     makes the jump right at B (the seek itself still takes a few ms), so the
+     overshoot is small, not up to half a second. A fully frame-accurate loop would
+     need a native ClippingMediaSource. Cleared whenever a new track starts. UI: the A / B
      buttons under the seek bar. */
   AudioFeatures.register({
     id: 'abRepeat', label: 'A-B repeat', status: 'working',
     defaults: { a: null, b: null },
     persistKeys: [],
-    trackStart() { const s = state.features.abRepeat; s.a = null; s.b = null; },
+    trackStart() { const s = state.features.abRepeat; s.a = null; s.b = null; this._clearTimer(); },
+    _timer: null,
+    _clearTimer() { if (this._timer !== null) { clearTimeout(this._timer); this._timer = null; } },
     progress(p) {
       const s = state.features.abRepeat;
+      this._clearTimer();
       if (s.a === null || s.b === null) return;
-      if (p.positionSec >= s.b) AudioEngine.seek(s.a);
+      if (p.positionSec >= s.b) { AudioEngine.seek(s.a); return; }
+      // The progress reports come only every 0.25-0.5 s, so when B is about to be reached inside the next
+      // report, a timer jumps back right at B instead of waiting for the report that is already too late.
+      const left = s.b - p.positionSec;
+      if (state.playing && left < 0.75) {
+        this._timer = setTimeout(() => {
+          this._timer = null;
+          const f = state.features.abRepeat;
+          if (f.a === null || f.b === null || !state.playing) return;
+          if (Math.abs(state.positionSec - f.b) > 1.5) return;     // the user moved on in the meantime
+          AudioEngine.seek(f.a);
+        }, Math.max(0, left * 1000 - 40));
+      }
     },
     setA() {
       const s = state.features.abRepeat;
@@ -2107,7 +2123,7 @@ window.NovelAudio = (function () {
       s.b = state.positionSec;
       return s.b;
     },
-    clear() { const s = state.features.abRepeat; s.a = null; s.b = null; },
+    clear() { const s = state.features.abRepeat; s.a = null; s.b = null; this._clearTimer(); },
     isActive() { const s = state.features.abRepeat; return s.a !== null && s.b !== null; },
     get() { const s = state.features.abRepeat; return { a: s.a, b: s.b }; },
   });
