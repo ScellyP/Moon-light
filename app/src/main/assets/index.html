@@ -2224,6 +2224,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
   scrollbar-width: none; box-sizing: border-box; padding-bottom: 16px;
   display: block;
+  transform: translateZ(0);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
@@ -2236,8 +2237,14 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 .sp-view:not(.is-active) {
   pointer-events: none;
 }
-.sp-view:not(.is-active) * {
+.sp-view:not(.is-active):not(.sp-peeking) * {
   animation-play-state: paused !important;
+}
+
+/* While swiping between tabs, force off-screen list items to paint immediately instead of staying gray placeholders */
+#audio-panel.sp-dragging .sp-view *,
+.sp-view.sp-peeking * {
+  content-visibility: visible !important;
 }
 
 /* Active tab */

@@ -910,10 +910,15 @@
     });
   }
 
-  // Each time the tab is opened, refresh it (new playlists, new recent searches, liked hearts).
+  // Each time the tab is opened (or swiped into view), refresh it (new playlists, new recent searches, liked hearts).
   if (panel && typeof MutationObserver === 'function') {
     new MutationObserver(() => { if (panel.getAttribute('data-view') === 'search') run(); })
       .observe(panel, { attributes: true, attributeFilter: ['data-view'] });
+  }
+  if (panel && panel.addEventListener) {
+    panel.addEventListener('sp-view-peek', (e) => {
+      if (e && e.detail && e.detail.view === 'search') run();
+    });
   }
   run();
 

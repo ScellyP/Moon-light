@@ -492,6 +492,17 @@
     return true;
   }
 
+  let peekingView = '';
+
+  function clearDragVisuals() {
+    peekingView = '';
+    if (panel && panel.classList) panel.classList.remove('sp-dragging');
+    const allViews = document.querySelectorAll ? document.querySelectorAll('.sp-view.sp-peeking') : null;
+    if (allViews && allViews.forEach) {
+      allViews.forEach((v) => { if (v && v.classList) v.classList.remove('sp-peeking'); });
+    }
+  }
+
   /** Following the finger while the page is dragged sideways: the pages move with it. dx > 0 = finger moved right (the page
    *  to the left comes in). Returns false (and moves nothing) when there is no page that way, e.g. Home dragged right. */
   function dragView(dx) {
@@ -500,6 +511,22 @@
     const hasTarget = target >= 0 && target < VIEWS.length;
     const track = el.viewsTrack || document.getElementById('sp-views-track');
     if (!track || !track.style || (!hasTarget && dx !== 0)) return false;
+    if (panel && panel.classList) panel.classList.add('sp-dragging');
+    if (hasTarget) {
+      const targetName = VIEWS[target];
+      if (peekingView !== targetName) {
+        peekingView = targetName;
+        const allViews = document.querySelectorAll ? document.querySelectorAll('.sp-view') : null;
+        if (allViews && allViews.forEach) {
+          allViews.forEach((v) => {
+            if (v && v.classList) v.classList.toggle('sp-peeking', v.id === 'sp-view-' + targetName);
+          });
+        }
+        if (typeof CustomEvent === 'function' && panel.dispatchEvent) {
+          panel.dispatchEvent(new CustomEvent('sp-view-peek', { detail: { view: targetName } }));
+        }
+      }
+    }
     track.style.transition = 'none';                 // no animation while the finger is down: the page is under it
     track.style.transform = 'translate3d(calc(-' + (idx * 100) + '% + ' + Math.round(dx) + 'px), 0, 0)';
     return true;
@@ -521,9 +548,11 @@
     }
     if (target >= 0 && target < VIEWS.length && (far || fast)) {
       setView(VIEWS[target]);
+      clearDragVisuals();
       return true;
     }
     if (track && track.style) track.style.transform = 'translate3d(-' + (idx * 100) + '%, 0, 0)';
+    clearDragVisuals();
     return false;
   }
 

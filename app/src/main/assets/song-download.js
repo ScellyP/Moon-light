@@ -1828,6 +1828,11 @@
       wasShown = shown;
     }).observe(panel, { attributes: true, attributeFilter: ['data-view', 'class'] });
   }
+  if (panel && panel.addEventListener) {
+    panel.addEventListener('sp-view-peek', (e) => {
+      if (e && e.detail && e.detail.view === 'download') render();
+    });
+  }
   render();
 
   root.SongDownload = Object.assign({}, api, {

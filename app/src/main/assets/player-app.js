@@ -76,6 +76,11 @@
      sliders, text fields and sideways-scrolling rows (the Home drawer swipe at the first tab is not touched either). */
   var DRAG_START = 10;
   var drag = null;
+  var dragRaf = 0;
+  function cancelDragRaf() {
+    if (dragRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(dragRaf);
+    dragRaf = 0;
+  }
   function ownsHorizontalDrag(target) {
     for (var el = target; el && el !== panel; el = el.parentElement) {
       if (el.matches && el.matches('input, textarea, select, #sp-sheet, #audio-playlist-btn')) return true;
@@ -87,33 +92,47 @@
     return false;
   }
   panel.addEventListener('touchstart', function (e) {
+    cancelDragRaf();
     drag = null;
     if (e.touches.length !== 1 || ownsHorizontalDrag(e.target)) return;
-    drag = { x: e.touches[0].clientX, y: e.touches[0].clientY, lastX: e.touches[0].clientX, lastT: Date.now(), vx: 0, active: false };
+    drag = { x: e.touches[0].clientX, y: e.touches[0].clientY, lastX: e.touches[0].clientX, lastT: Date.now(), vx: 0, dx: 0, active: false };
   }, { passive: true });
   panel.addEventListener('touchmove', function (e) {
     if (!drag) return;
     var ui = window.SpotifyUI;
-    if (e.touches.length !== 1 || !ui || !ui.dragView) { if (drag.active && ui && ui.releaseView) ui.releaseView(0, 0); drag = null; return; }
+    if (e.touches.length !== 1 || !ui || !ui.dragView) { cancelDragRaf(); if (drag.active && ui && ui.releaseView) ui.releaseView(0, 0); drag = null; return; }
     var t = e.touches[0], dx = t.clientX - drag.x, dy = t.clientY - drag.y;
     if (!drag.active) {
       if (Math.abs(dy) > DRAG_START && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }        // a scroll of the list
       if (Math.abs(dx) < DRAG_START || Math.abs(dx) < Math.abs(dy) * 1.2) return;                    // not clearly sideways yet
       if (!ui.dragView(dx)) { drag = null; return; }                                                  // no page that way
       drag.active = true;
+      drag.dx = dx;
     } else {
-      ui.dragView(dx);
+      drag.dx = dx;
+      if (!dragRaf && typeof requestAnimationFrame === 'function') {
+        dragRaf = requestAnimationFrame(function () {
+          dragRaf = 0;
+          if (drag && drag.active && window.SpotifyUI && window.SpotifyUI.dragView) {
+            window.SpotifyUI.dragView(drag.dx);
+          }
+        });
+      } else if (typeof requestAnimationFrame !== 'function') {
+        ui.dragView(dx);
+      }
     }
     var now = Date.now();
     drag.vx = (t.clientX - drag.lastX) / Math.max(1, now - drag.lastT);
     drag.lastX = t.clientX; drag.lastT = now;
   }, { passive: true });
   panel.addEventListener('touchend', function (e) {
+    cancelDragRaf();
     var d = drag; drag = null;
     if (!d || !d.active || !window.SpotifyUI || !window.SpotifyUI.releaseView) return;
     window.SpotifyUI.releaseView(e.changedTouches[0].clientX - d.x, d.vx);
   }, { passive: true });
   panel.addEventListener('touchcancel', function () {
+    cancelDragRaf();
     var d = drag; drag = null;
     if (d && d.active && window.SpotifyUI && window.SpotifyUI.releaseView) window.SpotifyUI.releaseView(0, 0);   // slide back
   }, { passive: true });
