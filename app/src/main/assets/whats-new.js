@@ -64,9 +64,9 @@
         });
         continue;
       }
-      var bulletMatch = line.match(/^[-*•]\s*(.*)$/);
+      var bulletMatch = line.match(/^[-•]\s*(.+)$|^\*\s+(.+)$/);
       if (bulletMatch) {
-        var itemText = bulletMatch[1].trim();
+        var itemText = (bulletMatch[1] || bulletMatch[2] || '').trim();
         if (itemText) {
           if (!currentList) currentList = { type: 'list', items: [] };
           currentList.items.push(itemText);
@@ -105,6 +105,7 @@
   var listEl = document.getElementById('whatsnew-dialog-list');
   var okBtn = document.getElementById('whatsnew-dialog-ok');
   var isShowing = false;
+  var pendingVersion = null;
 
   function appendInline(parent, text) {
     parseInline(text).forEach(function (tok) {
@@ -130,6 +131,8 @@
     if (!layer || !isShowing) return false;
     layer.classList.add('hidden');
     isShowing = false;
+    markSeen(pendingVersion);
+    pendingVersion = null;
     return true;
   }
 
@@ -138,7 +141,7 @@
     listEl.textContent = '';
     blocks.forEach(function (block) {
       if (block.type === 'heading') {
-        var h = document.createElement(block.level === 1 ? 'h4' : 'h5');
+        var h = document.createElement(block.level === 1 ? 'h4' : block.level === 2 ? 'h5' : 'h6');
         h.className = 'wn-heading wn-h' + block.level;
         appendInline(h, block.text);
         listEl.appendChild(h);
@@ -164,6 +167,7 @@
     }
     layer.classList.remove('hidden');
     isShowing = true;
+    pendingVersion = version || null;
     if (okBtn && okBtn.focus) {
       try { okBtn.focus({ preventScroll: true }); } catch (e) {}
     }
@@ -199,13 +203,14 @@
       .then(function (text) {
         var blocks = parseWhatsNew(text);
         if (!blocks.length) return false;
-        // Prepend a dynamic "What's New in vX.XX.XX" heading using the live version.
-        blocks.unshift({ type: 'heading', level: 1, text: "What\u2019s New in " + current });
-        var opened = open(blocks, current);
-        if (opened) markSeen(current);
-        return opened;
+        // Prepend a dynamic "What's New" heading — version is already shown separately in the dialog header.
+        blocks.unshift({ type: 'heading', level: 1, text: "What\u2019s New" });
+        return open(blocks, current);
       })
-      .catch(function () { return false; });
+      .catch(function (err) {
+        console.warn('[WhatsNew] Failed to load whats-new.txt:', err);
+        return false;
+      });
   }
 
   if (okBtn) okBtn.addEventListener('click', close);
