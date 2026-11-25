@@ -44,6 +44,12 @@ check('stepping works from any tab, including a jump made by tapping the bottom 
   assert.strictEqual(t.view(), 'track');
 });
 
+check('the view panels sit in the same order as the tabs (the slide offset is index * 100%)', () => {
+  const html = read('index.html');
+  const panels = (html.match(/<section id="sp-view-(\w+)" class="sp-view"/g) || []).map((m) => m.match(/sp-view-(\w+)/)[1]);
+  assert.deepStrictEqual(panels, ORDER);
+});
+
 check('the bottom bar lists the tabs in that same order, Download last, and each has a view', () => {
   const html = read('index.html');
   const nav = html.slice(html.indexOf('<nav id="sp-nav"'), html.indexOf('</nav>', html.indexOf('<nav id="sp-nav"')));
