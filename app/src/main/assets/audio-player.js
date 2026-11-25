@@ -329,11 +329,17 @@ window.NovelAudio = (function () {
         this._syncActiveTrack(state.pendingActivePlayback);
         state.pendingActivePlayback = null;
       } else {
-        const remembered = !state.shuffle && !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
+        // The song you were on carries on from where it was, also with shuffle on (it used to show the NEXT song of the
+        // queue instead). With shuffle on that needs a saved position inside the song: a song that had finished is over.
+        const last = !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
+        const rp = last ? ResumePoint.read() : null;
+        const resumeSec = rp && rp.id === last.id && (!(last.durationSec > 0) || rp.sec < last.durationSec - 3) ? rp.sec : 0;
+        const remembered = last && (!state.shuffle || (rp && rp.id === last.id && (!(last.durationSec > 0) || rp.sec < last.durationSec - 3))) ? last : null;
         if (remembered) {
           state.currentTrackId = remembered.id;
           state.durationSec = remembered.durationSec || 0;
-          state.positionSec = 0;
+          state.positionSec = resumeSec;
+          state.resumeSeek = resumeSec > 0 ? { id: remembered.id, sec: resumeSec } : null;
           if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
         }
       }
@@ -1760,6 +1766,9 @@ window.NovelAudio = (function () {
         // including this same one next time) always starts at 0.
         this._pendingSeek = state.handoffPositionSec;
         state.handoffPositionSec = null;
+        // The song remembered from the last launch carries on from where it was; any other song starts at 0.
+        if (state.resumeSeek && state.resumeSeek.id === id && this._pendingSeek === null) this._pendingSeek = state.resumeSeek.sec;
+        state.resumeSeek = null;
         this._lastLoadAt = Date.now();
         bridge.nativeAudioLoad(track.path, track.title || '', track.artist || '', track.album || '');
         this._loadedTrackId = id;
@@ -1843,6 +1852,7 @@ window.NovelAudio = (function () {
       if (!playing && Date.now() < this._xfGraceUntil) return; // see _xfGraceUntil
       if (state.playing === playing) return;
       state.playing = playing;
+      if (!playing) ResumePoint.flush();
       AudioUI.render();
     },
 
@@ -1870,6 +1880,7 @@ window.NovelAudio = (function () {
       if (Date.now() < this._xfGraceUntil) return;
       if (this._followNativeSong(path, positionSec, durationSec)) return;
       state.positionSec = positionSec;
+      ResumePoint.tick();
       if (durationSec) state.durationSec = durationSec;
       AudioUI.updateProgressOnly();
       this._applySleepFadeIfDue();
@@ -2483,6 +2494,35 @@ window.NovelAudio = (function () {
     }
   });
 
+  /* ---- Remember where in the song you were -------------------------------------
+     The last song is remembered by Prefs (lastTrackId). This remembers the position in it, written every few seconds
+     while it plays and when it pauses, so reopening the app (also after Android closed it) carries on with that song
+     from there instead of picking the next one in the queue. Kept apart from Prefs: it is written often, and cheap. */
+  const RESUME_KEY = 'moonlight_resume';
+  const ResumePoint = {
+    _lastWrite: 0,
+    write(id, sec) {
+      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, sec: Math.max(0, Math.floor(sec || 0)) })); } catch (e) { /* non-fatal */ }
+    },
+    read() {
+      try {
+        const o = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
+        return o && typeof o.id === 'string' && typeof o.sec === 'number' ? o : null;
+      } catch (e) { return null; }
+    },
+    tick() {                                       // during playback: at most every 5 seconds
+      const now = Date.now();
+      if (!state.currentTrackId || now - this._lastWrite < 5000) return;
+      this._lastWrite = now;
+      this.write(state.currentTrackId, state.positionSec);
+    },
+    flush() {                                      // on pause
+      if (!state.currentTrackId) return;
+      this._lastWrite = Date.now();
+      this.write(state.currentTrackId, state.positionSec);
+    },
+  };
+
   /* ---- Remember the last song ---------------------------------------------------
      Every time a track starts, the audio prefs are saved with it as `lastTrackId`
      (see Prefs.save), so the next launch can bring that song back. */
@@ -2490,7 +2530,10 @@ window.NovelAudio = (function () {
     id: 'lastTrack', label: 'Remember last song', status: 'working',
     defaults: {},
     persistKeys: [],
-    trackStart() { Prefs.save(); },
+    trackStart(track) {
+      Prefs.save();
+      if (track) ResumePoint.write(track.id, state.currentTrackId === track.id ? state.positionSec : 0);
+    },
   });
 
   /* ---- Liked tracks ---------------------------------------------------------
@@ -2689,7 +2732,7 @@ window.NovelAudio = (function () {
       els.xfValue = document.getElementById('audio-xf-value');
       els.queue = document.getElementById('audio-queue');
       els.order = document.getElementById('audio-order');
-      els.orderToggle = document.getElementById('audio-order-toggle');
+      els.orderBack = document.getElementById('audio-order-back');
       els.orderSub = document.getElementById('audio-order-sub');
       els.orderList = document.getElementById('audio-order-list');
       els.empty = document.getElementById('audio-empty');
@@ -2904,14 +2947,8 @@ window.NovelAudio = (function () {
         if (next) AudioEngine.play(next);
       });
 
-      // "Playing order" drop-down: the header opens / closes it, a row plays that song, scrolling loads more rows.
-      if (els.orderToggle && els.orderToggle.addEventListener) {
-        els.orderToggle.addEventListener('click', () => {
-          AudioUI._orderOpen = !AudioUI._orderOpen;
-          AudioUI._orderKey = '';
-          AudioUI._renderOrder(true);
-        });
-      }
+      // "Current playback order" screen: the back arrow closes it, a row plays that song, scrolling loads more rows.
+      if (els.orderBack && els.orderBack.addEventListener) els.orderBack.addEventListener('click', () => AudioUI.closeOrder());
       if (els.orderList && els.orderList.addEventListener) {
         els.orderList.addEventListener('click', (e) => {
           if (e.target.closest && e.target.closest('.pe-grip')) return;       // the handle only drags
@@ -3292,8 +3329,8 @@ window.NovelAudio = (function () {
       els.newInput.value = '';
       els.newInput.focus();
     },
-    /* ---- "Playing order": a drop-down under the playlist header showing the order the songs play in ----
-       Closed: only the header (how many songs, shuffle on / off). Open: rows in the look of the playlist
+    /* ---- "Current playback order": a screen (Now playing "..." menu) showing the order the songs play in ----
+       The bar says how many songs and whether shuffle is on. Rows are in the look of the playlist
        editor (picture, title, artist), numbered, the song playing now marked, songs already played dimmed.
        Rows are drawn 100 at a time while scrolling so a long playlist does not slow the page down. */
     _orderOpen: false,
@@ -3301,12 +3338,22 @@ window.NovelAudio = (function () {
     _orderIds: [],
     _orderDrawn: 0,
     _ORDER_CHUNK: 100,
+    openOrder() {
+      if (!els.order || !state.queue.length) return false;
+      this._orderOpen = true;
+      this._orderKey = '';
+      this._renderOrder(true);
+      return true;
+    },
+    closeOrder() {
+      if (this._orderDrag) this._endOrderDrag();
+      this._orderOpen = false;
+      if (els.order) els.order.classList.add('hidden');
+    },
     _renderOrder(force) {
       if (!els.order) return;
       const total = state.queue.length;
-      els.order.classList.toggle('hidden', total === 0);
-      els.order.classList.toggle('open', this._orderOpen);
-      if (els.orderToggle && els.orderToggle.setAttribute) els.orderToggle.setAttribute('aria-expanded', this._orderOpen ? 'true' : 'false');
+      els.order.classList.toggle('hidden', !this._orderOpen);
       if (els.orderSub) els.orderSub.textContent = total + (total === 1 ? ' song' : ' songs') + ' \u00b7 ' + (state.shuffle ? 'shuffle on' : 'in order');
       if (!this._orderOpen || !els.orderList) return;
       const key = state.queue.join('|') + '#' + MediaLibrary.infoRev;
@@ -3862,6 +3909,9 @@ window.NovelAudio = (function () {
     removeDuplicates(opts) { return MediaLibrary.removeDuplicates(opts); },
     findDuplicates() { return MediaLibrary.findDuplicates(state.tracks).map(g => ({ keep: g.keep.id, drop: g.drop.map(d => d.id) })); },
     isDuplicateDialogOpen() { return MediaLibrary.isDuplicateDialogOpen(); },
+    openPlayingOrder() { return AudioUI.openOrder(); },
+    closePlayingOrder() { AudioUI.closeOrder(); },
+    isPlayingOrderOpen() { return !!AudioUI._orderOpen; },
     closeDuplicateDialog() { return MediaLibrary.dismissDuplicateDialog(); },       // used by Back: counts as "keep the rest"
     getDuplicateQueue() { return MediaLibrary._dupeQueue ? MediaLibrary._dupeQueue.slice() : []; },
     isDuplicateIgnored(a, b) { return MediaLibrary.isDuplicateIgnored(a, b); },
@@ -4484,7 +4534,9 @@ window.NovelAudio = (function () {
       const positionSec = state.positionSec;
 
       if (wasPlaying) LocalAudioEngine.pause();
-      if (currentId && positionSec) state.handoffPositionSec = positionSec;
+      // Only a song that is really playing is handed over mid-way. A song that is just shown (the one remembered from the
+      // last launch, with its saved position) is resumed through state.resumeSeek when it is played, and only that song.
+      if (currentId && positionSec && wasPlaying) state.handoffPositionSec = positionSec;
 
       AudioEngine = NativeAudioEngine;
       AudioFeatures.emit('engineChanged', NativeAudioEngine);

@@ -114,4 +114,28 @@ check('an order with other songs, missing songs or a wrong length is refused and
   assert.deepStrictEqual(q.playingOrder(), before);
 });
 
+check('the Playing order is a screen opened from the Now playing "..." menu, not a drop-down in the Songs view', () => {
+  const fs = require('fs'); const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
+  const sheet = html.slice(html.indexOf('id="sp-sheet"'), html.indexOf('id="sp-sheet"') + 6000);
+  assert.ok(/class="sp-song-only" data-sp-act="playorder">[\s\S]*?Current playback order/.test(sheet), 'a "Current playback order" option in the Now playing menu');
+  assert.ok(!html.includes('audio-order-toggle'), 'the drop-down header is gone');
+  const songs = html.slice(html.indexOf('id="sp-view-album"'), html.indexOf('id="sp-view-track"'));
+  assert.ok(!songs.includes('audio-order'), 'nothing of it is left in the Songs view');
+  assert.ok(/id="audio-order" class="dyn-colours hidden"/.test(html) && html.includes('id="audio-order-back"'), 'the screen with a back arrow');
+});
+
+check('opening and closing the screen from the menu and with Back', () => {
+  const t = boot({ shuffle: true });
+  const na = t.app;
+  assert.strictEqual(na.isPlayingOrderOpen(), false);
+  assert.strictEqual(na.openPlayingOrder(), true);
+  assert.strictEqual(na.isPlayingOrderOpen(), true);
+  assert.strictEqual(ui(t)._orderIds.length, IDS.length);
+  na.closePlayingOrder();
+  assert.strictEqual(na.isPlayingOrderOpen(), false);
+  const js = require('fs').readFileSync(require('path').join(__dirname, '../app/src/main/assets/player-app.js'), 'utf8');
+  assert.ok(js.indexOf('isPlayingOrderOpen') < js.indexOf('PlaylistEditor.isOpen()'), 'Back closes it first');
+});
+
 finish();

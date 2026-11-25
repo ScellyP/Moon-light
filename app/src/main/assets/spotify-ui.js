@@ -492,6 +492,41 @@
     return true;
   }
 
+  /** Following the finger while the page is dragged sideways: the pages move with it. dx > 0 = finger moved right (the page
+   *  to the left comes in). Returns false (and moves nothing) when there is no page that way, e.g. Home dragged right. */
+  function dragView(dx) {
+    const idx = VIEWS.indexOf(panel.getAttribute('data-view'));
+    const target = idx + (dx < 0 ? 1 : -1);
+    const hasTarget = target >= 0 && target < VIEWS.length;
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    if (!track || !track.style || (!hasTarget && dx !== 0)) return false;
+    track.style.transition = 'none';                 // no animation while the finger is down: the page is under it
+    track.style.transform = 'translate3d(calc(-' + (idx * 100) + '% + ' + Math.round(dx) + 'px), 0, 0)';
+    return true;
+  }
+
+  /** The finger lifted. A drag of about a third of the width, or a quick flick, slides on to the next page; anything less
+   *  slides back to the page it started on. vx = finger speed in px per ms (negative = leftwards). Returns true if the page changed. */
+  function releaseView(dx, vx) {
+    const idx = VIEWS.indexOf(panel.getAttribute('data-view'));
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    const width = (panel && panel.clientWidth) || 360;
+    const target = idx + (dx < 0 ? 1 : -1);
+    const far = Math.abs(dx) > width * 0.33;
+    const fast = Math.abs(vx || 0) > 0.5 && Math.abs(dx) > 30 && (vx < 0) === (dx < 0);
+    if (track && track.style) {
+      track.style.transition = '';                   // the sliding animation is back on...
+      if (track.style.removeProperty) track.style.removeProperty('transition');
+      void track.offsetWidth;                        // ...and starts from where the finger left the page
+    }
+    if (target >= 0 && target < VIEWS.length && (far || fast)) {
+      setView(VIEWS[target]);
+      return true;
+    }
+    if (track && track.style) track.style.transform = 'translate3d(-' + (idx * 100) + '%, 0, 0)';
+    return false;
+  }
+
   /** The cover picture (a data: URL) the Home screen shows for a playlist folder, or '' when it has none yet. */
   function getCover(name) {
     return coverFor(name);
@@ -504,7 +539,7 @@
   }
 
   window.SpotifyUI = {
-    setView, stepView, getCover, refreshTint: () => updateTint(),
+    setView, stepView, dragView, releaseView, getCover, refreshTint: () => updateTint(),
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
     dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
@@ -618,6 +653,13 @@
 
       case 'sleep':
         if (el.sleepOptions) el.sleepOptions.classList.toggle('hidden');
+        break;
+
+      case 'playorder':
+        closeSheet();
+        if (!(window.NovelAudio && window.NovelAudio.openPlayingOrder && window.NovelAudio.openPlayingOrder())) {
+          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Nothing is playing yet');
+        }
         break;
 
       case 'sharesong': {

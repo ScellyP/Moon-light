@@ -690,8 +690,9 @@ class MainActivity : ComponentActivity() {
                 // silently dropped (leaving the player on the WebView
                 // fallback engine). Re-announce it now.
                 if (mediaController != null) {
-                    callPage("onNativeAudioReady")
+                    // Report the song that is already playing first (see connectNativePlayer).
                     syncNativePlaybackState()
+                    callPage("onNativeAudioReady")
                 }
             }
         }

@@ -70,12 +70,59 @@ check('the Download songs button is gone from Home', () => {
   assert.ok(!read('song-download.js').includes('dl-open-btn'));
 });
 
-check('swiping the panel switches tabs and no longer closes it', () => {
+check('swiping the panel follows the finger, switches tabs and no longer closes the panel', () => {
   const js = read('player-app.js');
-  const swipe = js.slice(js.indexOf('swipe sideways between the four tabs'), js.indexOf('/* ---- Back:'));
-  assert.ok(swipe.includes('SpotifyUI.stepView(dx < 0 ? 1 : -1)'), 'swipe does not step the tabs');
+  const swipe = js.slice(js.indexOf('swipe sideways between the tabs'), js.indexOf('/* ---- Back:'));
+  assert.ok(swipe.includes('dragView(dx)') && swipe.includes('releaseView('), 'the swipe must follow the finger and settle on release');
   assert.ok(!swipe.includes('closeAllPanels'), 'the swipe still closes the panel');
   assert.ok(swipe.includes('#audio-playlist-btn'), 'the playlist button keeps its own sideways swipe');
+  assert.ok(/\.sp-view \{\s*touch-action: pan-y;/.test(read('index.html')), 'tab pages must leave sideways drags to the swipe');
+});
+
+check('dragging a page: it follows the finger only when there is a page that way', () => {
+  const t = boot();
+  window.SpotifyUI.setView('library');
+  assert.strictEqual(window.SpotifyUI.dragView(40), false, 'Home dragged right: nothing (that is the drawer)');
+  assert.strictEqual(window.SpotifyUI.dragView(-40), true, 'Home dragged left: the next page follows');
+  window.SpotifyUI.releaseView(0, 0);
+  window.SpotifyUI.setView('download');
+  assert.strictEqual(window.SpotifyUI.dragView(-40), false, 'the last page dragged left: nothing');
+  assert.strictEqual(window.SpotifyUI.dragView(40), true);
+  window.SpotifyUI.releaseView(0, 0);
+  assert.strictEqual(t.view(), 'download');
+});
+
+check('letting go: about a third of the width or a quick flick slides on, less slides back', () => {
+  const t = boot();
+  window.SpotifyUI.setView('album');
+  assert.strictEqual(window.SpotifyUI.releaseView(-40, -0.1), false);          // short and slow: back
+  assert.strictEqual(t.view(), 'album');
+  assert.strictEqual(window.SpotifyUI.releaseView(-118, -0.2), false);         // just under a third of 360
+  assert.strictEqual(t.view(), 'album');
+  assert.strictEqual(window.SpotifyUI.releaseView(-130, -0.2), true);          // past a third: on
+  assert.strictEqual(t.view(), 'search');
+  assert.strictEqual(window.SpotifyUI.releaseView(60, 0.9), true);             // a quick flick right: back one
+  assert.strictEqual(t.view(), 'album');
+  assert.strictEqual(window.SpotifyUI.releaseView(60, -0.9), false);           // flick against the drag: not a flick
+  assert.strictEqual(t.view(), 'album');
+});
+
+check('letting go past either end stays on the page', () => {
+  const t = boot();
+  window.SpotifyUI.setView('library');
+  assert.strictEqual(window.SpotifyUI.releaseView(300, 1), false);
+  assert.strictEqual(t.view(), 'library');
+  window.SpotifyUI.setView('download');
+  assert.strictEqual(window.SpotifyUI.releaseView(-300, -1), false);
+  assert.strictEqual(t.view(), 'download');
+});
+
+check('while dragging the slide animation is off, on release it is back on and starts where the finger left it', () => {
+  const js = read('spotify-ui.js');
+  const drag = js.slice(js.indexOf('function dragView'), js.indexOf('function releaseView'));
+  const rel = js.slice(js.indexOf('function releaseView'), js.indexOf('/** The cover picture'));
+  assert.ok(drag.includes("transition = 'none'") && drag.includes('translate3d(calc(-'), 'dragView must follow the finger without animating');
+  assert.ok(rel.includes("transition = ''") && rel.includes('offsetWidth'), 'releaseView must animate from the dragged position');
 });
 
 check('text in the music player cannot be selected, but the fields you type in still can', () => {

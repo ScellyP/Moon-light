@@ -70,11 +70,12 @@
   // MainActivity.notifyError() calls this (storage access missing, scan failed ...).
   window.onFolderPickError = function (message) { showMessage(message); };
 
-  /* ---- swipe sideways between the four tabs ----
-     Only a mostly-sideways, far and quick move counts, so scrolling the lists, dragging the
-     sliders and tapping are unaffected. (Same rules as in the reader app.) */
-  var MIN_DX = 70, MAX_MS = 800;
-  var sx = 0, sy = 0, st = 0, tracking = false;
+  /* ---- swipe sideways between the tabs ----
+     The pages follow the finger. Let go past about a third of the width (or with a quick flick) and the page slides
+     on to the next one; let go earlier and it slides back. Mostly-vertical moves are left to the lists, and so are
+     sliders, text fields and sideways-scrolling rows (the Home drawer swipe at the first tab is not touched either). */
+  var DRAG_START = 10;
+  var drag = null;
   function ownsHorizontalDrag(target) {
     for (var el = target; el && el !== panel; el = el.parentElement) {
       if (el.matches && el.matches('input, textarea, select, #sp-sheet, #audio-playlist-btn')) return true;
@@ -86,21 +87,36 @@
     return false;
   }
   panel.addEventListener('touchstart', function (e) {
-    tracking = e.touches.length === 1 && !ownsHorizontalDrag(e.target);
-    if (!tracking) return;
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+    drag = null;
+    if (e.touches.length !== 1 || ownsHorizontalDrag(e.target)) return;
+    drag = { x: e.touches[0].clientX, y: e.touches[0].clientY, lastX: e.touches[0].clientX, lastT: Date.now(), vx: 0, active: false };
   }, { passive: true });
-  panel.addEventListener('touchmove', function (e) { if (e.touches.length !== 1) tracking = false; }, { passive: true });
-  panel.addEventListener('touchend', function (e) {
-    if (!tracking) return;
-    tracking = false;
-    var t = e.changedTouches[0];
-    var dx = t.clientX - sx, dy = t.clientY - sy;
-    if (Math.abs(dx) >= MIN_DX && Math.abs(dy) <= Math.abs(dx) * 0.6 && Date.now() - st <= MAX_MS) {
-      if (window.SpotifyUI && window.SpotifyUI.stepView) window.SpotifyUI.stepView(dx < 0 ? 1 : -1);
+  panel.addEventListener('touchmove', function (e) {
+    if (!drag) return;
+    var ui = window.SpotifyUI;
+    if (e.touches.length !== 1 || !ui || !ui.dragView) { if (drag.active && ui && ui.releaseView) ui.releaseView(0, 0); drag = null; return; }
+    var t = e.touches[0], dx = t.clientX - drag.x, dy = t.clientY - drag.y;
+    if (!drag.active) {
+      if (Math.abs(dy) > DRAG_START && Math.abs(dy) > Math.abs(dx)) { drag = null; return; }        // a scroll of the list
+      if (Math.abs(dx) < DRAG_START || Math.abs(dx) < Math.abs(dy) * 1.2) return;                    // not clearly sideways yet
+      if (!ui.dragView(dx)) { drag = null; return; }                                                  // no page that way
+      drag.active = true;
+    } else {
+      ui.dragView(dx);
     }
+    var now = Date.now();
+    drag.vx = (t.clientX - drag.lastX) / Math.max(1, now - drag.lastT);
+    drag.lastX = t.clientX; drag.lastT = now;
   }, { passive: true });
-  panel.addEventListener('touchcancel', function () { tracking = false; }, { passive: true });
+  panel.addEventListener('touchend', function (e) {
+    var d = drag; drag = null;
+    if (!d || !d.active || !window.SpotifyUI || !window.SpotifyUI.releaseView) return;
+    window.SpotifyUI.releaseView(e.changedTouches[0].clientX - d.x, d.vx);
+  }, { passive: true });
+  panel.addEventListener('touchcancel', function () {
+    var d = drag; drag = null;
+    if (d && d.active && window.SpotifyUI && window.SpotifyUI.releaseView) window.SpotifyUI.releaseView(0, 0);   // slide back
+  }, { passive: true });
 
   /* ---- Back: closes the top-most thing, then returns to Home; false = nothing left, so the app
      asks for a second back press before it exits. ---- */
@@ -116,6 +132,7 @@
     }
     // The song options sheet (the "..." menu, song-menu.js) is on top of everything it was opened from, so it goes first.
     if (window.SongDownload && window.SongDownload.closeCrop && window.SongDownload.closeCrop()) return true;
+    if (window.NovelAudio && window.NovelAudio.isPlayingOrderOpen && window.NovelAudio.isPlayingOrderOpen()) { window.NovelAudio.closePlayingOrder(); return true; }
     if (window.PlaylistEditor && window.PlaylistEditor.isOpen()) { window.PlaylistEditor.close(); return true; }
     if (window.PlaylistPicker && window.PlaylistPicker.isOpen()) { window.PlaylistPicker.close(); return true; }
     if (window.SongMenu && window.SongMenu.isOpen()) { window.SongMenu.close(); return true; }

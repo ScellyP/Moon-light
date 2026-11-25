@@ -2219,6 +2219,7 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 }
 
 .sp-view {
+  touch-action: pan-y;
   flex: 0 0 100%; width: 100%; height: 100%;
   overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
   scrollbar-width: none; box-sizing: border-box; padding-bottom: 16px;
@@ -3057,19 +3058,14 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .pe-grip .ico { width: 26px; height: 26px; }
 #pe-layer.selecting .pe-grip { visibility: hidden; }
 .pe-empty { padding: 48px 28px; text-align: center; color: var(--sp-sub, var(--faint)); font: 400 15px/1.5 var(--font-ui); }
-/* "Playing order" drop-down in the Songs view: rows reuse the playlist editor look (.pe-row / .pe-art / .pe-text) */
-#audio-order { margin: 4px 0 10px; border-radius: 14px; background: color-mix(in srgb, var(--text) 6%, var(--bg)); overflow: hidden; }
+/* "Current playback order" screen (opened from the Now playing "..." menu): the editor's look, rows are .pe-row / .pe-art / .pe-text */
+#audio-order { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 93; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
 #audio-order.hidden { display: none; }
-#audio-order-toggle { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 56px; box-sizing: border-box; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-#audio-order-toggle .ico { flex: none; width: 22px; height: 22px; color: var(--sp-sub, var(--faint)); }
-.po-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.po-title { font: 700 16px/1.25 var(--font-ui); }
+#audio-order .pe-title { display: flex; flex-direction: column; gap: 2px; }
 .po-sub { font: 400 13px/1.3 var(--font-ui); color: var(--sp-sub, var(--faint)); }
-#audio-order .po-chev { transition: transform .2s ease; }
-#audio-order.open .po-chev { transform: rotate(180deg); }
-#audio-order-list { display: none; max-height: min(58vh, 432px); overflow-y: auto; overscroll-behavior: contain; padding: 2px 0 6px; scrollbar-width: none; }
+#audio-order-list { scrollbar-width: none; }
 #audio-order-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
-#audio-order.open #audio-order-list { display: block; }
 .po-row { cursor: pointer; background: transparent; }
 .po-row:active { background: color-mix(in srgb, var(--text) 8%, transparent); }
 .po-num { flex: none; width: 34px; text-align: center; font: 600 14px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); font-variant-numeric: tabular-nums; }
@@ -3640,14 +3636,6 @@ body.settings-open #srch-input { pointer-events: none; }
             <button type="button" class="sp-chip" id="sp-album-edit"><svg class="ico"><use href="#i-pencil"/></svg><span>Name and details</span></button>
           </div>
           <div id="sp-album-find-empty" class="hidden">No songs match that.</div>
-          <div id="audio-order" class="hidden">
-            <button type="button" id="audio-order-toggle" aria-expanded="false" aria-controls="audio-order-list">
-              <svg class="ico po-i-order"><use href="#i-queue"/></svg>
-              <span class="po-head"><span class="po-title">Playing order</span><span id="audio-order-sub" class="po-sub"></span></span>
-              <svg class="ico po-chev"><use href="#i-chev-down"/></svg>
-            </button>
-            <div id="audio-order-list" role="list"></div>
-          </div>
           <div id="audio-song-list-heading">Songs</div>
           <ul id="audio-queue"></ul>
           <div id="audio-empty">No audio files yet. Put music in <code>/storage/emulated/0/Novel/Audio</code>, then tap Scan the sky.</div>
@@ -3812,6 +3800,7 @@ body.settings-open #srch-input { pointer-events: none; }
               <button type="button" data-sp-sleep="60">60 min</button>
               <button type="button" data-sp-sleep="-1">End of track</button>
             </div>
+            <button type="button" class="sp-song-only" data-sp-act="playorder"><svg class="ico"><use href="#i-queue"/></svg><span>Current playback order</span></button>
             <button type="button" class="sp-song-only" data-sp-act="sharesong"><svg class="ico"><use href="#i-share"/></svg><span>Share song</span></button>
             <button type="button" class="sp-pl-only" data-sp-act="rescan"><svg class="ico"><use href="#i-refresh"/></svg><span>Scan the sky</span></button>
           </div>
@@ -3929,10 +3918,9 @@ body.settings-open #srch-input { pointer-events: none; }
         <input type="checkbox" id="update-auto" checked>
       </label>
       <div class="sd-version-row">
-        <button type="button" id="update-check" class="sd-version-box" aria-label="Current version, tap to check for updates">
+        <button type="button" id="update-check" class="sd-version-box" aria-label="Current version">
           <span class="sd-version-box-meta">
             <span class="sd-version-box-title">Moonlight</span>
-            <span class="sd-version-box-hint">Tap to check for updates</span>
           </span>
           <span id="app-version"></span>
         </button>
@@ -3940,6 +3928,15 @@ body.settings-open #srch-input { pointer-events: none; }
 
     </footer>
   </aside>
+</div>
+
+<div id="audio-order" class="dyn-colours hidden" role="dialog" aria-label="Current playback order">
+  <div class="pe-bar">
+    <button type="button" class="pe-back" id="audio-order-back" aria-label="Back"><svg class="ico"><use href="#i-chev-left"/></svg></button>
+    <div class="pe-title"><span>Current playback order</span><small id="audio-order-sub" class="po-sub"></small></div>
+    <span></span>
+  </div>
+  <div id="audio-order-list" class="pe-list" role="list"></div>
 </div>
 
 <div id="dialog-layer" class="hidden" role="alertdialog" aria-modal="true" aria-describedby="dialog-message">

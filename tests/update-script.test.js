@@ -204,4 +204,9 @@ check('the version number in the Settings menu has no stray line above it', () =
   assert.ok(/(^|[\s;{])padding: [^;]+;/.test(rule), 'the footer badge must set its own padding');
 });
 
+check('the version box in Settings shows no "Tap to check for updates" line', () => {
+  assert.ok(!/tap to check for updates/i.test(html), 'the hint text is gone (also from the aria-label)');
+  assert.ok(/id="update-check"[\s\S]*?sd-version-box-title">Moonlight<[\s\S]*?id="app-version"/.test(html), 'the box still shows the name and the version');
+});
+
 console.log(n + ' checks passed');
