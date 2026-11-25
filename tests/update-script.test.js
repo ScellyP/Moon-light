@@ -197,7 +197,11 @@ check('the in-app updater says why when a MANUAL check finds no usable release (
 });
 
 check('the version number in the Settings menu has no stray line above it', () => {
-  assert.ok(/\.sd-foot #app-version \{[^}]*padding: 0; border: 0;/.test(html));
+  // The plain #app-version rule draws a line on top (border-top). Inside the Settings footer the badge
+  // must override it with its own full border (the pill), so no stray line shows above the number.
+  const rule = (html.match(/\.sd-foot #app-version \{[^}]*\}/) || [''])[0];
+  assert.ok(/(^|[\s;{])border: 1px solid/.test(rule), 'the footer badge must set its own border, not inherit the top line');
+  assert.ok(/(^|[\s;{])padding: [^;]+;/.test(rule), 'the footer badge must set its own padding');
 });
 
 console.log(n + ' checks passed');
