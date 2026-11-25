@@ -1009,6 +1009,19 @@ window.NovelAudio = (function () {
       return state.queue.slice();
     },
 
+    // The user dragged songs in the "Playing order" menu. newIds must be the same songs as the queue, in the new order; the
+    // song playing now keeps playing and queueIndex follows it. The playlist itself (its own order) is not touched.
+    setQueueOrder(newIds) {
+      if (!Array.isArray(newIds) || newIds.length !== state.queue.length) return false;
+      const a = newIds.slice().sort();
+      const b = state.queue.slice().sort();
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      const cur = this.current();
+      state.queue = newIds.slice();
+      state.queueIndex = cur ? state.queue.indexOf(cur) : state.queueIndex;
+      return true;
+    },
+
     // "Add to Queue": the song plays right after the one that is playing now. Picking another playlist or a
     // rescan builds the queue from the playlist again, which drops it. False when it is the song playing now.
     addNext(id) {
@@ -2851,10 +2864,16 @@ window.NovelAudio = (function () {
       }
       if (els.orderList && els.orderList.addEventListener) {
         els.orderList.addEventListener('click', (e) => {
+          if (e.target.closest && e.target.closest('.pe-grip')) return;       // the handle only drags
           const row = e.target.closest && e.target.closest('[data-order-id]');
           if (!row) return;
           const next = PlaybackQueue.jumpTo(row.getAttribute('data-order-id'));
           if (next) AudioEngine.play(next);
+        });
+        els.orderList.addEventListener('pointerdown', (e) => {
+          const grip = e.target.closest && e.target.closest('.pe-grip');
+          const row = grip && grip.closest('.po-row');
+          if (row) AudioUI._startOrderDrag(row, e, grip);
         });
         els.orderList.addEventListener('scroll', () => {
           if (els.orderList.scrollTop + els.orderList.clientHeight >= els.orderList.scrollHeight - 400) AudioUI._drawMoreOrder();
@@ -3294,12 +3313,101 @@ window.NovelAudio = (function () {
           text.appendChild(artist);
         }
         row.appendChild(text);
+        const grip = document.createElement('button');
+        grip.type = 'button';
+        grip.className = 'pe-grip';
+        grip.setAttribute('aria-label', 'Drag to move: ' + (t.title || 'song'));
+        const gsvg = document.createElementNS(NS, 'svg');
+        gsvg.setAttribute('class', 'ico');
+        gsvg.setAttribute('aria-hidden', 'true');
+        const guse = document.createElementNS(NS, 'use');
+        guse.setAttribute('href', '#i-menu');
+        gsvg.appendChild(guse);
+        grip.appendChild(gsvg);
+        row.appendChild(grip);
         els.orderList.appendChild(row);
         // the picture comes from the same loader the playlist editor uses (one per animation frame)
         try { if (window.PlaylistEditor && window.PlaylistEditor.art) window.PlaylistEditor.art(tile, t); } catch (e) { /* the icon stays */ }
       }
       this._orderDrawn = end;
       this._markOrder();
+    },
+    /* ---- dragging a row: like the playlist editor, rows have a fixed height (72px, CSS .pe-row), so the
+       position under the finger is plain arithmetic. The DOM row moves in whole rows, the transform covers the rest. ---- */
+    _orderDrag: null,
+    _ORDER_ROW_H: 72,
+    _startOrderDrag(row, e, grip) {
+      if (this._orderDrag || !els.orderList) return;
+      if (e.preventDefault) e.preventDefault();
+      const list = els.orderList;
+      const rows = Array.prototype.slice.call(list.children);
+      const idx = rows.indexOf(row);
+      if (idx < 0) return;
+      try { if (grip && grip.setPointerCapture && e.pointerId !== undefined) grip.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners below still work */ }
+      const d = { row: row, startIdx: idx, curIdx: idx, startY: e.clientY, startScroll: list.scrollTop, lastY: e.clientY, raf: 0 };
+      this._orderDrag = d;
+      row.classList.add('dragging');
+      d.move = (ev) => { d.lastY = ev.clientY; AudioUI._followOrder(); };
+      d.up = () => AudioUI._endOrderDrag();
+      document.addEventListener('pointermove', d.move);
+      document.addEventListener('pointerup', d.up);
+      document.addEventListener('pointercancel', d.up);
+      this._autoScrollOrder();
+    },
+    _followOrder() {
+      const d = this._orderDrag;
+      if (!d) return;
+      const list = els.orderList;
+      const H = this._ORDER_ROW_H;
+      const dy = (d.lastY - d.startY) + (list.scrollTop - d.startScroll);
+      const count = list.children.length;
+      const want = Math.max(0, Math.min(count - 1, d.startIdx + Math.round(dy / H)));
+      if (want !== d.curIdx) {
+        const rows = Array.prototype.slice.call(list.children);
+        list.insertBefore(d.row, want > d.curIdx ? (rows[want + 1] || null) : rows[want]);
+        d.curIdx = want;
+      }
+      d.row.style.transform = 'translateY(' + (dy - (d.curIdx - d.startIdx) * H) + 'px)';
+    },
+    _autoScrollOrder() {
+      const d = this._orderDrag;
+      if (!d) return;
+      const list = els.orderList;
+      if (list.getBoundingClientRect) {
+        const r = list.getBoundingClientRect();
+        if (d.lastY < r.top + 60) list.scrollTop -= 14;
+        else if (d.lastY > r.bottom - 60) list.scrollTop += 14;
+        this._followOrder();
+      }
+      d.raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => AudioUI._autoScrollOrder()) : 0;
+    },
+    _endOrderDrag() {
+      const d = this._orderDrag;
+      if (!d) return;
+      this._orderDrag = null;
+      document.removeEventListener('pointermove', d.move);
+      document.removeEventListener('pointerup', d.up);
+      document.removeEventListener('pointercancel', d.up);
+      if (d.raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(d.raf);
+      d.row.classList.remove('dragging');
+      d.row.style.transform = '';
+      if (d.curIdx === d.startIdx) return;
+      // New queue = the rows as they are now, then the rows not drawn yet (the tail never moves), then any song without a row.
+      const rows = Array.prototype.slice.call(els.orderList.children);
+      const ids = rows.map((r) => r.getAttribute('data-order-id'));
+      const tail = this._orderIds.slice(this._orderDrawn);
+      const known = new Set(ids.concat(tail));
+      const missing = this._orderIds.filter((id) => !known.has(id));
+      if (!PlaybackQueue.setQueueOrder(ids.concat(tail, missing))) { this._orderKey = ''; this._renderOrder(true); return; }
+      this._orderIds = PlaybackQueue.playingOrder();
+      rows.forEach((r, i) => {
+        r.setAttribute('data-order-index', String(i));
+        const n = r.querySelector ? r.querySelector('.po-num') : null;
+        if (n) n.textContent = String(i + 1);
+      });
+      this._orderKey = state.queue.join('|') + '#' + MediaLibrary.infoRev;   // already drawn: render() must not rebuild it
+      this._markOrder();
+      AudioUI.render();
     },
     // "now" = the song playing, "done" = songs before it in this order (already played in the round).
     _markOrder() {

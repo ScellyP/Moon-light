@@ -77,4 +77,41 @@ check('the Playing order drop-down draws without errors, closed and open', () =>
   assert.ok(u._orderDrawn >= IDS.length - 0 || u._orderDrawn === u._orderIds.length);
 });
 
+check('dragging songs in the Playing order changes the order they play in, the current song keeps playing', () => {
+  const t = boot({ shuffle: true });
+  const q = queue(t);
+  const cur = q.current();
+  const order = q.playingOrder();
+  const moved = order.slice();
+  const x = moved.splice(moved.length - 1, 1)[0];       // last song moves to the front
+  moved.unshift(x);
+  assert.strictEqual(q.setQueueOrder(moved), true);
+  assert.deepStrictEqual(q.playingOrder(), moved);
+  assert.strictEqual(q.current(), cur, 'the song playing now is still the current one');
+  assert.strictEqual(t.state.queue[t.state.queueIndex], cur);
+  assert.deepStrictEqual(q.displayOrder(), IDS, 'the list keeps the playlist order');
+});
+
+check('a song dragged up to play next is the one that plays next', () => {
+  const t = boot({ shuffle: true });
+  const q = queue(t);
+  const order = q.playingOrder();
+  const i = t.state.queueIndex;
+  const far = order[order.length - 1];
+  const moved = order.slice(0, order.length - 1);
+  moved.splice(i + 1, 0, far);
+  assert.strictEqual(q.setQueueOrder(moved), true);
+  assert.strictEqual(t.state.queue[t.state.queueIndex + 1], far);
+});
+
+check('an order with other songs, missing songs or a wrong length is refused and nothing changes', () => {
+  const t = boot({ shuffle: true });
+  const q = queue(t);
+  const before = q.playingOrder();
+  assert.strictEqual(q.setQueueOrder(before.slice(1)), false);
+  assert.strictEqual(q.setQueueOrder(before.slice(1).concat(['/Novel/Audio/other.mp3'])), false);
+  assert.strictEqual(q.setQueueOrder(null), false);
+  assert.deepStrictEqual(q.playingOrder(), before);
+});
+
 finish();
