@@ -2536,42 +2536,11 @@ class MainActivity : ComponentActivity() {
     }
 
     // ---- Playlist download progress notification ------------------------------------------------
-    private val PLAYLIST_NOTIF_ID = 2001
-    private val PLAYLIST_CHANNEL_ID = "moonlight_playlist_dl"
-
-    private fun ensurePlaylistChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            if (nm.getNotificationChannel(PLAYLIST_CHANNEL_ID) == null) {
-                val ch = android.app.NotificationChannel(
-                    PLAYLIST_CHANNEL_ID,
-                    "Playlist downloads",
-                    android.app.NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "Progress while a playlist is being downloaded." }
-                nm.createNotificationChannel(ch)
-            }
-        }
-    }
-
-    /** Shows or updates the playlist download progress notification.
+    /** Updates or dismisses the unified download notification with playlist progress.
      *  [done] and [total] are song counts; [title] is the playlist name.
-     *  Pass done == total to auto-dismiss. */
+     *  Pass done >= total to dismiss. */
     fun updatePlaylistNotification(title: String, done: Int, total: Int) {
-        ensurePlaylistChannel()
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        if (done >= total) {
-            nm.cancel(PLAYLIST_NOTIF_ID)
-            return
-        }
-        val notif = androidx.core.app.NotificationCompat.Builder(this, PLAYLIST_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Downloading \"$title\"")
-            .setContentText("$done of $total songs done")
-            .setProgress(total, done, false)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        nm.notify(PLAYLIST_NOTIF_ID, notif)
+        songDownloader.updatePlaylistProgress(title, done, total)
     }
 
     private fun callPage(fn: String, args: String = "") {

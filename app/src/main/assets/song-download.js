@@ -1211,6 +1211,10 @@
       item.name = stemOf(item.path);
     } else if (status === 'failed') {
       item.status = 'failed'; item.error = message; item.percent = -1; item.eta = -1; item.speed = ''; pl.failed++;
+      if (message === 'Stopped') {
+        plCheckDone();
+        return true;
+      }
     }
     // A slot freed — start the next queued item (concurrency pump).
     plStartNext();
@@ -1230,9 +1234,11 @@
   function plNotify() {
     const b = bridge();
     if (!b || typeof b.notifyPlaylistProgress !== 'function') return;
-    const total = pl.items.length;
-    const done  = pl.done + pl.failed;
-    try { b.notifyPlaylistProgress(pl.title, done, total); } catch (e) {}
+    if (!pl) return;
+    const total = pl.items ? pl.items.length : 0;
+    const completed = pl.done + pl.failed + (pl.skipped || 0);
+    const done = pl.step === 'pl-downloading' ? completed : total;
+    try { b.notifyPlaylistProgress(pl.title || 'Playlist', done, total); } catch (e) {}
   }
 
   function savePlSongs() {
@@ -1764,9 +1770,11 @@
 
   function cancelAnyDownload() {
     let hadWork = false;
+    let plTitle = '';
     const b = bridge();
     if (pl) {
       hadWork = true;
+      plTitle = pl.title || 'Playlist';
       pl = null;
     }
     if (wizard) {
@@ -1779,6 +1787,9 @@
     }
     if (hadWork && b) {
       try { if (typeof b.cancelSongDownload === 'function') b.cancelSongDownload(); } catch (e) {}
+      if (plTitle && typeof b.notifyPlaylistProgress === 'function') {
+        try { b.notifyPlaylistProgress(plTitle, 0, 0); } catch (e) {}
+      }
       try { if (typeof b.discardStagedSongs === 'function') b.discardStagedSongs(); } catch (e) {}
     }
     render();
@@ -1786,6 +1797,17 @@
       root.SpotifyUI.setView('library');
     }
   }
+
+  root.onDownloadCancelledFromNotification = function () {
+    if (pl) {
+      pl = null;
+    }
+    if (wizard && typeof wizard.leave === 'function') {
+      wizard.leave();
+    }
+    render();
+  };
+  if (typeof window !== 'undefined') window.onDownloadCancelledFromNotification = root.onDownloadCancelledFromNotification;
 
   const topCancelBtn = document.getElementById('dl-cancel-btn');
   if (topCancelBtn) {

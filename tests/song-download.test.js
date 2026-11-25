@@ -547,4 +547,127 @@ check('.moonlight default file association intent filters and intent.clipData re
   assert.ok(mainKt.includes('Uri.decode(fileName)'), 'decodes URL-encoded file names');
 });
 
+check('custom download notification system and lifecycle fixes', () => {
+  const fgServiceKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/DownloadForegroundService.kt'), 'utf8');
+  assert.ok(fgServiceKt.includes('START_NOT_STICKY'), 'DownloadForegroundService uses START_NOT_STICKY');
+  assert.ok(!/\breturn\s+START_STICKY\b/.test(fgServiceKt), 'DownloadForegroundService never returns START_STICKY');
+  assert.ok(fgServiceKt.includes('isActiveCheck'), 'DownloadForegroundService verifies active download state on start');
+  assert.ok(fgServiceKt.includes('DecoratedCustomViewStyle'), 'DownloadForegroundService uses DecoratedCustomViewStyle custom notifications');
+  assert.ok(fgServiceKt.includes('notification_download_collapsed'), 'collapsed custom layout is referenced');
+  assert.ok(fgServiceKt.includes('notification_download_expanded'), 'expanded custom layout is referenced');
+  assert.ok(fgServiceKt.includes('notification_download_result'), 'result custom layout is referenced');
+
+  const resDir = path.join(__dirname, '../app/src/main/res');
+  assert.ok(fs.existsSync(path.join(resDir, 'layout/notification_download_collapsed.xml')), 'collapsed layout exists');
+  assert.ok(fs.existsSync(path.join(resDir, 'layout/notification_download_expanded.xml')), 'expanded layout exists');
+  assert.ok(fs.existsSync(path.join(resDir, 'layout/notification_download_result.xml')), 'result layout exists');
+  assert.ok(fs.existsSync(path.join(resDir, 'drawable/notif_progress_bar.xml')), 'custom progress bar drawable exists');
+
+  const downloaderKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/SongDownloader.kt'), 'utf8');
+  assert.ok(downloaderKt.includes('isDownloading()'), 'SongDownloader exposes isDownloading()');
+  assert.ok(downloaderKt.includes('onDownloadCancelledFromNotification'), 'SongDownloader notifies page on notification cancel');
+  assert.ok(downloaderKt.includes('if (status == "failed" && message == "Stopped") return'), 'cancelled jobs do not post error notifications');
+  assert.ok(downloaderKt.includes('playlistSucceeded'), 'SongDownloader tracks successful playlist items separately from failures');
+  assert.ok(downloaderKt.includes('LinkedHashSet<String>()'), 'SongDownloader uses deterministic LinkedHashSet for active downloads');
+  assert.ok(fgServiceKt.includes('if (!state.active || isActiveCheck?.invoke() != true) return'), 'DownloadForegroundService.start guards against stale/inactive state');
+
+  const playbackKt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/PlaybackService.kt'), 'utf8');
+  assert.ok(!playbackKt.includes('cancelAll()'), 'PlaybackService does not wipe unrelated app notifications on idle');
+});
+
+check('playlist notification includes skipped songs and stops queue on Stopped', () => {
+  const vm = require('vm');
+  const { createNode } = require('./fake-dom');
+  const viewEl = createNode('div');
+  const stageEl = createNode('div');
+  const notifCalls = [];
+  const staged = [];
+  const doc = {
+    createElement: (tag) => createNode(tag),
+    createElementNS: (_, tag) => createNode(tag),
+    getElementById: (id) => (id === 'dl-stage' ? stageEl : id === 'sp-view-download' ? viewEl : null),
+    activeElement: null,
+  };
+  const win = {
+    document: doc,
+    setTimeout,
+    clearTimeout,
+    Date,
+    JSON,
+    Math,
+    Array,
+    RegExp,
+    Error,
+    Set,
+    AndroidBridge: {
+      stageSong: (id, url) => { staged.push({ id, url }); return true; },
+      placeSong: () => true,
+      cancelSongDownload: () => {},
+      discardStagedSongs: () => {},
+      notifyPlaylistProgress: (title, done, total) => notifCalls.push({ title, done, total }),
+      getArtwork: () => '',
+    },
+    SongMemory: {
+      normalizeUrl: (u) => u,
+      findDownloaded: (u) => u.includes('skip') ? { name: 'Skipped Song' } : null,
+      isPresent: () => true,
+    },
+  };
+  win.window = win;
+  const ctx = vm.createContext(win);
+  const code = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+  vm.runInContext(code, ctx);
+
+  win.onIncomingMoonlightFile('# name: Mix\nhttps://youtu.be/skip1\nhttps://youtu.be/keep1\nhttps://youtu.be/keep2\nhttps://youtu.be/keep3\nhttps://youtu.be/keep4', 'Mix.moonlight');
+
+  // 1 skipped + 3 started (PL_CONCURRENCY = 3)
+  assert.strictEqual(staged.length, 3);
+  // Simulate notification cancel returning 'Stopped' for the first job
+  win.onSongDownloadStatus(staged[0].id, 'failed', 'Stopped');
+  // Must NOT kick off the 4th queued song after Stopped
+  assert.strictEqual(staged.length, 3);
+
+  // Now simulate notification cancel callback resetting UI and clearing notification
+  win.onDownloadCancelledFromNotification();
+  assert.strictEqual(stageEl.getAttribute('data-step'), 'paste');
+
+  // Test a playlist where 1 song is skipped and 1 song completes: done must reach total (2 >= 2)
+  notifCalls.length = 0;
+  staged.length = 0;
+  win.onIncomingMoonlightFile('# name: Small\nhttps://youtu.be/skip1\nhttps://youtu.be/keep1', 'Small.moonlight');
+  assert.strictEqual(staged.length, 1);
+  win.onSongDownloadStatus(staged[0].id, 'done', '/storage/emulated/0/Moonlight/Songs/.staging/s_1/song.mp3');
+  const last = notifCalls[notifCalls.length - 1];
+  assert.deepStrictEqual(last, { title: 'Small', done: 2, total: 2 });
+
+  // Test cancelling a playlist via #dl-cancel-btn: must call cancelSongDownload and notifyPlaylistProgress(title, 0, 0), never (1, 1)
+  const callOrder = [];
+  const cancelBtn = createNode('button');
+  const win2 = {
+    document: {
+      createElement: (tag) => createNode(tag),
+      createElementNS: (_, tag) => createNode(tag),
+      getElementById: (id) => (id === 'dl-stage' ? createNode('div') : id === 'sp-view-download' ? createNode('div') : id === 'dl-cancel-btn' ? cancelBtn : null),
+      activeElement: null,
+    },
+    setTimeout, clearTimeout, Date, JSON, Math, Array, RegExp, Error, Set,
+    AndroidBridge: {
+      stageSong: () => true,
+      placeSong: () => true,
+      cancelSongDownload: () => callOrder.push('cancelSongDownload'),
+      discardStagedSongs: () => callOrder.push('discardStagedSongs'),
+      notifyPlaylistProgress: (title, done, total) => callOrder.push(`notify:${title}:${done}/${total}`),
+    },
+  };
+  win2.window = win2;
+  vm.runInContext(code, vm.createContext(win2));
+  win2.onIncomingMoonlightFile('# name: CancelTest\nhttps://youtu.be/a1\nhttps://youtu.be/a2', 'CancelTest.moonlight');
+  callOrder.length = 0;
+  const { click } = require('./fake-dom');
+  click(cancelBtn);
+  assert.strictEqual(callOrder[0], 'cancelSongDownload', 'cancelSongDownload runs before notifyPlaylistProgress');
+  assert.ok(callOrder.includes('notify:CancelTest:0/0'), 'cancel notifies (0, 0) instead of (1, 1)');
+  assert.ok(!callOrder.some((c) => c.endsWith(':1/1')), 'cancel never sends 1/1 completion signal');
+});
+
 console.log(n + ' checks passed');

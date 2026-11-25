@@ -1,10 +1,8 @@
 package com.scell.moonlight
 
-import android.app.NotificationManager
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
-import androidx.core.app.NotificationCompat
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -93,9 +91,6 @@ class SongDownloader(
         /** The old music folder (one sub-folder per playlist). Still read, never written to by downloads. */
         const val AUDIO_DIR = "/storage/emulated/0/Novel/Audio"
 
-        // Per-song notification IDs start at 3000 and are incremented per job.
-        private val songNotifCounter = java.util.concurrent.atomic.AtomicInteger(3000)
-
         /** Is [path] a file inside the staging folder? (Nothing else may be moved or renamed.) */
         fun isStagedPath(path: String?): Boolean {
             if (path.isNullOrBlank()) return false
@@ -113,20 +108,37 @@ class SongDownloader(
     private val pool: ExecutorService = Executors.newCachedThreadPool()
     private val lock = Any()
     private val running = HashSet<String>()                         // every accepted, unanswered job
-    private val downloading = HashSet<String>()                     // the stage jobs among them
+    private val downloading = LinkedHashSet<String>()               // the stage jobs among them (insertion-ordered)
     private val cancelled = Collections.synchronizedSet(HashSet<String>())
+    private val jobProgress = java.util.concurrent.ConcurrentHashMap<String, ProgressMetrics>()
     private var engineReady = false
     // Tracks whether DownloadForegroundService is running so we start/stop it exactly once.
-    private var fgServiceRunning = false
+    @Volatile private var fgServiceRunning = false
     // Mirrors the "Background downloads" setting toggle. When false the foreground service is
     // never started, so downloads stop if the user switches away (original behaviour).
     @Volatile private var backgroundDownloadsEnabled = true
 
+    // Unified playlist notification metadata (owned here so there is only ever ONE download notification).
+    @Volatile private var playlistActive = false
+    @Volatile private var playlistTitle = ""
+    @Volatile private var playlistDone = 0
+    @Volatile private var playlistTotal = 0
+    @Volatile private var playlistSucceeded = 0
+    @Volatile private var playlistCancelled = false
+    @Volatile private var lastNotifUpdateMs = 0L
+
     fun setBackgroundDownloadsEnabled(enabled: Boolean) {
         backgroundDownloadsEnabled = enabled
         // If the user just turned it OFF and the service is currently running, stop it now.
-        if (!enabled && fgServiceRunning) {
-            synchronized(lock) { fgServiceRunning = false }
+        val shouldStop = synchronized(lock) {
+            if (!enabled && fgServiceRunning) {
+                fgServiceRunning = false
+                true
+            } else {
+                false
+            }
+        }
+        if (shouldStop) {
             main.post { DownloadForegroundService.stop(activity) }
         }
     }
@@ -138,9 +150,11 @@ class SongDownloader(
     private val nightlyChecked = AtomicBoolean(false)
 
     init {
+        DownloadForegroundService.isActiveCheck = { isDownloading() }
         DownloadForegroundService.cancelHandler = {
             cancel()
             try { File(STAGING_DIR).deleteRecursively() } catch (_: Exception) {}
+            main.post { onPage("onDownloadCancelledFromNotification", "") }
         }
     }
 
@@ -150,11 +164,18 @@ class SongDownloader(
     }
 
     fun release() {
+        cancel()
         pool.shutdownNow()
+        DownloadForegroundService.isActiveCheck = null
+        DownloadForegroundService.cancelHandler = null
+        DownloadForegroundService.cancelAllDownloadNotifications(activity)
     }
 
     /** True while a job is unanswered (the app must not close itself meanwhile). */
     fun isBusy(): Boolean = synchronized(lock) { running.isNotEmpty() }
+
+    /** True while at least one stage (download) job is actively running. */
+    fun isDownloading(): Boolean = synchronized(lock) { downloading.isNotEmpty() }
 
     /**
      * Accepts a download job. Returns false only when a job with this id is already running; every
@@ -253,23 +274,137 @@ class SongDownloader(
 
     /** Stops every running download; each then reports "Stopped" by itself. */
     fun cancel() {
-        val ids = synchronized(lock) { downloading.toList() }
+        val ids = synchronized(lock) {
+            fgServiceRunning = false
+            playlistActive = false
+            playlistSucceeded = 0
+            playlistCancelled = true
+            downloading.toList()
+        }
         cancelled.addAll(ids)
+        jobProgress.clear()
+        main.post { DownloadForegroundService.cancelAllDownloadNotifications(activity) }
         for (id in ids) {
             try { YoutubeDL.getInstance().destroyProcessById(id) } catch (e: Exception) { /* already over */ }
         }
     }
 
+    /** Called by MainActivity when JS reports playlist download progress (done >= total dismisses). */
+    fun updatePlaylistProgress(title: String, done: Int, total: Int) {
+        if (total <= 0 || done >= total) {
+            val (wasActive, wasCancelled, succeeded, anyDownloading) = synchronized(lock) {
+                val active = playlistActive
+                val cancelledFlag = playlistCancelled
+                val ok = playlistSucceeded
+                playlistActive = false
+                playlistTitle = ""
+                playlistDone = 0
+                playlistTotal = 0
+                playlistSucceeded = 0
+                val stillDownloading = downloading.isNotEmpty()
+                if (!stillDownloading) {
+                    fgServiceRunning = false
+                }
+                listOf(active, cancelledFlag, ok, stillDownloading)
+            }
+            if (anyDownloading == false) {
+                main.post { DownloadForegroundService.stop(activity) }
+            } else {
+                postNotificationUpdate(force = true)
+            }
+            if (wasActive == true && wasCancelled == false && total > 0 && done >= total) {
+                val safeTitle = title.ifBlank { "Playlist" }
+                val okCount = succeeded as Int
+                main.post {
+                    if (okCount > 0) {
+                        val noun = if (okCount == 1) "song" else "songs"
+                        DownloadForegroundService.postResultNotification(
+                            activity,
+                            title = "Playlist downloaded",
+                            body = "\u201c$safeTitle\u201d ($okCount $noun) ready to save",
+                            isError = false,
+                        )
+                    } else {
+                        DownloadForegroundService.postResultNotification(
+                            activity,
+                            title = "Playlist download failed",
+                            body = "No songs could be downloaded from \u201c$safeTitle\u201d",
+                            isError = true,
+                        )
+                    }
+                }
+            }
+            return
+        }
+        synchronized(lock) {
+            playlistActive = true
+            playlistCancelled = false
+            playlistTitle = title
+            playlistDone = done
+            playlistTotal = total
+        }
+        postNotificationUpdate(force = true)
+    }
+
     private fun begin(jobId: String, isDownload: Boolean): Boolean = synchronized(lock) {
         val fresh = running.add(jobId)
         if (fresh && isDownload) {
+            if (downloading.isEmpty()) {
+                playlistCancelled = false
+                if (!playlistActive) playlistSucceeded = 0
+                main.post { DownloadForegroundService.clearResultNotification(activity) }
+            }
             downloading.add(jobId)
+            val state = buildNotifStateLocked()
             if (!fgServiceRunning && backgroundDownloadsEnabled) {
                 fgServiceRunning = true
-                main.post { DownloadForegroundService.start(activity) }
+                main.post { DownloadForegroundService.start(activity, state) }
+            } else if (fgServiceRunning) {
+                main.post { DownloadForegroundService.updateProgress(activity, state, showInShade = true) }
             }
         }
         fresh
+    }
+
+    private fun buildNotifStateLocked(): DownloadNotifState {
+        if (downloading.isEmpty()) return DownloadNotifState(active = false)
+        val firstMetric = downloading.firstNotNullOfOrNull { jobProgress[it] }
+        val pct = firstMetric?.percent?.let { if (it >= 0.0) it.toInt().coerceIn(0, 100) else -1 } ?: -1
+        var fracSum = 0.0
+        for (id in downloading) {
+            val p = jobProgress[id]?.percent ?: -1.0
+            if (p >= 0.0) fracSum += (p.coerceIn(0.0, 100.0) / 100.0)
+        }
+        return DownloadNotifState(
+            active = true,
+            isPlaylist = playlistActive || downloading.any { it.startsWith("pl-dl-") },
+            playlistTitle = playlistTitle,
+            doneCount = playlistDone,
+            totalCount = playlistTotal,
+            activeCount = downloading.size,
+            activeFractionSum = fracSum,
+            percent = pct,
+            speed = firstMetric?.speed ?: "",
+            etaSeconds = firstMetric?.eta ?: -1L,
+            downloaded = firstMetric?.downloaded ?: "",
+            totalSize = firstMetric?.total ?: "",
+        )
+    }
+
+    private fun postNotificationUpdate(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastNotifUpdateMs < 400L) return
+        lastNotifUpdateMs = now
+        val (state, showInShade) = synchronized(lock) {
+            Pair(buildNotifStateLocked(), fgServiceRunning)
+        }
+        main.post {
+            if (!state.active || !isDownloading()) {
+                DownloadForegroundService.stop(activity)
+            } else {
+                DownloadForegroundService.updateProgress(activity, state, showInShade = showInShade)
+            }
+        }
     }
 
     // ---- worker threads from here on ---------------------------------------------------
@@ -430,6 +565,14 @@ class SongDownloader(
                         val finalPct = if (progress >= 0f) progress.toDouble() else info.percent
                         val finalEta = if (etaInSeconds >= 0L) etaInSeconds else info.eta
                         if (finalPct >= 0.0 || info.speed.isNotEmpty() || info.downloaded.isNotEmpty()) {
+                            jobProgress[jobId] = ProgressMetrics(
+                                percent = finalPct,
+                                eta = finalEta,
+                                speed = info.speed,
+                                downloaded = info.downloaded,
+                                total = info.total,
+                            )
+                            postNotificationUpdate(force = false)
                             val json = JSONObject().apply {
                                 put("jobId", jobId)
                                 put("percent", finalPct)
@@ -627,63 +770,62 @@ class SongDownloader(
     }
 
     private fun finish(jobId: String, status: String, message: String) {
+        jobProgress.remove(jobId)
         val (mine, noMoreDownloads) = synchronized(lock) {
             downloading.remove(jobId)
             val mine = running.remove(jobId)
-            Pair(mine, fgServiceRunning && downloading.isEmpty())
+            if (mine && jobId.startsWith("pl-dl-") && status == "done") {
+                playlistSucceeded++
+            }
+            val empty = downloading.isEmpty()
+            if (empty) {
+                fgServiceRunning = false
+            }
+            Pair(mine, empty)
         }
         cancelled.remove(jobId)
-        if (!mine) return                    // a late or repeated answer changes nothing
+        if (!mine) {
+            if (noMoreDownloads) {
+                main.post { DownloadForegroundService.stop(activity) }
+            }
+            return                    // a late or repeated answer changes nothing
+        }
         onStatus(jobId, status, message)
 
-        // Post a per-song result notification so the user sees outcome even when backgrounded.
-        postSongResultNotification(jobId, status, message)
-
-        // Stop the foreground service when the last download finishes.
+        // Stop the foreground service immediately when the last download finishes.
         if (noMoreDownloads) {
-            synchronized(lock) { fgServiceRunning = false }
             main.post { DownloadForegroundService.stop(activity) }
+        } else {
+            postNotificationUpdate(force = true)
         }
+
+        // Post a brief result notification for single-song downloads (never for cancelled jobs or playlist items).
+        postSongResultNotification(jobId, status, message)
     }
 
     /** Posts a brief notification for a completed or failed single-song download. */
     private fun postSongResultNotification(jobId: String, status: String, message: String) {
-        // Only for stage (download) jobs, not place jobs.
-        if (!jobId.startsWith("dl-") && !jobId.startsWith("pl-dl-")) return
-        val nm = activity.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
-                as? NotificationManager ?: return
+        // Only for single-song stage jobs, not place jobs or playlist items (playlist posts one summary).
+        if (!jobId.startsWith("dl-")) return
+        if (status == "failed" && message == "Stopped") return
         val title = when (status) {
             "done"   -> "Song downloaded"
             "failed" -> "Download failed"
-            else     -> return   // "running" — no notification
+            else     -> return
         }
         val songName = if (status == "done") {
-            try { java.io.File(message).nameWithoutExtension } catch (e: Exception) { "" }
+            try { File(message).nameWithoutExtension } catch (e: Exception) { "" }
         } else ""
         val body = when {
-            status == "failed"      -> message.take(120)
-            songName.isNotBlank()   -> "\u201c$songName\u201d saved"
-            else                    -> "Tap to open Moonlight"
+            status == "failed"    -> message.take(120)
+            songName.isNotBlank() -> "\u201c$songName\u201d ready to save"
+            else                  -> "Tap to open Moonlight"
         }
-        val tapIntent = android.content.Intent(activity, MainActivity::class.java).apply {
-            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val tap = android.app.PendingIntent.getActivity(
-            activity, 0, tapIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        DownloadForegroundService.postResultNotification(
+            activity,
+            title = title,
+            body = body,
+            isError = (status == "failed"),
         )
-        val notif = NotificationCompat.Builder(activity, DownloadForegroundService.CHANNEL_SONG)
-            .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setContentIntent(tap)
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
-        val notifId = songNotifCounter.getAndIncrement()
-        nm.notify(notifId, notif)
-        // Auto-cancel after 8 seconds so the shade doesn't pile up with download results.
-        main.postDelayed({ nm.cancel(notifId) }, 8_000L)
     }
 }

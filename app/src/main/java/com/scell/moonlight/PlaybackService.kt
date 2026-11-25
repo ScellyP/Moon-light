@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.app.NotificationManager
 import android.app.PendingIntent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
@@ -352,7 +353,7 @@ class PlaybackService : MediaSessionService() {
     private val idleStopRunnable = Runnable {
         val p = mediaSession?.player
         if ((p == null || !isPlaybackActive(p)) && !heldByMute()) {
-            getSystemService(NotificationManager::class.java)?.cancelAll()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
