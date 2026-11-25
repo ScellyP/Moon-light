@@ -997,6 +997,18 @@ window.NovelAudio = (function () {
       return state.queue[state.queueIndex] || null;
     },
 
+    // The order the song list shows. Shuffle changes only the order the songs PLAY in (state.queue): the
+    // playlist itself keeps its own order, so with shuffle on the list is the unshuffled selection. The
+    // order they play in is shown in the "Playing order" menu (playingOrder()).
+    displayOrder() {
+      return state.shuffle && this._originalOrder.length ? this._originalOrder : state.queue;
+    },
+
+    // The order the songs will really play in (and have played in, for a shuffle round): the queue.
+    playingOrder() {
+      return state.queue.slice();
+    },
+
     // "Add to Queue": the song plays right after the one that is playing now. Picking another playlist or a
     // rescan builds the queue from the playlist again, which drops it. False when it is the song playing now.
     addNext(id) {
@@ -2613,6 +2625,10 @@ window.NovelAudio = (function () {
       els.xf = document.getElementById('audio-xf');
       els.xfValue = document.getElementById('audio-xf-value');
       els.queue = document.getElementById('audio-queue');
+      els.order = document.getElementById('audio-order');
+      els.orderToggle = document.getElementById('audio-order-toggle');
+      els.orderSub = document.getElementById('audio-order-sub');
+      els.orderList = document.getElementById('audio-order-list');
       els.empty = document.getElementById('audio-empty');
       els.note = document.getElementById('audio-status-note');
       els.playlistRow = document.getElementById('audio-playlist-row');
@@ -2824,6 +2840,26 @@ window.NovelAudio = (function () {
         const next = PlaybackQueue.jumpTo(li.dataset.trackId);
         if (next) AudioEngine.play(next);
       });
+
+      // "Playing order" drop-down: the header opens / closes it, a row plays that song, scrolling loads more rows.
+      if (els.orderToggle && els.orderToggle.addEventListener) {
+        els.orderToggle.addEventListener('click', () => {
+          AudioUI._orderOpen = !AudioUI._orderOpen;
+          AudioUI._orderKey = '';
+          AudioUI._renderOrder(true);
+        });
+      }
+      if (els.orderList && els.orderList.addEventListener) {
+        els.orderList.addEventListener('click', (e) => {
+          const row = e.target.closest && e.target.closest('[data-order-id]');
+          if (!row) return;
+          const next = PlaybackQueue.jumpTo(row.getAttribute('data-order-id'));
+          if (next) AudioEngine.play(next);
+        });
+        els.orderList.addEventListener('scroll', () => {
+          if (els.orderList.scrollTop + els.orderList.clientHeight >= els.orderList.scrollHeight - 400) AudioUI._drawMoreOrder();
+        });
+      }
 
       // Duplicate confirmation dialog wiring
       const dupeLayer = document.getElementById('dupe-dialog-layer');
@@ -3187,6 +3223,95 @@ window.NovelAudio = (function () {
       els.newInput.value = '';
       els.newInput.focus();
     },
+    /* ---- "Playing order": a drop-down under the playlist header showing the order the songs play in ----
+       Closed: only the header (how many songs, shuffle on / off). Open: rows in the look of the playlist
+       editor (picture, title, artist), numbered, the song playing now marked, songs already played dimmed.
+       Rows are drawn 100 at a time while scrolling so a long playlist does not slow the page down. */
+    _orderOpen: false,
+    _orderKey: '',
+    _orderIds: [],
+    _orderDrawn: 0,
+    _ORDER_CHUNK: 100,
+    _renderOrder(force) {
+      if (!els.order) return;
+      const total = state.queue.length;
+      els.order.classList.toggle('hidden', total === 0);
+      els.order.classList.toggle('open', this._orderOpen);
+      if (els.orderToggle && els.orderToggle.setAttribute) els.orderToggle.setAttribute('aria-expanded', this._orderOpen ? 'true' : 'false');
+      if (els.orderSub) els.orderSub.textContent = total + (total === 1 ? ' song' : ' songs') + ' \u00b7 ' + (state.shuffle ? 'shuffle on' : 'in order');
+      if (!this._orderOpen || !els.orderList) return;
+      const key = state.queue.join('|') + '#' + MediaLibrary.infoRev;
+      if (!force && key === this._orderKey && els.orderList.childElementCount) {
+        this._markOrder();      // the same list: only move the "playing" mark
+        return;
+      }
+      this._orderKey = key;
+      this._orderIds = PlaybackQueue.playingOrder();
+      els.orderList.innerHTML = '';
+      this._orderDrawn = 0;
+      // enough rows to reach the song playing now, then a screenful beyond it
+      const upto = Math.max(this._ORDER_CHUNK, state.queueIndex + this._ORDER_CHUNK);
+      while (this._orderDrawn < Math.min(upto, this._orderIds.length)) this._drawMoreOrder();
+      this._markOrder();
+      const now = els.orderList.querySelector ? els.orderList.querySelector('.po-row.now') : null;
+      if (now && now.scrollIntoView && state.queueIndex > 2) { try { now.scrollIntoView({ block: 'center' }); } catch (e) { /* non-fatal */ } }
+    },
+    _drawMoreOrder() {
+      if (!els.orderList || this._orderDrawn >= this._orderIds.length) return;
+      const end = Math.min(this._orderIds.length, this._orderDrawn + this._ORDER_CHUNK);
+      for (let i = this._orderDrawn; i < end; i++) {
+        const t = MediaLibrary.getTrack(this._orderIds[i]);
+        if (!t) continue;
+        const row = document.createElement('div');
+        row.className = 'pe-row po-row';
+        row.setAttribute('data-order-id', t.id);
+        row.setAttribute('data-order-index', String(i));
+        const num = document.createElement('div');
+        num.className = 'po-num';
+        num.textContent = String(i + 1);
+        row.appendChild(num);
+        const tile = document.createElement('div');
+        tile.className = 'pe-art';
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'ico');
+        svg.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS(NS, 'use');
+        use.setAttribute('href', '#i-moon-music');
+        svg.appendChild(use);
+        tile.appendChild(svg);
+        row.appendChild(tile);
+        const text = document.createElement('div');
+        text.className = 'pe-text';
+        const name = document.createElement('div');
+        name.className = 'pe-name';
+        name.textContent = t.title || 'Unknown song';
+        text.appendChild(name);
+        if (t.artist) {
+          const artist = document.createElement('div');
+          artist.className = 'pe-artist';
+          artist.textContent = t.artist;
+          text.appendChild(artist);
+        }
+        row.appendChild(text);
+        els.orderList.appendChild(row);
+        // the picture comes from the same loader the playlist editor uses (one per animation frame)
+        try { if (window.PlaylistEditor && window.PlaylistEditor.art) window.PlaylistEditor.art(tile, t); } catch (e) { /* the icon stays */ }
+      }
+      this._orderDrawn = end;
+      this._markOrder();
+    },
+    // "now" = the song playing, "done" = songs before it in this order (already played in the round).
+    _markOrder() {
+      if (!els.orderList || !els.orderList.children) return;
+      const cur = state.queueIndex;
+      Array.prototype.forEach.call(els.orderList.children, (row) => {
+        const i = parseInt(row.getAttribute('data-order-index'), 10);
+        row.classList.toggle('now', i === cur);
+        row.classList.toggle('done', i < cur);
+      });
+    },
+
     _createList() {
       const name = els.newInput.value.trim();
       if (!name) { els.newInput.focus(); return; }
@@ -3411,12 +3536,15 @@ window.NovelAudio = (function () {
       // while a specific playlist is selected, since every visible row
       // already belongs to it.
       const showPlaylistTags = state.activePlaylist === 'all' && MediaLibrary.getPlaylists().length > 0;
+      // The song list keeps the playlist's own order, also while shuffle is on (see PlaybackQueue.displayOrder).
+      const listOrder = PlaybackQueue.displayOrder();
+      AudioUI._renderOrder();       // the "Playing order" drop-down (cheap while it is closed)
       // infoRev changes when a song's title / artist is edited, so the rows are redrawn with the new names.
-      const queueKey = showPlaylistTags + '|' + MediaLibrary.infoRev + '|' + state.queue.map(id => {
+      const queueKey = showPlaylistTags + '|' + MediaLibrary.infoRev + '|' + listOrder.map(id => {
         const t = MediaLibrary.getTrack(id);
         return id + ':' + (t ? t.durationSec + (t.playlist || '') : '');
       }).join(',');
-      if (state.queue.length > 0 && queueKey === queueRenderKey && els.queue.childElementCount === state.queue.length) {
+      if (listOrder.length > 0 && queueKey === queueRenderKey && els.queue.childElementCount === listOrder.length) {
         // Same list as last time: just move the "playing" highlight
         // instead of tearing down and rebuilding every row.
         Array.prototype.forEach.call(els.queue.children, li => {
@@ -3426,7 +3554,7 @@ window.NovelAudio = (function () {
       }
       queueRenderKey = queueKey;
       els.queue.innerHTML = '';
-      state.queue.forEach(id => {
+      listOrder.forEach(id => {
         const t = MediaLibrary.getTrack(id);
         if (!t) return;
         const li = document.createElement('li');
