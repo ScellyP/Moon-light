@@ -916,7 +916,9 @@ class MainActivity : ComponentActivity() {
                     val posSec = controller.currentPosition / 1000.0
                     val durMs = controller.duration
                     val durSec = if (durMs != C.TIME_UNSET && durMs > 0) durMs / 1000.0 else 0.0
-                    callPage("onNativeAudioProgress", "$posSec, $durSec")
+                    // The song the player really has goes along, so the page can notice if it shows a different one.
+                    val playingPath = JSONObject.quote(controller.currentMediaItem?.mediaId ?: "")
+                    callPage("onNativeAudioProgress", "$posSec, $durSec, $playingPath")
                 }
                 // Screen visible: 500 ms keeps the seek bar smooth. App in the
                 // background / screen off: nobody sees the bar, so tick slowly

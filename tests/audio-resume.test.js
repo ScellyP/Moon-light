@@ -47,10 +47,62 @@ check('with nothing playing in the background, the Bluetooth start-up still play
   assert.strictEqual(t.state.currentTrackId, TRACKS[1].id);
 });
 
+const NE = (t) => t.app._modules.NativeAudioEngine;
+const playing = (t, i) => { t.scanFinished(); t.nativeReady(); t.app._modules.AudioEngine.play(TRACKS[i].id); NE(t)._lastLoadAt = 0; NE(t)._xfGraceUntil = 0; };
+
+check('the page follows the player: the player is on another song for two reports, so that song is shown', () => {
+  const t = launch({ saved: null, bluetooth: false });
+  playing(t, 0);
+  assert.strictEqual(t.state.currentTrackId, TRACKS[0].id);
+  NE(t).onProgress(30, 100, TRACKS[1].path);
+  assert.strictEqual(t.state.currentTrackId, TRACKS[0].id, 'one report is not enough');
+  NE(t).onProgress(30.5, 100, TRACKS[1].path);
+  assert.strictEqual(t.state.currentTrackId, TRACKS[1].id, 'the page now shows the song that is really playing');
+  assert.strictEqual(t.state.playing, true);
+  assert.strictEqual(NE(t)._loadedTrackId, TRACKS[1].id);
+});
+
+check('right after the page loaded a song, the old song in a report is ignored', () => {
+  const t = launch({ saved: null, bluetooth: false });
+  playing(t, 0);
+  t.app._modules.AudioEngine.play(TRACKS[2].id);       // the page asks for another song: the player still says the old one
+  NE(t).onProgress(10, 100, TRACKS[0].path);
+  NE(t).onProgress(10.5, 100, TRACKS[0].path);
+  NE(t).onProgress(11, 100, TRACKS[0].path);
+  assert.strictEqual(t.state.currentTrackId, TRACKS[2].id);
+});
+
+check('a report that matches the shown song changes nothing', () => {
+  const t = launch({ saved: null, bluetooth: false });
+  playing(t, 1);
+  for (let i = 0; i < 4; i++) NE(t).onProgress(5 + i, 100, TRACKS[1].path);
+  assert.strictEqual(t.state.currentTrackId, TRACKS[1].id);
+});
+
+check('coming back to the app with the same song playing keeps the queue (no reshuffle of what plays next)', () => {
+  const t = launch({ saved: { shuffle: true }, bluetooth: false });
+  playing(t, 1);
+  const q = t.state.queue.slice(); const idx = t.state.queueIndex;
+  t.app._nativeOnActive(active(1, { positionSec: 77 }));
+  assert.deepStrictEqual(t.state.queue, q);
+  assert.strictEqual(t.state.queueIndex, idx);
+  assert.strictEqual(t.state.positionSec, 77);
+});
+
+check('returning to the app right after the page changed song does not put the old song back', () => {
+  const t = launch({ saved: null, bluetooth: false });
+  t.scanFinished(); t.nativeReady();
+  t.app._modules.AudioEngine.play(TRACKS[0].id);
+  t.app._modules.AudioEngine.play(TRACKS[2].id);        // moved on just now
+  t.app._nativeOnActive(active(0));                    // the player still reports the previous song for a moment
+  assert.strictEqual(t.state.currentTrackId, TRACKS[2].id);
+});
+
 check('MainActivity reports the running song before it announces the native player', () => {
   const kt = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/scell/moonlight/MainActivity.kt'), 'utf8');
   const a = kt.indexOf('syncNativePlaybackState()\n                callPage("onNativeAudioReady")');
   assert.ok(a > 0, 'syncNativePlaybackState() must come right before callPage("onNativeAudioReady")');
+  assert.ok(/callPage\("onNativeAudioProgress", "\$posSec, \$durSec, \$playingPath"\)/.test(kt), 'the progress report carries the song the player really has');
 });
 
 finish();

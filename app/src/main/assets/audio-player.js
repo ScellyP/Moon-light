@@ -230,8 +230,18 @@ window.NovelAudio = (function () {
       const track = state.tracks.find(t => norm(t.path) === target) || state.tracks.find(t => t.id === active.path);
       if (!track) return;
 
+      const alreadyShown = state.currentTrackId === track.id && AudioEngine === NativeAudioEngine && state.queue.includes(track.id);
       state.currentTrackId = track.id;
       NativeAudioEngine._loadedTrackId = track.id;
+      if (alreadyShown) {
+        // Coming back to the app with the same song playing: keep the queue (a rebuild would reshuffle what plays next).
+        if (typeof active.playing === 'boolean') state.playing = active.playing;
+        if (typeof active.positionSec === 'number') state.positionSec = active.positionSec;
+        if (typeof active.durationSec === 'number' && active.durationSec > 0) state.durationSec = active.durationSec;
+        StartupPlayback.done = true;
+        AudioUI.render();
+        return;
+      }
       if (typeof active.playing === 'boolean') state.playing = active.playing;
       if (typeof active.positionSec === 'number') state.positionSec = active.positionSec;
       state.durationSec = (typeof active.durationSec === 'number' && active.durationSec > 0)
@@ -1695,6 +1705,10 @@ window.NovelAudio = (function () {
     // first use of this engine, leaving nothing loaded natively even
     // though state *looked* like playback had already started.
     _loadedTrackId: null,
+    // When this page last asked the native player to load / crossfade to a song: for a moment after that the native
+    // side still reports the OLD song, which must not be taken for "the player is on another song".
+    _lastLoadAt: 0,
+    _mismatch: 0,
     // Until this time, a "paused" report from native is ignored: right after
     // a crossfade starts the new player is briefly buffering, which reads as
     // "not playing" for a few tens of ms and would make the play button blink.
@@ -1746,6 +1760,7 @@ window.NovelAudio = (function () {
         // including this same one next time) always starts at 0.
         this._pendingSeek = state.handoffPositionSec;
         state.handoffPositionSec = null;
+        this._lastLoadAt = Date.now();
         bridge.nativeAudioLoad(track.path, track.title || '', track.artist || '', track.album || '');
         this._loadedTrackId = id;
         AudioFeatures.emit('trackStart', track);
@@ -1833,10 +1848,27 @@ window.NovelAudio = (function () {
 
     // Called by window.onNativeAudioProgress(posSec, durSec), a couple
     // of times a second while playing.
-    onProgress(positionSec, durationSec) {
+    // True when the song the native player really has differs from the one this page shows, for two reports in a row
+    // and not just after this page asked for a change. Then the page follows the player: what you hear is what is shown.
+    _followNativeSong(path, positionSec, durationSec) {
+      if (!path) return false;
+      const cur = MediaLibrary.getTrack(state.currentTrackId);
+      const now = Date.now();
+      if (!cur || now < this._xfGraceUntil || now - this._lastLoadAt < 3000) { this._mismatch = 0; return false; }
+      const norm = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+      if (norm(cur.path) === norm(path)) { this._mismatch = 0; return false; }
+      if (++this._mismatch < 2) return false;
+      this._mismatch = 0;
+      const before = state.currentTrackId;
+      MediaLibrary._syncActiveTrack({ path: path, playing: true, positionSec: positionSec, durationSec: durationSec });
+      return state.currentTrackId !== before;
+    },
+
+    onProgress(positionSec, durationSec, path) {
       // Reports already on their way from the OLD track when a crossfade began
       // would drag the seek bar back to its end (and re-trigger a crossfade).
       if (Date.now() < this._xfGraceUntil) return;
+      if (this._followNativeSong(path, positionSec, durationSec)) return;
       state.positionSec = positionSec;
       if (durationSec) state.durationSec = durationSec;
       AudioUI.updateProgressOnly();
@@ -1880,6 +1912,7 @@ window.NovelAudio = (function () {
         this._pendingSeek = null;
         state.handoffPositionSec = null;
         this._loadedTrackId = nextId;
+        this._lastLoadAt = Date.now();
         this._xfGraceUntil = Date.now() + 1500;
         try {
           bridge.nativeAudioCrossfade(track.path, track.title || '', track.artist || '',
@@ -4469,7 +4502,7 @@ window.NovelAudio = (function () {
     // referenced directly from outside this closure.
     _nativeOnLoaded(durationSec) { NativeAudioEngine.onLoaded(durationSec); },
     _nativeOnStateChanged(playing) { NativeAudioEngine.onStateChanged(playing); },
-    _nativeOnProgress(positionSec, durationSec) { NativeAudioEngine.onProgress(positionSec, durationSec); },
+    _nativeOnProgress(positionSec, durationSec, path) { NativeAudioEngine.onProgress(positionSec, durationSec, path); },
     _nativeOnEnded() { NativeAudioEngine.onTrackEnded(); },
     _nativeOnError(message) { NativeAudioEngine.onError(message); },
     _nativeOnSkipNext() { NativeAudioEngine.onSkipNext(); },
@@ -4479,6 +4512,9 @@ window.NovelAudio = (function () {
       // A song is already loaded in the background player (the app was swiped away or reopened while it played or
       // was paused): it keeps going, and the start-up auto play must never replace it with another song.
       StartupPlayback.done = true;
+      // Returning to the app also reports the running song. Right after this page itself loaded or crossfaded to a song, the
+      // player may still report the previous one for a moment: that must not put the old song back on the screen.
+      if (AudioEngine === NativeAudioEngine && NativeAudioEngine._loadedTrackId && Date.now() - NativeAudioEngine._lastLoadAt < 3000) return;
       if (state.tracks && state.tracks.length > 0) {
         MediaLibrary._syncActiveTrack(data);
       } else {
@@ -4581,8 +4617,8 @@ window.onNativeAudioState = function (json) {
 
 // Fired roughly every 500ms while playing (see MainActivity.kt's
 // startProgressUpdates()).
-window.onNativeAudioProgress = function (positionSec, durationSec) {
-  window.NovelAudio._nativeOnProgress(positionSec, durationSec);
+window.onNativeAudioProgress = function (positionSec, durationSec, path) {
+  window.NovelAudio._nativeOnProgress(positionSec, durationSec, path);
 };
 
 window.onNativeAudioEnded = function () {
