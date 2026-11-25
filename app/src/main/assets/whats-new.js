@@ -199,6 +199,8 @@
       .then(function (text) {
         var blocks = parseWhatsNew(text);
         if (!blocks.length) return false;
+        // Prepend a dynamic "What's New in vX.XX.XX" heading using the live version.
+        blocks.unshift({ type: 'heading', level: 1, text: "What\u2019s New in " + current });
         var opened = open(blocks, current);
         if (opened) markSeen(current);
         return opened;

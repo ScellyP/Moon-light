@@ -1,7 +1,5 @@
 // What's New in Moonlight (supports Markdown: # / ## headings, - bullets, **bold**, *italic*, `code`)
-// Lines starting with // are ignored as comments.
-
-## What's New in v1.19.10
+// Lines starting with // are ignored. The version heading is added automatically — no need to write it here.
 
 ## Highlights
 - **Personalised Home greeting** — the app now shows your name right on the home page
