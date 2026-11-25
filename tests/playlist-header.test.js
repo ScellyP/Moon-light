@@ -44,11 +44,11 @@ check('Find in playlist: filters the rows by title + artist, ignores case and ac
   assert.ok(/initFind\(\);\s*setView\('library'/.test(ui));
 });
 
-check('share links, native side: a .txt in the app cache handed to the share sheet through FileProvider', () => {
+check('share links, native side: a .moonlight in the app cache handed to the share sheet through FileProvider', () => {
   const kt = read('java/com/scell/moonlight/MainActivity.kt');
   assert.ok(/@JavascriptInterface\s+fun playlistShareLinks\(fileName: String, text: String\): Boolean/.test(kt));
   const body = kt.slice(kt.indexOf('fun playlistShareLinks'), kt.indexOf('fun playlistShareLinks') + 1800);
-  assert.ok(/cacheDir/.test(body) && /playlist-links/.test(body) && /type = "text\/plain"/.test(body) && /FLAG_GRANT_READ_URI_PERMISSION/.test(body));
+  assert.ok(/cacheDir/.test(body) && /playlist-links/.test(body) && /type = "application\/x-moonlight"/.test(body) && /FLAG_GRANT_READ_URI_PERMISSION/.test(body));
   assert.ok(/\.songshare/.test(body));
   const xml = read('res/xml/share_paths.xml');
   assert.ok(/<cache-path name="playlist_links" path="playlist-links\/" \/>/.test(xml));

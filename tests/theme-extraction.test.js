@@ -222,5 +222,22 @@ function parseCssRgb(cssStr) {
     console.log('ok - all 8 theme CSS variables are consistently populated');
   }
 
-  console.log('\nAll 11 theme colour extraction checks passed cleanly!');
+  // 12. Mostly-black cover with thin coloured side bars stays black/grey (not tinted by the bars)
+  {
+    const { mockDoc } = createMockCanvas((x) => (x < 7 || x >= 25 ? [88, 42, 44, 255] : [0, 0, 0, 255]));
+    const extracted = dominantRgb({}, mockDoc);
+    const [, s] = rgbToHsl(extracted[0], extracted[1], extracted[2]);
+    assert.ok(s < 0.12, 'black cover with maroon bars is treated as neutral');
+    console.log('ok - black cover with thin coloured bars is not tinted by the bars');
+  }
+
+  // 13. Vivid subject on a black cover still keeps its colour
+  {
+    const { mockDoc } = createMockCanvas((x, y) => (x >= 8 && x < 24 && y >= 8 && y < 24 ? [30, 80, 220, 255] : [0, 0, 0, 255]));
+    const extracted = dominantRgb({}, mockDoc);
+    assert.ok(extracted[2] > 200 && extracted[0] < 50, 'vivid blue subject still wins over black');
+    console.log('ok - vivid subject on black keeps its colour');
+  }
+
+  console.log('\nAll 13 theme colour extraction checks passed cleanly!');
 })();

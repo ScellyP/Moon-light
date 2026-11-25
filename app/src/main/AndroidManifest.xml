@@ -60,6 +60,66 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-moonlight" />
+            </intent-filter>
+            <!-- ACTION_VIEW for .moonlight files: matches content and file schemes,
+                 explicit custom mimeType, generic/stream/text mimeTypes with .moonlight pattern/suffix,
+                 and URIs with no mimeType, priority="100" to be preferred default handler. -->
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/x-moonlight" />
+            </intent-filter>
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.moonlight" />
+                <data android:pathSuffix=".moonlight" />
+                <data android:mimeType="*/*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-moonlight" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.moonlight" />
+                <data android:pathSuffix=".moonlight" />
+            </intent-filter>
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:pathPattern=".*\\.moonlight" />
+                <data android:pathSuffix=".moonlight" />
+                <data android:mimeType="*/*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-moonlight" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter android:priority="100">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:pathPattern=".*\\.moonlight" />
+                <data android:pathSuffix=".moonlight" />
+            </intent-filter>
         </activity>
 
         <!-- Share button (MainActivity.songShare): gives the chosen song to another app (WhatsApp, Telegram,

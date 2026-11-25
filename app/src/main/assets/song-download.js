@@ -180,12 +180,34 @@
                state: waiting | downloading | ready | failed | placed | skipped
        index   which item the screen is about
      ----------------------------------------------------------------------- */
-  function createWizard({ stage, place, cancel, discard, discardOne, play, onPlaced, onChange } = {}) {
+  function createWizard({ stage, place, cancel, discard, discardOne, play, onPlaced, onChange, onPersist } = {}) {
     const w = { step: 'paste', items: [], index: 0, message: '', error: '', folder: '' };
     const jobs = {};            // jobId -> { kind: 'stage' | 'place', item }
     let seq = 0;                // job ids never repeat within a session, so a late answer can't be mistaken
 
-    const emit = () => { if (onChange) onChange(w); };
+    function snapshot() {
+      return {
+        step: w.step,
+        index: w.index,
+        folder: w.folder,
+        message: w.message,
+        error: w.error,
+        seq,
+        items: w.items.map((it) => ({
+          id: it.id,
+          url: it.url,
+          state: it.state,
+          path: it.path || '',
+          name: it.name || '',
+          crop: it.crop ? { x: it.crop.x, y: it.crop.y, size: it.crop.size } : null,
+          error: it.error || '',
+          jobId: it.jobId || '',
+        })),
+      };
+    }
+
+    const persist = () => { if (onPersist) onPersist(snapshot()); };
+    const emit = () => { persist(); if (onChange) onChange(w); };
     const current = () => w.items[w.index] || null;
     const stageRunning = () => Object.keys(jobs).some((id) => jobs[id].kind === 'stage');
 
@@ -196,12 +218,14 @@
     function startStage(item) {
       const id = 's' + (++seq);
       jobs[id] = { kind: 'stage', item };
+      item.jobId = id;
       item.state = 'downloading';
       item.error = '';
       let ok = false;
       let why = '';
       try { ok = !!stage && stage(id, item.url) !== false; } catch (e) { why = e && e.message ? e.message : ''; }
-      if (!ok) { delete jobs[id]; stageFailed(item, why || 'Could not start the download'); }
+      if (!ok) { delete jobs[id]; item.jobId = ''; stageFailed(item, why || 'Could not start the download'); }
+      else { persist(); }
     }
 
     // One download at a time. The song on screen comes first; once it is downloaded, the next one
@@ -219,6 +243,7 @@
 
     function stageDone(item, path) {
       if (!path) return stageFailed(item, 'The download left no file behind.');
+      item.jobId = '';
       item.path = path;
       item.name = cleanSongName(stemOf(path));
       item.state = 'ready';
@@ -231,6 +256,7 @@
     }
 
     function stageFailed(item, message) {
+      item.jobId = '';
       item.state = 'failed';
       item.error = message || 'The download failed.';
       item.percent = -1;
@@ -242,22 +268,26 @@
     function startPlace(item) {
       const id = 'p' + (++seq);
       jobs[id] = { kind: 'place', item };
+      item.jobId = id;
       w.step = 'placing';
       w.error = '';
       let ok = false;
       let why = '';
       try { ok = !!place && place(id, item.path, item.name, w.folder) !== false; } catch (e) { why = e && e.message ? e.message : ''; }
-      if (!ok) { delete jobs[id]; placeFailed(why || 'Could not start moving the song'); return; }
+      if (!ok) { delete jobs[id]; item.jobId = ''; placeFailed(why || 'Could not start moving the song'); return; }
       emit();
     }
 
     function placeFailed(message) {
+      const cur = current();
+      if (cur) cur.jobId = '';
       w.step = 'placefail';
       w.error = message || 'The song could not be added.';
       emit();
     }
 
     function placeDone(item, finalPath) {
+      item.jobId = '';
       item.state = 'placed';
       item.finalPath = finalPath || '';
       // Remember the link and the name it was saved under (downloads.txt), before anything else can go wrong.
@@ -307,12 +337,13 @@
         const job = jobs[id];
         if (!job || !job.item) return null;
         const d = typeof data === 'string' ? JSON.parse(data) : (data || {});
-        if (typeof d.percent === 'number') job.item.percent = d.percent;
-        if (typeof d.eta === 'number') job.item.eta = d.eta;
-        if (d.speed != null) job.item.speed = String(d.speed);
-        if (d.downloaded != null) job.item.downloaded = String(d.downloaded);
-        if (d.total != null) job.item.total = String(d.total);
-        emit();
+        if (typeof d.percent === 'number' && d.percent >= 0) {
+          job.item.percent = Math.max(job.item.percent >= 0 ? job.item.percent : 0, d.percent);
+        }
+        if (typeof d.eta === 'number' && d.eta >= 0) job.item.eta = d.eta;
+        if (d.speed != null && d.speed !== '') job.item.speed = String(d.speed);
+        if (d.downloaded != null && d.downloaded !== '') job.item.downloaded = String(d.downloaded);
+        if (d.total != null && d.total !== '') job.item.total = String(d.total);
         return job.item;
       },
       // The native side answers here.
@@ -356,7 +387,10 @@
       // The name being typed (no redraw: the user is typing in the field).
       rename(text) {
         const cur = current();
-        if (w.step === 'name' && cur) cur.name = String(text == null ? '' : text);
+        if (w.step === 'name' && cur) {
+          cur.name = String(text == null ? '' : text);
+          persist();
+        }
       },
       // Step 3 -> 4. An emptied name keeps the song's own.
       save() {
@@ -414,6 +448,123 @@
         if (w.step !== 'done') return;
         reset();
         emit();
+      },
+      snapshot,
+      restore(saved, { isStaged, activeJobs, bufferedResults, onCrop } = {}) {
+        if (!saved || !saved.step || saved.step === 'paste' || !Array.isArray(saved.items) || !saved.items.length) {
+          return false;
+        }
+        const activeSet = new Set(Array.isArray(activeJobs) ? activeJobs : []);
+        const buffered = bufferedResults && typeof bufferedResults === 'object' ? bufferedResults : {};
+        Object.keys(jobs).forEach((id) => { delete jobs[id]; });
+
+        w.step = String(saved.step);
+        w.items = saved.items.map((it, i) => ({
+          id: it.id != null ? it.id : i + 1,
+          url: String(it.url || ''),
+          state: String(it.state || 'waiting'),
+          path: String(it.path || ''),
+          name: String(it.name || ''),
+          crop: it.crop && typeof it.crop === 'object' ? { x: Number(it.crop.x) || 0, y: Number(it.crop.y) || 0, size: Number(it.crop.size) || 1 } : null,
+          error: String(it.error || ''),
+          jobId: String(it.jobId || ''),
+          percent: it.state === 'ready' ? 100 : -1,
+          eta: -1,
+          speed: '',
+          downloaded: '',
+          total: '',
+        }));
+        w.index = Math.max(0, Math.min(Number(saved.index) || 0, w.step === 'done' ? w.items.length : w.items.length - 1));
+        w.folder = String(saved.folder || '');
+        w.message = String(saved.message || '');
+        w.error = String(saved.error || '');
+        seq = Math.max(seq, Number(saved.seq) || 0);
+
+        const curIdx = w.index;
+        const toReplay = [];
+        w.items.forEach((item, idx) => {
+          if (item.state === 'ready') {
+            // If this item is currently being placed, its staged file may already have been moved
+            // to Songs/ while detached; let the 'placing' reconciliation below handle it.
+            if (w.step === 'placing' && idx === curIdx) {
+              if (item.crop && onCrop && item.path && (!isStaged || isStaged(item.path))) {
+                try { onCrop(item.path, item.crop); } catch (e) {}
+              }
+              return;
+            }
+            const ok = item.path && (!isStaged || isStaged(item.path));
+            if (!ok) {
+              item.state = 'waiting';
+              item.path = '';
+              item.crop = null;
+              item.jobId = '';
+            } else if (item.crop && onCrop) {
+              try { onCrop(item.path, item.crop); } catch (e) {}
+            }
+          } else if (item.state === 'downloading') {
+            const jid = item.jobId;
+            if (jid && buffered[jid]) {
+              jobs[jid] = { kind: 'stage', item };
+              toReplay.push(jid);
+            } else if (jid && activeSet.has(jid)) {
+              jobs[jid] = { kind: 'stage', item };
+            } else {
+              item.state = 'waiting';
+              item.jobId = '';
+              item.error = '';
+            }
+          }
+        });
+
+        const cur = current();
+        if (w.step === 'placing') {
+          const jid = cur && cur.jobId;
+          if (cur && jid && buffered[jid]) {
+            jobs[jid] = { kind: 'place', item: cur };
+            toReplay.push(jid);
+          } else if (cur && jid && activeSet.has(jid)) {
+            jobs[jid] = { kind: 'place', item: cur };
+          } else if (cur) {
+            cur.jobId = '';
+            if (cur.path && (!isStaged || isStaged(cur.path))) {
+              w.step = 'placefail';
+              w.error = 'Saving was interrupted. Try again.';
+            } else {
+              cur.state = 'waiting';
+              cur.path = '';
+              w.step = 'download';
+            }
+          }
+        }
+
+        toReplay.forEach((jid) => {
+          const res = buffered[jid];
+          if (res) {
+            const job = jobs[jid];
+            delete jobs[jid];
+            const ok = res.status === 'done';
+            if (job && job.kind === 'stage') {
+              if (ok) stageDone(job.item, res.message);
+              else stageFailed(job.item, res.message);
+            } else if (job && job.item === current()) {
+              if (ok) placeDone(job.item, res.message);
+              else placeFailed(res.message);
+            }
+          }
+        });
+
+        const nowCur = current();
+        if (!nowCur && w.step !== 'done') {
+          w.step = 'done';
+        } else if (nowCur && (w.step === 'name' || w.step === 'playlist' || w.step === 'newplaylist') && nowCur.state !== 'ready') {
+          w.step = nowCur.state === 'placed' ? 'done' : 'download';
+        } else if (nowCur && w.step === 'download' && nowCur.state === 'ready') {
+          w.step = 'name';
+        }
+
+        emit();
+        pump();
+        return true;
       },
       current,
     };
@@ -596,6 +747,7 @@
       try { if (b && b.songStageCrop) b.songStageCrop(item.path, 0, 0, -1); } catch (err) { /* nothing to undo */ }
       item.crop = null;
       item.art = item.fullArt;
+      saveWizardState(wizard.snapshot());
       closeCrop();
       render();
     }));
@@ -615,6 +767,7 @@
           item.art = canvas.toDataURL('image/jpeg', 0.9);
         } catch (err) { /* the old preview stays; the cut-out is still applied when the song is saved */ }
         item.crop = { x: r.x, y: r.y, size: r.size };
+        saveWizardState(wizard.snapshot());
       }
       closeCrop();
       render();
@@ -624,6 +777,29 @@
     layer.addEventListener('click', (e) => { if (e.target === layer) closeCrop(); });
     cropLayer = layer;
     document.body.appendChild(layer);
+  }
+
+  const WIZARD_STORAGE_KEY = 'moonlight_song_dl_wizard_v1';
+
+  function saveWizardState(snap) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!snap || snap.step === 'paste') {
+        localStorage.removeItem(WIZARD_STORAGE_KEY);
+      } else {
+        localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify(snap));
+      }
+    } catch (e) { /* storage full or unavailable */ }
+  }
+
+  function loadWizardState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(WIZARD_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   const wizard = createWizard({
@@ -642,6 +818,7 @@
         if (done && typeof done.catch === 'function') done.catch(() => {});
       }
     },
+    onPersist(snap) { saveWizardState(snap); },
     onChange() { render(); },
   });
 
@@ -788,19 +965,19 @@
     const box = el('div', 'dl-step');
     box.appendChild(button('Click to paste', 'dl-primary dl-big', pasteFromClipboard));
 
-    // Hidden file picker for importing playlist source links (.txt)
+    // Hidden file picker for importing playlist source links (.moonlight / .txt)
     const fileInput = el('input');
     fileInput.type = 'file';
-    fileInput.accept = '.txt,text/plain';
+    fileInput.accept = '.moonlight,.txt,text/plain';
     fileInput.style.display = 'none';
-    fileInput.setAttribute('aria-label', 'Import playlist text file');
+    fileInput.setAttribute('aria-label', 'Import playlist');
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function (evt) {
         const fileContent = evt.target.result;
-        const fallbackTitle = (file.name || 'Playlist').replace(/\.[^.]+$/, '');
+        const fallbackTitle = (file.name || 'Playlist').replace(/\.moonlight$/i, '').replace(/\.[^.]+$/, '');
         const res = parsePlaylistLinksText(fileContent, fallbackTitle);
         if (res && res.links.length > 0) {
           startCustomPlaylistFlow(res.title, res.links);
@@ -818,7 +995,7 @@
     });
     box.appendChild(fileInput);
 
-    const importBtn = button('Import playlist .txt', 'dl-secondary dl-big', () => fileInput.click());
+    const importBtn = button('Import playlist', 'dl-secondary dl-big', () => fileInput.click());
     importBtn.style.marginTop = '12px';
     box.appendChild(importBtn);
 
@@ -845,6 +1022,7 @@
       box.appendChild(row);
       return box;
     }
+
     box.appendChild(el('span', 'dl-spinner'));
     const hasPct = item && typeof item.percent === 'number' && item.percent >= 0;
     const pct = hasPct ? Math.min(100, Math.max(0, Math.round(item.percent))) : null;
@@ -1049,7 +1227,10 @@
     mark.appendChild(icon('i-check'));
     box.appendChild(mark);
     box.appendChild(el('h2', 'dl-title', placed ? 'All done' : 'No songs were added'));
-    box.appendChild(button('Paste more', 'dl-primary', () => wizard.again()));
+    box.appendChild(button('Paste more', 'dl-primary', () => {
+      wizard.again();
+      pasteFromClipboard();
+    }));
     return box;
   }
 
@@ -1088,7 +1269,7 @@
     b.fetchPlaylistInfo(jobId, url);
   }
 
-  function startCustomPlaylistFlow(title, links) {
+  function startCustomPlaylistFlow(title, links, autoStart) {
     if (!links || !links.length) {
       wizard.setMessage('No valid download links found.');
       render();
@@ -1103,7 +1284,11 @@
       done: 0,
       failed: 0,
     };
-    render();
+    if (autoStart) {
+      startPlaylistDownloads();
+    } else {
+      render();
+    }
   }
 
   // Max parallel yt-dlp processes for a playlist batch. More than 3 gives no speed benefit
@@ -1128,6 +1313,9 @@
   /** Kick off the next queued item (if any). */
   function plStartNext() {
     if (!pl || pl.step !== 'pl-downloading') return;
+    while (pl.queueIndex < pl.items.length && pl.items[pl.queueIndex].status !== 'queued') {
+      pl.queueIndex++;
+    }
     const idx = pl.queueIndex;
     if (idx >= pl.items.length) return;
     pl.queueIndex++;
@@ -1173,6 +1361,7 @@
       plCheckDone(); return;
     }
     item.status = 'dl';
+    savePlState();
     b.stageSong(jobId, item.url);
   }
 
@@ -1202,6 +1391,10 @@
       item.name = stemOf(item.path);
     } else if (status === 'failed') {
       item.status = 'failed'; item.error = message; item.percent = -1; item.eta = -1; item.speed = ''; pl.failed++;
+      if (message === 'Stopped') {
+        plCheckDone();
+        return true;
+      }
     }
     // A slot freed — start the next queued item (concurrency pump).
     plStartNext();
@@ -1221,9 +1414,11 @@
   function plNotify() {
     const b = bridge();
     if (!b || typeof b.notifyPlaylistProgress !== 'function') return;
-    const total = pl.items.length;
-    const done  = pl.done + pl.failed;
-    try { b.notifyPlaylistProgress(pl.title, done, total); } catch (e) {}
+    if (!pl) return;
+    const total = pl.items ? pl.items.length : 0;
+    const completed = pl.done + pl.failed + (pl.skipped || 0);
+    const done = pl.step === 'pl-downloading' ? completed : total;
+    try { b.notifyPlaylistProgress(pl.title || 'Playlist', done, total); } catch (e) {}
   }
 
   function savePlSongs() {
@@ -1246,6 +1441,7 @@
     if (!b || typeof b.placeSong !== 'function') { pl = null; render(); return; }
     const jobId = 'pl-place-' + pl.saveIndex + '-' + Date.now().toString(36);
     item.placeJobId = jobId;
+    savePlState();
     b.placeSong(jobId, item.path, cleanSongName(item.name), cleanFolderName(pl.title));
   }
 
@@ -1503,10 +1699,10 @@
     };
 
     selAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = true; }); updateAll();
+      successItems.forEach((it) => { it.keep = true; }); updateAll(); savePlState();
     });
     deselAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = false; }); updateAll();
+      successItems.forEach((it) => { it.keep = false; }); updateAll(); savePlState();
     });
 
     successItems.forEach((item, si) => {
@@ -1543,6 +1739,7 @@
       textWrap.appendChild(nameDisp);
       textWrap.appendChild(nameInput);
       row.appendChild(textWrap);
+      nameInput.addEventListener('input', () => { savePlState(); });
 
       // Right: pencil + keep/skip toggle
       const actions = el('div', 'dl-sp-row-actions');
@@ -1573,6 +1770,7 @@
           ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
           : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
         updateCta();
+        savePlState();
       });
       actions.appendChild(toggleBtn);
 
@@ -1613,14 +1811,49 @@
     if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
       root.SpotifyUI.setView('download');
     }
-    if (pl && (pl.step === 'pl-confirm' || pl.step === 'pl-error')) {
+    if (pl) {
+      const b = bridge();
+      if (b && typeof b.cancelSongDownload === 'function') {
+        try { b.cancelSongDownload(); } catch (e) {}
+      }
       pl = null;
     }
-    if (wizard && wizard.state && wizard.state.step === 'done') {
-      wizard.again();
+    if (wizard && wizard.state) {
+      if (wizard.state.step === 'done') wizard.again();
+      else if (wizard.state.step !== 'paste') wizard.leave();
     }
     takeClipboardText(url);
   };
+
+  // Called from native side (MainActivity) when a .moonlight file is opened
+  root.onIncomingMoonlightFile = function (content, fileName) {
+    if (!content) return;
+    if (root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
+      root.SpotifyUI.setView('download');
+    }
+    if (pl) {
+      const b = bridge();
+      if (b && typeof b.cancelSongDownload === 'function') {
+        try { b.cancelSongDownload(); } catch (e) {}
+      }
+      pl = null;
+    }
+    if (wizard && wizard.state) {
+      if (wizard.state.step === 'done') wizard.again();
+      else if (wizard.state.step !== 'paste') wizard.leave();
+    }
+    const fallbackTitle = (fileName || 'Playlist').replace(/\.moonlight$/i, '').replace(/\.[^.]+$/, '');
+    const res = parsePlaylistLinksText(content, fallbackTitle);
+    if (res && res.links && res.links.length > 0) {
+      startCustomPlaylistFlow(res.title || fallbackTitle, res.links, true);
+    } else {
+      if (wizard && typeof wizard.setMessage === 'function') {
+        wizard.setMessage('No valid download links found in ' + (fileName || 'file'));
+        render();
+      }
+    }
+  };
+  if (typeof window !== 'undefined') window.onIncomingMoonlightFile = root.onIncomingMoonlightFile;
 
   root.onSongDownloadProgress = function (jobId, data) {
     const d = typeof data === 'string' ? JSON.parse(data) : (data || {});
@@ -1686,7 +1919,193 @@
     'pl-downloading': buildPlDownloading, 'pl-edit': buildPlEdit, 'pl-saving': buildPlSaving,
   };
 
+  const PL_STORAGE_KEY = 'moonlight_pl_dl_v1';
+
+  function savePlState() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!pl || pl.step === 'pl-error') {
+        localStorage.removeItem(PL_STORAGE_KEY);
+        return;
+      }
+      const items = Array.isArray(pl.items) ? pl.items : [];
+      const savingIndices = Array.isArray(pl.saving)
+        ? pl.saving.map((it) => items.indexOf(it)).filter((i) => i >= 0)
+        : [];
+      localStorage.setItem(PL_STORAGE_KEY, JSON.stringify({
+        url: String(pl.url || ''),
+        step: String(pl.step || ''),
+        title: String(pl.title || ''),
+        tracks: Array.isArray(pl.tracks) ? pl.tracks.slice() : [],
+        queueIndex: Number(pl.queueIndex) || 0,
+        skipped: Number(pl.skipped) || 0,
+        done: Number(pl.done) || 0,
+        failed: Number(pl.failed) || 0,
+        saveIndex: Number(pl.saveIndex) || 0,
+        savingIndices,
+        items: items.map((it) => ({
+          url: String(it.url || ''),
+          jobId: String(it.jobId || ''),
+          name: String(it.name || ''),
+          path: String(it.path || ''),
+          crop: it.crop && typeof it.crop === 'object' ? { x: Number(it.crop.x) || 0, y: Number(it.crop.y) || 0, size: Number(it.crop.size) || 1 } : null,
+          status: String(it.status || 'queued'),
+          error: String(it.error || ''),
+          keep: it.keep !== false,
+          dupeName: String(it.dupeName || ''),
+          placeJobId: String(it.placeJobId || ''),
+        })),
+      }));
+    } catch (e) {}
+  }
+
+  function loadPlState() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(PL_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function restorePlState(saved, { isStaged, activeJobs, bufferedResults, onCrop } = {}) {
+    if (!saved || !saved.step || saved.step === 'pl-error') return false;
+    const b = bridge();
+    if (saved.step === 'pl-resolving') {
+      if (saved.url) startPlaylistFlow(saved.url);
+      return !!saved.url;
+    }
+    const activeSet = new Set(Array.isArray(activeJobs) ? activeJobs : []);
+    const buffered = bufferedResults && typeof bufferedResults === 'object' ? bufferedResults : {};
+    const items = (Array.isArray(saved.items) ? saved.items : []).map((it) => ({
+      url: String(it.url || ''),
+      jobId: String(it.jobId || ''),
+      name: String(it.name || ''),
+      path: String(it.path || ''),
+      fullArt: '',
+      art: '',
+      crop: it.crop && typeof it.crop === 'object' ? { x: Number(it.crop.x) || 0, y: Number(it.crop.y) || 0, size: Number(it.crop.size) || 1 } : null,
+      status: String(it.status || 'queued'),
+      error: String(it.error || ''),
+      keep: it.keep !== false,
+      dupeName: String(it.dupeName || ''),
+      placeJobId: String(it.placeJobId || ''),
+      percent: it.status === 'done' ? 100 : -1,
+      eta: -1,
+      speed: '',
+      downloaded: '',
+      total: '',
+    }));
+
+    pl = {
+      url: String(saved.url || ''),
+      step: String(saved.step),
+      title: String(saved.title || 'Playlist'),
+      tracks: Array.isArray(saved.tracks) ? saved.tracks.slice() : [],
+      items,
+      queueIndex: Number(saved.queueIndex) || 0,
+      skipped: 0,
+      done: 0,
+      failed: 0,
+      saveIndex: Number(saved.saveIndex) || 0,
+      saving: [],
+    };
+
+    if (pl.step === 'pl-confirm') {
+      savePlState();
+      return true;
+    }
+
+    const savingIndices = Array.isArray(saved.savingIndices) ? saved.savingIndices : [];
+    const savingSet = new Set(savingIndices);
+    const toReplayDl = [];
+    items.forEach((item, idx) => {
+      if (item.status === 'done') {
+        if (pl.step === 'pl-saving' && savingSet.has(idx)) {
+          return;
+        }
+        const ok = item.path && (!isStaged || isStaged(item.path));
+        if (!ok) {
+          item.status = 'queued';
+          item.path = '';
+          item.jobId = '';
+          item.crop = null;
+        } else {
+          if (item.crop && onCrop) {
+            try { onCrop(item.path, item.crop); } catch (e) {}
+          }
+          if (b && typeof b.getArtwork === 'function') {
+            try { const a = b.getArtwork(item.path); item.fullArt = a || ''; item.art = item.fullArt; } catch (e) {}
+          }
+        }
+      } else if (item.status === 'dl') {
+        if (item.jobId && buffered[item.jobId]) {
+          toReplayDl.push(item.jobId);
+        } else if (!item.jobId || !activeSet.has(item.jobId)) {
+          item.status = 'queued';
+          item.jobId = '';
+          item.error = '';
+        }
+      }
+    });
+
+    const recount = () => {
+      pl.done = items.filter((it) => it.status === 'done').length;
+      pl.failed = items.filter((it) => it.status === 'failed').length;
+      pl.skipped = items.filter((it) => it.status === 'skipped').length;
+    };
+    recount();
+
+    if (pl.step === 'pl-downloading') {
+      const firstQueued = items.findIndex((it) => it.status === 'queued');
+      pl.queueIndex = firstQueued >= 0 ? firstQueued : items.length;
+      toReplayDl.forEach((jid) => {
+        const res = buffered[jid];
+        if (res) onPlSongStatus(jid, res.status, res.message);
+      });
+      if (pl && pl.step === 'pl-downloading') {
+        const activeCount = items.filter((it) => it.status === 'dl').length;
+        const slots = Math.max(0, PL_CONCURRENCY - activeCount);
+        for (let s = 0; s < slots; s++) plStartNext();
+        plCheckDone();
+      }
+      savePlState();
+      return true;
+    }
+
+    if (pl.step === 'pl-edit') {
+      savePlState();
+      return true;
+    }
+
+    if (pl.step === 'pl-saving') {
+      pl.saving = savingIndices.map((idx) => items[idx]).filter(Boolean);
+      pl.saveIndex = Math.max(0, Math.min(pl.saveIndex, pl.saving.length));
+      const cur = pl.saving[pl.saveIndex];
+      if (!cur) {
+        pl = null;
+        savePlState();
+        return false;
+      }
+      if (cur.placeJobId && buffered[cur.placeJobId]) {
+        onPlPlaceDone(cur.placeJobId, buffered[cur.placeJobId].status === 'done');
+      } else if (!cur.placeJobId || !activeSet.has(cur.placeJobId)) {
+        if (cur.path && (!isStaged || isStaged(cur.path))) {
+          placeSaved();
+        } else {
+          pl.saveIndex++;
+          placeSaved();
+        }
+      }
+      savePlState();
+      return true;
+    }
+
+    savePlState();
+    return true;
+  }
+
   function render() {
+    savePlState();
     const s = wizard.state;
     // A step that is redrawn because something happened in the background (the next song finished
     // downloading) must not take the keyboard away from a field being typed in.
@@ -1718,17 +2137,101 @@
     if (isShown() && root.SpotifyUI && root.SpotifyUI.setView) root.SpotifyUI.setView('library');
   };
 
-  // Leaving the tab (another tab, the ✕, the panel closing) ends a run that is not finished.
+  function cancelAnyDownload() {
+    let hadWork = false;
+    let plTitle = '';
+    const b = bridge();
+    if (pl) {
+      hadWork = true;
+      plTitle = pl.title || 'Playlist';
+      pl = null;
+    }
+    if (wizard) {
+      if (wizard.state.step !== 'paste') {
+        hadWork = true;
+        wizard.leave();
+      } else {
+        wizard.leave();
+      }
+    }
+    if (hadWork && b) {
+      try { if (typeof b.cancelSongDownload === 'function') b.cancelSongDownload(); } catch (e) {}
+      if (plTitle && typeof b.notifyPlaylistProgress === 'function') {
+        try { b.notifyPlaylistProgress(plTitle, 0, 0); } catch (e) {}
+      }
+      try { if (typeof b.discardStagedSongs === 'function') b.discardStagedSongs(); } catch (e) {}
+    }
+    render();
+    if (!hadWork && root.SpotifyUI && typeof root.SpotifyUI.setView === 'function') {
+      root.SpotifyUI.setView('library');
+    }
+  }
+
+  root.onDownloadCancelledFromNotification = function () {
+    if (pl) {
+      pl = null;
+    }
+    if (wizard && typeof wizard.leave === 'function') {
+      wizard.leave();
+    }
+    render();
+  };
+  if (typeof window !== 'undefined') window.onDownloadCancelledFromNotification = root.onDownloadCancelledFromNotification;
+
+  const topCancelBtn = document.getElementById('dl-cancel-btn');
+  if (topCancelBtn) {
+    topCancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cancelAnyDownload();
+    });
+  }
+
+  // Switching away from the Download tab keeps single-song downloads and wizard steps alive in the background.
   // The playlists and covers are re-read each time the tab comes into view.
   let wasShown = isShown();
   if (panel && typeof MutationObserver === 'function') {
     new MutationObserver(() => {
       const shown = isShown();
       if (shown && !wasShown) render();
-      if (!shown && wasShown) { dupes = null; wizard.leave(); }
+      if (!shown && wasShown) { dupes = null; closeCrop(); }
       wasShown = shown;
     }).observe(panel, { attributes: true, attributeFilter: ['data-view', 'class'] });
   }
+  if (panel && panel.addEventListener) {
+    panel.addEventListener('sp-view-peek', (e) => {
+      if (e && e.detail && e.detail.view === 'download') render();
+    });
+  }
+
+  (function restoreDownloadsOnStartup() {
+    const b = bridge();
+    let sync = null;
+    if (b && typeof b.getSongDownloadSyncState === 'function') {
+      try { sync = JSON.parse(b.getSongDownloadSyncState() || '{}'); } catch (e) { sync = null; }
+    }
+    if (sync && sync.cancelled) {
+      saveWizardState(null);
+      try { if (typeof localStorage !== 'undefined') localStorage.removeItem(PL_STORAGE_KEY); } catch (e) {}
+      return;
+    }
+    const bufferedResults = {};
+    if (sync && Array.isArray(sync.results)) {
+      sync.results.forEach((r) => { if (r && r.jobId) bufferedResults[r.jobId] = r; });
+    }
+    const restoreOpts = {
+      isStaged: (p) => !!(b && typeof b.isStagedFile === 'function' && b.isStagedFile(p)),
+      activeJobs: (sync && Array.isArray(sync.activeJobs)) ? sync.activeJobs : [],
+      bufferedResults,
+      onCrop: (p, crop) => {
+        try { if (b && typeof b.songStageCrop === 'function' && crop) b.songStageCrop(p, crop.x, crop.y, crop.size); } catch (e) {}
+      },
+    };
+    const saved = loadWizardState();
+    if (saved) wizard.restore(saved, restoreOpts);
+    const savedPl = loadPlState();
+    if (savedPl) restorePlState(savedPl, restoreOpts);
+  })();
+
   render();
 
   root.SongDownload = Object.assign({}, api, {

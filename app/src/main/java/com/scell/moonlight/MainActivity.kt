@@ -221,18 +221,10 @@ class MainActivity : ComponentActivity() {
     }
 
     // Runs the "Download songs" jobs with the yt-dlp that is bundled in this app (see SongDownloader.kt
-    // and song-download.js).
-    private val songDownloader = SongDownloader(
-        activity = this,
-        library = { songLibrary },
-        onStatus = { jobId, status, message ->
-            callPage(
-                "onSongDownloadStatus",
-                JSONObject.quote(jobId) + ", " + JSONObject.quote(status) + ", " + JSONObject.quote(message)
-            )
-        },
-        onPage = { fn, args -> callPage(fn, args) },
-    )
+    // and song-download.js). Application-scoped so active downloads survive MainActivity.onDestroy().
+    private val songDownloader: SongDownloader by lazy {
+        SongDownloader.getInstance(applicationContext)
+    }
 
     fun notifySongDownloadProgress(jobId: String, progressJson: String) {
         callPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + progressJson)
@@ -442,18 +434,88 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIncomingSendIntent(intent)
+        handleIncomingViewIntent(intent)
     }
 
     private var pendingIncomingShareLink: String? = null
+    private var pendingIncomingMoonlightFile: Pair<String, String>? = null
+
+    private fun handleIncomingViewIntent(intent: Intent?) {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) return
+        val uri = intent.data ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return
+        try {
+            val content = if ((uri.scheme == "file" || uri.scheme == null) && (uri.path != null || uri.toString().startsWith("/"))) {
+                val filePath = uri.path ?: uri.toString()
+                try { File(filePath).readText(Charsets.UTF_8) } catch (_: Exception) {
+                    contentResolver.openInputStream(uri)?.use { stream -> stream.reader(Charsets.UTF_8).readText() }
+                }
+            } else {
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.reader(Charsets.UTF_8).readText()
+                }
+            } ?: return
+            var fileName = "Playlist.moonlight"
+            try {
+                contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIdx >= 0) fileName = cursor.getString(nameIdx) ?: fileName
+                    }
+                }
+            } catch (_: Exception) {
+                val last = uri.lastPathSegment
+                if (!last.isNullOrBlank()) fileName = last
+            }
+            if (fileName == "Playlist.moonlight") {
+                val last = uri.lastPathSegment
+                if (!last.isNullOrBlank()) fileName = last
+            }
+            try {
+                fileName = Uri.decode(fileName)
+            } catch (_: Exception) {}
+
+            if (pageLoaded) {
+                runOnUiThread {
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(content) + ", " + JSONObject.quote(fileName))
+                }
+            } else {
+                pendingIncomingMoonlightFile = Pair(content, fileName)
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun handleIncomingSendIntent(intent: Intent?) {
         if (intent == null || intent.action != Intent.ACTION_SEND) return
+
+        val streamUri = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }) ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+
+        if (streamUri != null) {
+            handleIncomingViewIntent(Intent(Intent.ACTION_VIEW, streamUri))
+            return
+        }
+
         val type = intent.type ?: return
         if (!type.startsWith("text/")) return
 
         val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             ?: return
+
+        if (sharedText.contains("# Moonlight playlist links") || sharedText.contains("# name:")) {
+            if (pageLoaded) {
+                runOnUiThread {
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(sharedText) + ", " + JSONObject.quote("Shared Playlist.moonlight"))
+                }
+            } else {
+                pendingIncomingMoonlightFile = Pair(sharedText, "Shared Playlist.moonlight")
+            }
+            return
+        }
 
         val match = Regex("""https?://\S+""").find(sharedText) ?: return
         val url = match.value.trim().trimEnd(')', ']', '>', '.', ',')
@@ -483,10 +545,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         installCrashLogger()
         registerVolumeReceiver()
+        songDownloader.attach(
+            library = { songLibrary },
+            onStatus = { jobId, status, message ->
+                callPage(
+                    "onSongDownloadStatus",
+                    JSONObject.quote(jobId) + ", " + JSONObject.quote(status) + ", " + JSONObject.quote(message)
+                )
+            },
+            onPage = { fn, args -> callPage(fn, args) },
+        )
         songDownloader.warmUp()
         appUpdater.start()
         busyCheck = { songDownloader.isBusy() || appUpdater.isBusy() }
         handleIncomingSendIntent(intent)
+        handleIncomingViewIntent(intent)
         // Keeps updating the app while it is closed (see BackgroundUpdater.kt).
         BackgroundUpdater.schedule(applicationContext)
         // A few seconds after launch, so the check does not compete with the splash and the library scan.
@@ -601,6 +674,10 @@ class MainActivity : ComponentActivity() {
                     pendingIncomingShareLink = null
                     callPage("onIncomingShareLink", JSONObject.quote(link))
                 }
+                pendingIncomingMoonlightFile?.let { (content, fileName) ->
+                    pendingIncomingMoonlightFile = null
+                    callPage("onIncomingMoonlightFile", JSONObject.quote(content) + ", " + JSONObject.quote(fileName))
+                }
                 if (hasStoragePermission()) {
                     onStorageReady()
                 } else if (!permissionFlowActive) {
@@ -614,7 +691,11 @@ class MainActivity : ComponentActivity() {
                 // callback hit a page that had no handler yet and was
                 // silently dropped (leaving the player on the WebView
                 // fallback engine). Re-announce it now.
-                if (mediaController != null) callPage("onNativeAudioReady")
+                if (mediaController != null) {
+                    // Report the song that is already playing first (see connectNativePlayer).
+                    syncNativePlaybackState()
+                    callPage("onNativeAudioReady")
+                }
             }
         }
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
@@ -754,6 +835,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Report a song that is already playing in the background FIRST, then announce the native player.
+                // The other way round, the page could start "the remembered song" (Bluetooth auto start) the moment it
+                // hears "ready", over the song that was still playing, before it had been told about that song.
+                syncNativePlaybackState()
                 callPage("onNativeAudioReady")
             } catch (e: Exception) {
                 // Native engine unavailable (e.g. the service failed to
@@ -763,6 +848,30 @@ class MainActivity : ComponentActivity() {
                 // error since local playback still works fine.
             }
         }, MoreExecutors.directExecutor())
+    }
+
+    private fun syncNativePlaybackState() {
+        val controller = mediaController ?: return
+        val item = controller.currentMediaItem
+        val path = item?.mediaId ?: ""
+        val isPlaying = controller.isPlaying
+        val state = controller.playbackState
+        val isLoaded = state == Player.STATE_READY || state == Player.STATE_BUFFERING
+        if (path.isNotEmpty() && (isPlaying || isLoaded)) {
+            val posSec = (controller.currentPosition.coerceAtLeast(0L)) / 1000.0
+            val durSec = (controller.duration.coerceAtLeast(0L)) / 1000.0
+            val json = JSONObject().apply {
+                put("active", true)
+                put("path", path)
+                put("playing", isPlaying)
+                put("positionSec", posSec)
+                put("durationSec", durSec)
+            }.toString()
+            runOnUiThread {
+                callPage("onNativeAudioActive", JSONObject.quote(json))
+                if (isPlaying) startProgressUpdates()
+            }
+        }
     }
 
     /**
@@ -810,7 +919,9 @@ class MainActivity : ComponentActivity() {
                     val posSec = controller.currentPosition / 1000.0
                     val durMs = controller.duration
                     val durSec = if (durMs != C.TIME_UNSET && durMs > 0) durMs / 1000.0 else 0.0
-                    callPage("onNativeAudioProgress", "$posSec, $durSec")
+                    // The song the player really has goes along, so the page can notice if it shows a different one.
+                    val playingPath = JSONObject.quote(controller.currentMediaItem?.mediaId ?: "")
+                    callPage("onNativeAudioProgress", "$posSec, $durSec, $playingPath")
                 }
                 // Screen visible: 500 ms keeps the seek bar smooth. App in the
                 // background / screen off: nobody sees the bar, so tick slowly
@@ -1073,7 +1184,11 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         try { unregisterReceiver(volumeReceiver) } catch (e: Exception) { /* not registered */ }
-        songDownloader.release()
+        if (songDownloader.shouldKeepAliveOnDestroy()) {
+            songDownloader.detach()
+        } else {
+            songDownloader.release()
+        }
         appUpdater.release()
         busyCheck = null
         screenHandler.removeCallbacks(releaseScreenRunnable)
@@ -1104,6 +1219,7 @@ class MainActivity : ComponentActivity() {
         appUpdater.onResume()
         // Push the current position right away (the poll may have been in slow mode).
         if (mediaController?.isPlaying == true) startProgressUpdates()
+        syncNativePlaybackState()
         keepScreenAwake()
         if (::webView.isInitialized && !webViewGone) {
             webView.onResume()
@@ -1188,6 +1304,12 @@ class MainActivity : ComponentActivity() {
         fun cancelSongDownload() {
             songDownloader.cancel()
         }
+
+        @JavascriptInterface
+        fun isStagedFile(path: String): Boolean = SongDownloader.isStagedPath(path)
+
+        @JavascriptInterface
+        fun getSongDownloadSyncState(): String = songDownloader.consumeSyncStateJson()
 
         // Deletes everything in the staging folder: songs that were downloaded but never placed.
         @JavascriptInterface
@@ -1457,17 +1579,19 @@ class MainActivity : ComponentActivity() {
                 dir.mkdirs()
                 dir.listFiles()?.forEach { try { it.delete() } catch (e: Exception) { /* an old copy may stay */ } }
                 val safe = fileName.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().take(60).ifEmpty { "playlist" }
-                val f = File(dir, "$safe.txt")
+                val clean = safe.removeSuffix(".moonlight")
+                val f = File(dir, "$clean.moonlight")
                 f.writeText(text, Charsets.UTF_8)
                 val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.songshare", f)
                 val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
+                    type = "application/x-moonlight"
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_TITLE, f.name)
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/x-moonlight", "text/plain", "*/*"))
                     clipData = ClipData.newRawUri(f.name, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                val chooser = Intent.createChooser(send, "Share playlist links")
+                val chooser = Intent.createChooser(send, "Share playlist")
                 runOnUiThread {
                     try { startActivity(chooser) } catch (e: Exception) { /* nothing can take it: nothing to open */ }
                 }
@@ -1531,6 +1655,12 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun setBackgroundDownloads(enabled: Boolean) {
             songDownloader.setBackgroundDownloadsEnabled(enabled)
+        }
+
+        // Dynamic notification accent colours from Moonlight's active cover-art tint or theme.
+        @JavascriptInterface
+        fun setNotificationAccent(accentHex: String, accentStrongHex: String) {
+            DownloadForegroundService.setNotificationAccent(applicationContext, accentHex, accentStrongHex)
         }
 
         // YouTube sign-in for the downloader. youtubeSignInStatus: "signed-in" | "signed-out".
@@ -2424,42 +2554,11 @@ class MainActivity : ComponentActivity() {
     }
 
     // ---- Playlist download progress notification ------------------------------------------------
-    private val PLAYLIST_NOTIF_ID = 2001
-    private val PLAYLIST_CHANNEL_ID = "moonlight_playlist_dl"
-
-    private fun ensurePlaylistChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            if (nm.getNotificationChannel(PLAYLIST_CHANNEL_ID) == null) {
-                val ch = android.app.NotificationChannel(
-                    PLAYLIST_CHANNEL_ID,
-                    "Playlist downloads",
-                    android.app.NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "Progress while a playlist is being downloaded." }
-                nm.createNotificationChannel(ch)
-            }
-        }
-    }
-
-    /** Shows or updates the playlist download progress notification.
+    /** Updates or dismisses the unified download notification with playlist progress.
      *  [done] and [total] are song counts; [title] is the playlist name.
-     *  Pass done == total to auto-dismiss. */
+     *  Pass done >= total to dismiss. */
     fun updatePlaylistNotification(title: String, done: Int, total: Int) {
-        ensurePlaylistChannel()
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        if (done >= total) {
-            nm.cancel(PLAYLIST_NOTIF_ID)
-            return
-        }
-        val notif = androidx.core.app.NotificationCompat.Builder(this, PLAYLIST_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle("Downloading \"$title\"")
-            .setContentText("$done of $total songs done")
-            .setProgress(total, done, false)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        nm.notify(PLAYLIST_NOTIF_ID, notif)
+        songDownloader.updatePlaylistProgress(title, done, total)
     }
 
     private fun callPage(fn: String, args: String = "") {

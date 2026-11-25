@@ -121,6 +121,7 @@
   }
 
   function show() {
+    syncUserNameInput();
     clearTimeout(closeTimer);
     layer.classList.add('is-open');
     layer.setAttribute('aria-hidden', 'false');
@@ -154,7 +155,7 @@
     }, ms + 40);
   }
 
-  function open() { refreshYouTube(); if (progress < 1 || !settled) settleTo(1, 0); }
+  function open() { refreshYouTube(); refreshBlacklist(); if (progress < 1 || !settled) settleTo(1, 0); }
   function close() { if (progress > 0 || layer.classList.contains('is-open')) { settled = false; settleTo(0, 0); } }
   function isOpen() { return layer.classList.contains('is-open') && progress > 0; }
 
@@ -243,6 +244,27 @@
   if (openBtn) openBtn.addEventListener('click', open);
   if (closeBtn) closeBtn.addEventListener('click', close);
 
+  /* ---- user name ---- */
+  var nameInput = document.getElementById('set-user-name');
+  function syncUserNameInput() {
+    if (!nameInput) return;
+    var a = audio();
+    nameInput.value = (a && a.getSetting && a.getSetting('userName')) || '';
+  }
+  if (nameInput) {
+    var commitName = function () {
+      var a = audio();
+      var saved = a && a.setUserName ? a.setUserName(nameInput.value) : String(nameInput.value || '').trim();
+      nameInput.value = saved;
+      if (root.SpotifyUI && root.SpotifyUI.refreshPlaylists) root.SpotifyUI.refreshPlaylists();
+    };
+    nameInput.addEventListener('change', commitName);
+    nameInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { nameInput.blur(); }
+    });
+    syncUserNameInput();
+  }
+
   /* ---- the switches ---- */
   function audio() { return root.NovelAudio || null; }
   function bindSwitch(id, name, apply, defaultVal) {
@@ -326,6 +348,24 @@
     if (message && root.SongMenu && root.SongMenu.toast) root.SongMenu.toast(message);
   };
   refreshYouTube();
+
+  /* ---- Autoplay playlist blacklist ---- */
+  var blBtn = document.getElementById('autoplay-blacklist-btn');
+  var blStatus = document.getElementById('autoplay-blacklist-status');
+  function refreshBlacklist() {
+    if (!blStatus) return;
+    if (root.NovelAudio && root.NovelAudio.getBlacklistStatusText) {
+      blStatus.textContent = root.NovelAudio.getBlacklistStatusText();
+    }
+  }
+  if (blBtn) {
+    blBtn.addEventListener('click', function () {
+      if (root.NovelAudio && root.NovelAudio.openBlacklistDialog) {
+        root.NovelAudio.openBlacklistDialog();
+      }
+    });
+  }
+  refreshBlacklist();
 
   setProgress(0);
   root.SettingsMenu = { open: open, close: close, isOpen: isOpen };

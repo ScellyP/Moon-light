@@ -142,6 +142,8 @@
     const pixels = imgData.data;
 
     let chromSumR = 0, chromSumG = 0, chromSumB = 0, chromWeight = 0;
+    let chromCount = 0, chromSatSum = 0;
+    let neutSumR = 0, neutSumG = 0, neutSumB = 0, neutCount = 0;
     let genSumR = 0, genSumG = 0, genSumB = 0, genCount = 0;
 
     for (let i = 0; i < pixels.length; i += 4) {
@@ -158,6 +160,8 @@
 
       // Chromatic candidate: visible colour (not extreme pitch black, not blown-out white)
       if (saturation >= 0.10 && lightness >= 0.05 && lightness <= 0.98) {
+        chromCount++;
+        chromSatSum += saturation;
         // Taper gently at extreme borders so light colours & pastels keep strong presence
         const lightFactor = Math.max(0, 1 - Math.pow(Math.abs(lightness - 0.5) * 1.85, 4));
         const satFactor = Math.sqrt(saturation);
@@ -168,17 +172,33 @@
           chromSumB += b * weight;
           chromWeight += weight;
         }
+      } else {
+        // Neutral pixel: black, white or grey (the "background" of many covers)
+        neutSumR += r;
+        neutSumG += g;
+        neutSumB += b;
+        neutCount++;
       }
     }
 
     if (genCount === 0) return null; // completely transparent
 
-    // If chromatic pixels are present, use the weighted chromatic colour:
-    if (chromWeight >= 0.4) {
+    // Does colour really dominate the cover? Judged by AREA, so a black cover with a thin
+    // coloured border (e.g. black square + maroon side bars) is treated as black, not as that
+    // colour. A smaller coloured area still wins when it is vivid (a bright subject on black).
+    const chromFraction = chromCount / genCount;
+    const chromAvgSat = chromCount ? chromSatSum / chromCount : 0;
+    const colourDominates = chromFraction >= 0.5 || (chromFraction >= 0.2 && chromAvgSat >= 0.5);
+
+    if (chromWeight >= 0.4 && (colourDominates || neutCount === 0)) {
       return [chromSumR / chromWeight, chromSumG / chromWeight, chromSumB / chromWeight];
     }
 
-    // Otherwise, represent the cover's actual neutral / grey / monochrome shade:
+    // Otherwise the cover is mostly black / white / grey: use the average of those pixels only,
+    // so the small coloured part does not tint it.
+    if (neutCount > 0) {
+      return [neutSumR / neutCount, neutSumG / neutCount, neutSumB / neutCount];
+    }
     return [genSumR / genCount, genSumG / genCount, genSumB / genCount];
   }
 
@@ -297,7 +317,7 @@
      Constants & element references
      ======================================================================= */
 
-  const VIEWS = ['library', 'search', 'album', 'track', 'download'];   // the order of the bottom bar, and of swiping
+  const VIEWS = ['library', 'album', 'search', 'track', 'download'];   // the order of the bottom bar, and of swiping
   const ENTER_ANIMATION_MS = 900;
   const PROGRESS_INTERVAL_MS = 400;
 
@@ -472,6 +492,70 @@
     return true;
   }
 
+  let peekingView = '';
+
+  function clearDragVisuals() {
+    peekingView = '';
+    if (panel && panel.classList) panel.classList.remove('sp-dragging');
+    const allViews = document.querySelectorAll ? document.querySelectorAll('.sp-view.sp-peeking') : null;
+    if (allViews && allViews.forEach) {
+      allViews.forEach((v) => { if (v && v.classList) v.classList.remove('sp-peeking'); });
+    }
+  }
+
+  /** Following the finger while the page is dragged sideways: the pages move with it. dx > 0 = finger moved right (the page
+   *  to the left comes in). Returns false (and moves nothing) when there is no page that way, e.g. Home dragged right. */
+  function dragView(dx) {
+    const idx = VIEWS.indexOf(panel.getAttribute('data-view'));
+    const target = idx + (dx < 0 ? 1 : -1);
+    const hasTarget = target >= 0 && target < VIEWS.length;
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    if (!track || !track.style || (!hasTarget && dx !== 0)) return false;
+    if (panel && panel.classList) panel.classList.add('sp-dragging');
+    if (hasTarget) {
+      const targetName = VIEWS[target];
+      if (peekingView !== targetName) {
+        peekingView = targetName;
+        const allViews = document.querySelectorAll ? document.querySelectorAll('.sp-view') : null;
+        if (allViews && allViews.forEach) {
+          allViews.forEach((v) => {
+            if (v && v.classList) v.classList.toggle('sp-peeking', v.id === 'sp-view-' + targetName);
+          });
+        }
+        if (typeof CustomEvent === 'function' && panel.dispatchEvent) {
+          panel.dispatchEvent(new CustomEvent('sp-view-peek', { detail: { view: targetName } }));
+        }
+      }
+    }
+    track.style.transition = 'none';                 // no animation while the finger is down: the page is under it
+    track.style.transform = 'translate3d(calc(-' + (idx * 100) + '% + ' + Math.round(dx) + 'px), 0, 0)';
+    return true;
+  }
+
+  /** The finger lifted. A drag of about a third of the width, or a quick flick, slides on to the next page; anything less
+   *  slides back to the page it started on. vx = finger speed in px per ms (negative = leftwards). Returns true if the page changed. */
+  function releaseView(dx, vx) {
+    const idx = VIEWS.indexOf(panel.getAttribute('data-view'));
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    const width = (panel && panel.clientWidth) || 360;
+    const target = idx + (dx < 0 ? 1 : -1);
+    const far = Math.abs(dx) > width * 0.33;
+    const fast = Math.abs(vx || 0) > 0.5 && Math.abs(dx) > 30 && (vx < 0) === (dx < 0);
+    if (track && track.style) {
+      track.style.transition = '';                   // the sliding animation is back on...
+      if (track.style.removeProperty) track.style.removeProperty('transition');
+      void track.offsetWidth;                        // ...and starts from where the finger left the page
+    }
+    if (target >= 0 && target < VIEWS.length && (far || fast)) {
+      setView(VIEWS[target]);
+      clearDragVisuals();
+      return true;
+    }
+    if (track && track.style) track.style.transform = 'translate3d(-' + (idx * 100) + '%, 0, 0)';
+    clearDragVisuals();
+    return false;
+  }
+
   /** The cover picture (a data: URL) the Home screen shows for a playlist folder, or '' when it has none yet. */
   function getCover(name) {
     return coverFor(name);
@@ -484,7 +568,8 @@
   }
 
   window.SpotifyUI = {
-    setView, stepView, getCover, refreshTint: () => updateTint(),
+    setView, stepView, dragView, releaseView, getCover,
+    refreshTint: () => { updateTint(); syncNotificationAccent(); },
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
     dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
@@ -599,6 +684,24 @@
       case 'sleep':
         if (el.sleepOptions) el.sleepOptions.classList.toggle('hidden');
         break;
+
+      case 'playorder':
+        closeSheet();
+        if (!(window.NovelAudio && window.NovelAudio.openPlayingOrder && window.NovelAudio.openPlayingOrder())) {
+          if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Nothing is playing yet');
+        }
+        break;
+
+      case 'sharesong': {
+        // Shares the song playing now: the audio file itself (not its link, not a playlist file).
+        const a = window.NovelAudio;
+        const id = a && a.getCurrentTrackId ? a.getCurrentTrackId() : null;
+        closeSheet();
+        let ok = false;
+        try { ok = !!(id && a.shareSong && a.shareSong(id)); } catch (e) { ok = false; }
+        if (!ok && window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Could not share this song');
+        break;
+      }
 
       case 'rescan':
         clickIfPresent(el.scan);
@@ -756,6 +859,46 @@
   // song / playlist sheets, the add-songs picker, the edit screen, settings), so nothing in the app falls back to
   // the plain theme while a song with cover art is loaded. `tintVars` is what was last applied (null = plain theme).
   let tintVars = null;
+  let lastNotifAccentKey = '';
+
+  function toHexColor(value) {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1].length === 3 ? hexMatch[1].replace(/./g, '$&$&') : hexMatch[1];
+      return '#' + hex.toLowerCase();
+    }
+    const rgbMatch = s.match(/^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i);
+    if (rgbMatch) {
+      const toByte = (n) => clamp(Math.round(Number(n) || 0), 0, 255).toString(16).padStart(2, '0');
+      return '#' + toByte(rgbMatch[1]) + toByte(rgbMatch[2]) + toByte(rgbMatch[3]);
+    }
+    return '';
+  }
+
+  function syncNotificationAccent() {
+    const bridge = typeof window !== 'undefined' ? window.AndroidBridge : null;
+    if (!bridge || typeof bridge.setNotificationAccent !== 'function') return;
+
+    let rawAccent = tintVars && tintVars['--accent'];
+    let rawStrong = tintVars && tintVars['--accent-strong'];
+    if ((!rawAccent || !rawStrong) && typeof getComputedStyle === 'function' && document.documentElement) {
+      const cs = getComputedStyle(document.documentElement);
+      if (!rawAccent) rawAccent = cs.getPropertyValue('--accent');
+      if (!rawStrong) rawStrong = cs.getPropertyValue('--accent-strong');
+    }
+
+    const accentHex = toHexColor(rawAccent);
+    if (!accentHex) return;
+    const accentStrongHex = toHexColor(rawStrong) || accentHex;
+    const key = accentHex + '|' + accentStrongHex;
+    if (key === lastNotifAccentKey) return;
+    try {
+      bridge.setNotificationAccent(accentHex, accentStrongHex);
+      lastNotifAccentKey = key;
+    } catch (error) { /* bridge not ready */ }
+  }
 
   function tintTargets() {
     return [panel].concat(Array.prototype.slice.call(document.querySelectorAll('.dyn-colours')));
@@ -769,6 +912,7 @@
         else node.style.removeProperty(name);
       });
     });
+    syncNotificationAccent();
   }
 
   function clearTint() {
@@ -832,6 +976,7 @@
   try {
     new MutationObserver(() => {
       if (tintRgb) applyTint(tintRgb);
+      else syncNotificationAccent();
     }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['style', 'class', 'data-theme'],
@@ -1387,7 +1532,9 @@
   function syncHome() {
     if (!home.grid || !home.madeRow || !home.listsRow) return;
 
-    const greeting = greetingForHour(new Date().getHours());
+    const baseGreeting = greetingForHour(new Date().getHours());
+    const userName = (window.NovelAudio && window.NovelAudio.getSetting && window.NovelAudio.getSetting('userName')) || '';
+    const greeting = userName ? (baseGreeting + '! ' + userName) : baseGreeting;
     if (home.greeting && home.greeting.textContent !== greeting) home.greeting.textContent = greeting;
 
     try { syncRecent(); } catch (error) { /* the rest of Home must still build */ }
@@ -1481,7 +1628,7 @@
     const a = window.NovelAudio;
     const toast = (m) => { if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast(m); };
     if (!a || !a.sharePlaylistLinks) return;
-    const name = (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || 'all';
+    const name = (a._state && a._state.activePlaylist) || (el.albumCover && el.albumCover.getAttribute('data-pl-key')) || (a.getActivePlaylistKey ? a.getActivePlaylistKey() : 'all') || 'all';
     const r = a.sharePlaylistLinks(name, getPlaylistTitle());
     if (r.ok) return;
     toast(r.error === 'none' ? (r.total ? 'None of these songs has a source link yet' : 'There are no songs here yet') : 'Could not open the share sheet');
@@ -1792,6 +1939,7 @@
   initFind();
   setView('library', { immediate: true });
   scheduleSync();
+  syncNotificationAccent();
 
   // Startup transition cleanup: remove .no-transition after initial layout settles
   const appWrapper = $('app') || panel;

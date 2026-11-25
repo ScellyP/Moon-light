@@ -118,6 +118,7 @@ class BackgroundUpdater(
                 @Suppress("DEPRECATION") android.app.Notification.Builder(context)
             }
             builder.setSmallIcon(R.drawable.ic_stat_music)
+                .setColor(DownloadForegroundService.getAccentColor(context))
                 .setContentTitle(title)
                 .setContentText(text)
                 .setAutoCancel(true)

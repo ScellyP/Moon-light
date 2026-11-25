@@ -12,7 +12,7 @@ Plays the music already on your phone, keeps going in the background, and can do
 ![Build](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![AI-assisted](https://img.shields.io/badge/built%20with-AI%20assistance-8A2BE2)
 ![Status](https://img.shields.io/badge/status-learning%20project-orange)
-![Version](https://img.shields.io/badge/version-v1.17.01-blueviolet)
+![Version](https://img.shields.io/badge/version-v1.19.05-blueviolet)
 
 [Download](https://github.com/ScellyP/Moon-light/releases) · [Features](#-features) · [Install](#-installation) · [Build](#-building-from-source) · [AI disclosure](#-ai-disclosure)
 
@@ -83,21 +83,22 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - **Shuffle in rounds**: every song plays once, in random order, before any repeats, and the app remembers this even after you close it. **Repeat** has three modes: off / all / one.
 - **Song options menu** (the `⋮` next to any song): edit info, share, like, add to playlist, move/remove, add to queue, loop, delete.
 - **Multi-select playlist picker**: When adding songs to a playlist via *Add to this playlist*, use multi-select mode with interactive row checkboxes, quick *Liked songs* filter chip, *Select all* / *Deselect all*, and batch addition with real-time selection counters.
-- **Share playlist source links**: Tap the share icon on any playlist header (or choose *Share source links* in the playlist menu) to export and share a text file (`.txt`) containing all song source URLs via Android's native share sheet.
 - **Edit song info** (title, artist, album). Edits are an overlay saved in `song-edits.json`, so the music file and its tags are never rewritten, and *Reset to the file's info* always brings the original back.
 - **Custom playlist covers**: tap the pencil on a playlist's cover to pick your own picture; it wins over the automatic mosaic.
-- **Duplicate clean-up with persistent choice memory**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. Choosing *Keep both* or *Keep all remaining* is permanently remembered across subsequent scans ("Scan the sky"). Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
-- **Complete music backup & restore**: In the Settings menu, export complete `.zip` archives of your playlists, covers, and settings to `Download/Moonlight-Backups/`, with one-tap restore.
-- **Share** a song's file (the mp3) through Android's share sheet, or just the link it was downloaded from.
+- **Duplicate clean-up**: copies of the same song (same title and artist, or same source link) trigger an interactive confirmation prompt asking whether each track is a duplicate. You can choose to *Keep both*, *Move duplicate* to `Moonlight/Duplicates`, or apply the choice to all remaining tracks. Extra copies are moved (never deleted), and automatic checks can be switched off in Settings.
+- **Share** a song's file (the mp3) or source link through Android's share sheet, and share playlists as `.moonlight` files with source links directly from the playlist header or menu.
 - **Delete** a song's file for good (after a confirmation), which is different from *Remove from this playlist*.
 
 ### Download songs
 - Paste links from the clipboard (up to 50 at a time); each becomes a queued song.
-- **Import playlist .txt files**: Import exported playlist link files directly via the "Import playlist .txt" file picker, or paste text with `# name:` headers to auto-name the playlist and stage all tracks.
+- **.moonlight files and playlist import**: Export and import playlists as `.moonlight` files containing track source links. Opening any `.moonlight` file launches Moonlight, opens Downloads, and starts downloading all tracks automatically without extra taps. You can also import existing `.txt` lists.
+- **Background downloads for single songs**: Single-song downloads continue running in the background via the foreground service, and can be cancelled from the persistent notification or in-app.
+- **Download cancel button**: Tap the light grey "X" button at the top right next to the "Download songs" heading at any step to stop running downloads immediately, clean up partial files, and reset.
+- **Paste more on completion**: Tap "Paste more" on the completion screen to immediately paste and start downloading the link from your clipboard without having to tap "Paste link" again.
 - **Download via Share**: Tap "Share" on any YouTube video or media link in other apps and choose Moonlight to instantly open the Downloads tab and resolve the song.
 - A **bundled yt-dlp (with Python and ffmpeg)** downloads audio and converts it to MP3 with tags and cover art. No other app is needed.
 - Step-by-step wizard per song: **download → name it → pick a playlist → place it**. The next song downloads in the background while you name the current one.
-- **Real-time per-song download progress**: Individual progress bars with exact percentage, download speed, downloaded size / total size, and ETA readout for both single songs and multi-track playlist downloads. Tracks clearly reflect queued, downloading, completed, and failed states, with an inline Retry button for any failed item without losing other downloads.
+- **Real-time per-song download progress**: Individual progress bars with exact percentage, download speed, downloaded size / total size, and ETA readout for both single songs and multi-track playlist downloads without UI flickering. Tracks clearly reflect queued, downloading, completed, and failed states, with an inline Retry button for any failed item without losing other downloads.
 - **Remembers what you downloaded** and warns *Already downloaded* even if the link is written differently.
 - **Duplicate-name detection** while you name a song, ignoring capitals, punctuation and tags like "(Official Video)".
 - **Crop the cover**: choose which square of the video's thumbnail becomes the song's cover art.
@@ -118,7 +119,7 @@ It is a **learning project**. I built it to learn **JavaScript** (the whole UI i
 - Optimised for large libraries (indexed lookups, off-screen rows skipped by the renderer).
 
 ### Settings menu
-Swipe right on Home (or tap the gear) for a drawer with playback options (normalisation, crossfade, Bluetooth auto-start), appearance options (twinkling stars, cover colours) and the update controls.
+Swipe right on Home (or tap the gear) for a drawer with playback options (normalisation, crossfade, Bluetooth auto-start), appearance options (twinkling stars, cover colours) and the current version box that checks for updates on tap.
 
 ### Updates
 - Checks this repo's **GitHub Releases** on start and in the background about every 6 hours (Wi-Fi only), with no Firebase or server needed.

@@ -1,10 +1,8 @@
 package com.scell.moonlight
 
-import android.app.NotificationManager
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.ComponentActivity
-import androidx.core.app.NotificationCompat
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -46,17 +44,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Written without being run on a device: test it there.
  */
-class SongDownloader(
-    private val activity: ComponentActivity,
-    /** The shared Songs folder and the playlist files (see SongLibrary.kt). */
-    private val library: () -> SongLibrary,
-    /** Reports a result to the page. Always called on the main thread. */
-    private val onStatus: (jobId: String, status: String, message: String) -> Unit,
-    /** Sends an arbitrary JS call back to the page: fn("arg1", "arg2"). Called on the UI thread. */
-    private val onPage: (fn: String, args: String) -> Unit = { _, _ -> },
+class SongDownloader private constructor(
+    private val appContext: Context,
 ) {
 
     companion object {
+        @Volatile private var instance: SongDownloader? = null
+
+        fun getInstance(context: Context): SongDownloader {
+            return instance ?: synchronized(this) {
+                instance ?: SongDownloader(context.applicationContext).also { instance = it }
+            }
+        }
         /**
          * Where downloads wait until they are named and placed: a hidden folder inside the shared Songs
          * folder (Moonlight/Songs/.staging). Folders starting with a dot are skipped by the music scan,
@@ -93,9 +92,6 @@ class SongDownloader(
         /** The old music folder (one sub-folder per playlist). Still read, never written to by downloads. */
         const val AUDIO_DIR = "/storage/emulated/0/Novel/Audio"
 
-        // Per-song notification IDs start at 3000 and are incremented per job.
-        private val songNotifCounter = java.util.concurrent.atomic.AtomicInteger(3000)
-
         /** Is [path] a file inside the staging folder? (Nothing else may be moved or renamed.) */
         fun isStagedPath(path: String?): Boolean {
             if (path.isNullOrBlank()) return false
@@ -113,21 +109,111 @@ class SongDownloader(
     private val pool: ExecutorService = Executors.newCachedThreadPool()
     private val lock = Any()
     private val running = HashSet<String>()                         // every accepted, unanswered job
-    private val downloading = HashSet<String>()                     // the stage jobs among them
+    private val downloading = LinkedHashSet<String>()               // the stage jobs among them (insertion-ordered)
     private val cancelled = Collections.synchronizedSet(HashSet<String>())
+    private val jobProgress = java.util.concurrent.ConcurrentHashMap<String, ProgressMetrics>()
     private var engineReady = false
     // Tracks whether DownloadForegroundService is running so we start/stop it exactly once.
-    private var fgServiceRunning = false
+    @Volatile private var fgServiceRunning = false
     // Mirrors the "Background downloads" setting toggle. When false the foreground service is
     // never started, so downloads stop if the user switches away (original behaviour).
     @Volatile private var backgroundDownloadsEnabled = true
 
+    // Unified playlist notification metadata (owned here so there is only ever ONE download notification).
+    @Volatile private var playlistActive = false
+    @Volatile private var playlistTitle = ""
+    @Volatile private var playlistDone = 0
+    @Volatile private var playlistTotal = 0
+    @Volatile private var playlistSucceeded = 0
+    @Volatile private var playlistCancelled = false
+    @Volatile private var lastNotifUpdateMs = 0L
+
+    @Volatile private var libraryProvider: (() -> SongLibrary)? = null
+    @Volatile private var statusCallback: ((jobId: String, status: String, message: String) -> Unit)? = null
+    @Volatile private var pageCallback: ((fn: String, args: String) -> Unit)? = null
+    @Volatile private var jsReady: Boolean = false
+    private val pendingResults = ArrayList<Triple<String, String, String>>()
+    @Volatile private var cancelledWhileDetached: Boolean = false
+
+    private val fallbackLibrary: SongLibrary by lazy {
+        SongLibrary(
+            File(AUDIO_DIR),
+            File("/storage/emulated/0/Moonlight/Songs"),
+            File("/storage/emulated/0/Moonlight/playlists")
+        )
+    }
+
+    private fun getLibrary(): SongLibrary = libraryProvider?.invoke() ?: fallbackLibrary
+
+    private fun onPage(fn: String, args: String) {
+        pageCallback?.invoke(fn, args)
+    }
+
+    fun attach(
+        library: () -> SongLibrary,
+        onStatus: (jobId: String, status: String, message: String) -> Unit,
+        onPage: (fn: String, args: String) -> Unit,
+    ) {
+        synchronized(lock) {
+            this.libraryProvider = library
+            this.statusCallback = onStatus
+            this.pageCallback = onPage
+            this.jsReady = false
+        }
+    }
+
+    fun detach() {
+        synchronized(lock) {
+            this.libraryProvider = null
+            this.statusCallback = null
+            this.pageCallback = null
+            this.jsReady = false
+        }
+    }
+
+    fun shouldKeepAliveOnDestroy(): Boolean = backgroundDownloadsEnabled && isBusy()
+
+    fun consumeSyncStateJson(): String {
+        val (activeList, resultsList, wasCancelled) = synchronized(lock) {
+            jsReady = true
+            val active = running.toList()
+            val res = pendingResults.toList()
+            pendingResults.clear()
+            val c = cancelledWhileDetached
+            cancelledWhileDetached = false
+            Triple(active, res, c)
+        }
+        val activeArr = org.json.JSONArray()
+        for (id in activeList) activeArr.put(id)
+        val resArr = org.json.JSONArray()
+        for ((id, status, message) in resultsList) {
+            resArr.put(
+                JSONObject()
+                    .put("jobId", id)
+                    .put("status", status)
+                    .put("message", message)
+            )
+        }
+        return JSONObject()
+            .put("activeJobs", activeArr)
+            .put("results", resArr)
+            .put("cancelled", wasCancelled)
+            .toString()
+    }
+
     fun setBackgroundDownloadsEnabled(enabled: Boolean) {
         backgroundDownloadsEnabled = enabled
         // If the user just turned it OFF and the service is currently running, stop it now.
-        if (!enabled && fgServiceRunning) {
-            synchronized(lock) { fgServiceRunning = false }
-            main.post { DownloadForegroundService.stop(activity) }
+        val shouldStop = synchronized(lock) {
+            if (!enabled && fgServiceRunning) {
+                fgServiceRunning = false
+                true
+            } else {
+                false
+            }
+        }
+        if (shouldStop) {
+            main.post { DownloadForegroundService.stop(appContext) }
         }
     }
     // Per staged song: the part of its thumbnail you chose for the cover (x, y, size: fractions, see CoverCrop), and
@@ -137,17 +223,41 @@ class SongDownloader(
     private val updateTried = AtomicBoolean(false)
     private val nightlyChecked = AtomicBoolean(false)
 
+    init {
+        DownloadForegroundService.isActiveCheck = { isDownloading() }
+        DownloadForegroundService.cancelHandler = {
+            val detached = synchronized(lock) { statusCallback == null || !jsReady }
+            if (detached) {
+                cancelledWhileDetached = true
+            }
+            cancel()
+            try { File(STAGING_DIR).deleteRecursively() } catch (_: Exception) {}
+            main.post { onPage("onDownloadCancelledFromNotification", "") }
+        }
+    }
+
     /** Gets the bundled Python/yt-dlp/ffmpeg unpacked in the background (a few seconds, once per install). */
     fun warmUp() {
         pool.execute { ensureEngine() }
     }
 
     fun release() {
+        detach()
+        cancel()
         pool.shutdownNow()
+        DownloadForegroundService.isActiveCheck = null
+        DownloadForegroundService.cancelHandler = null
+        DownloadForegroundService.cancelAllDownloadNotifications(appContext)
+        synchronized(Companion) {
+            if (instance === this) instance = null
+        }
     }
 
     /** True while a job is unanswered (the app must not close itself meanwhile). */
     fun isBusy(): Boolean = synchronized(lock) { running.isNotEmpty() }
+
+    /** True while at least one stage (download) job is actively running. */
+    fun isDownloading(): Boolean = synchronized(lock) { downloading.isNotEmpty() }
 
     /**
      * Accepts a download job. Returns false only when a job with this id is already running; every
@@ -187,7 +297,7 @@ class SongDownloader(
                     .addOption("--flat-playlist")
                     .addOption("--dump-single-json")
                     .addOption("--no-warnings")
-                cookiesCopy(activity.cacheDir)?.let { request.addOption("--cookies", it.absolutePath) }
+                cookiesCopy(appContext.cacheDir)?.let { request.addOption("--cookies", it.absolutePath) }
                 val out = StringBuilder()
                 YoutubeDL.getInstance().execute(request, jobId) { _, _, line -> out.appendLine(line) }
                 val json = org.json.JSONObject(out.toString().trim())
@@ -207,16 +317,16 @@ class SongDownloader(
                 val result = org.json.JSONObject()
                     .put("title", cleanFolderNameKt(title))
                     .put("tracks", tracks)
-                activity.runOnUiThread {
+                main.post {
                     onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, ${result}")
                 }
             } catch (e: YoutubeDL.CanceledException) {
-                activity.runOnUiThread {
+                main.post {
                     onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, {\"error\":\"Stopped\"}")
                 }
             } catch (e: Exception) {
                 val msg = SongNames.failureReason(e.message ?: e.cause?.message).ifEmpty { "Could not read the playlist." }
-                activity.runOnUiThread {
+                main.post {
                     onPage("onPlaylistInfo", "${org.json.JSONObject.quote(jobId)}, {\"error\":${org.json.JSONObject.quote(msg)}}")
                 }
             } finally {
@@ -246,23 +356,141 @@ class SongDownloader(
 
     /** Stops every running download; each then reports "Stopped" by itself. */
     fun cancel() {
-        val ids = synchronized(lock) { downloading.toList() }
+        val ids = synchronized(lock) {
+            fgServiceRunning = false
+            playlistActive = false
+            playlistSucceeded = 0
+            playlistCancelled = true
+            pendingResults.clear()
+            downloading.toList()
+        }
         cancelled.addAll(ids)
+        jobProgress.clear()
+        main.post { DownloadForegroundService.cancelAllDownloadNotifications(appContext) }
         for (id in ids) {
             try { YoutubeDL.getInstance().destroyProcessById(id) } catch (e: Exception) { /* already over */ }
         }
     }
 
+    /** Called by MainActivity when JS reports playlist download progress (done >= total dismisses). */
+    fun updatePlaylistProgress(title: String, done: Int, total: Int) {
+        if (total <= 0 || done >= total) {
+            val (wasActive, wasCancelled, succeeded, anyDownloading) = synchronized(lock) {
+                val active = playlistActive
+                val cancelledFlag = playlistCancelled
+                val ok = playlistSucceeded
+                playlistActive = false
+                playlistTitle = ""
+                playlistDone = 0
+                playlistTotal = 0
+                playlistSucceeded = 0
+                val stillDownloading = downloading.isNotEmpty()
+                if (!stillDownloading) {
+                    fgServiceRunning = false
+                }
+                listOf(active, cancelledFlag, ok, stillDownloading)
+            }
+            if (anyDownloading == false) {
+                main.post { DownloadForegroundService.stop(appContext) }
+            } else {
+                postNotificationUpdate(force = true)
+            }
+            if (wasActive == true && wasCancelled == false && total > 0 && done >= total) {
+                val safeTitle = title.ifBlank { "Playlist" }
+                val okCount = succeeded as Int
+                main.post {
+                    if (okCount > 0) {
+                        val noun = if (okCount == 1) "song" else "songs"
+                        DownloadForegroundService.postResultNotification(
+                            appContext,
+                            title = "Playlist downloaded",
+                            body = "\u201c$safeTitle\u201d ($okCount $noun) ready to save",
+                            isError = false,
+                        )
+                    } else {
+                        DownloadForegroundService.postResultNotification(
+                            appContext,
+                            title = "Playlist download failed",
+                            body = "No songs could be downloaded from \u201c$safeTitle\u201d",
+                            isError = true,
+                        )
+                    }
+                }
+            }
+            return
+        }
+        synchronized(lock) {
+            playlistActive = true
+            playlistCancelled = false
+            playlistTitle = title
+            playlistDone = done
+            playlistTotal = total
+        }
+        postNotificationUpdate(force = true)
+    }
+
     private fun begin(jobId: String, isDownload: Boolean): Boolean = synchronized(lock) {
         val fresh = running.add(jobId)
+        if (fresh) {
+            cancelledWhileDetached = false
+        }
         if (fresh && isDownload) {
+            if (downloading.isEmpty()) {
+                playlistCancelled = false
+                if (!playlistActive) playlistSucceeded = 0
+                main.post { DownloadForegroundService.clearResultNotification(appContext) }
+            }
             downloading.add(jobId)
+            val state = buildNotifStateLocked()
             if (!fgServiceRunning && backgroundDownloadsEnabled) {
                 fgServiceRunning = true
-                main.post { DownloadForegroundService.start(activity) }
+                main.post { DownloadForegroundService.start(appContext, state) }
+            } else if (fgServiceRunning) {
+                main.post { DownloadForegroundService.updateProgress(appContext, state, showInShade = true) }
             }
         }
         fresh
+    }
+
+    private fun buildNotifStateLocked(): DownloadNotifState {
+        if (downloading.isEmpty()) return DownloadNotifState(active = false)
+        val firstMetric = downloading.firstNotNullOfOrNull { jobProgress[it] }
+        val pct = firstMetric?.percent?.let { if (it >= 0.0) it.toInt().coerceIn(0, 100) else -1 } ?: -1
+        var fracSum = 0.0
+        for (id in downloading) {
+            val p = jobProgress[id]?.percent ?: -1.0
+            if (p >= 0.0) fracSum += (p.coerceIn(0.0, 100.0) / 100.0)
+        }
+        return DownloadNotifState(
+            active = true,
+            isPlaylist = playlistActive || downloading.any { it.startsWith("pl-dl-") },
+            playlistTitle = playlistTitle,
+            doneCount = playlistDone,
+            totalCount = playlistTotal,
+            activeCount = downloading.size,
+            activeFractionSum = fracSum,
+            percent = pct,
+            speed = firstMetric?.speed ?: "",
+            etaSeconds = firstMetric?.eta ?: -1L,
+            downloaded = firstMetric?.downloaded ?: "",
+            totalSize = firstMetric?.total ?: "",
+        )
+    }
+
+    private fun postNotificationUpdate(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastNotifUpdateMs < 400L) return
+        lastNotifUpdateMs = now
+        val (state, showInShade) = synchronized(lock) {
+            Pair(buildNotifStateLocked(), fgServiceRunning)
+        }
+        main.post {
+            if (!state.active || !isDownloading()) {
+                DownloadForegroundService.stop(appContext)
+            } else {
+                DownloadForegroundService.updateProgress(appContext, state, showInShade = showInShade)
+            }
+        }
     }
 
     // ---- worker threads from here on ---------------------------------------------------
@@ -279,9 +507,8 @@ class SongDownloader(
     private fun ensureEngine(): String? {
         if (engineReady) return null
         return try {
-            val context = activity.applicationContext
-            YoutubeDL.getInstance().init(context)
-            FFmpeg.getInstance().init(context)
+            YoutubeDL.getInstance().init(appContext)
+            FFmpeg.getInstance().init(appContext)
             engineReady = true
             null
         } catch (e: Exception) {
@@ -297,7 +524,7 @@ class SongDownloader(
         val runDir = File(STAGING_DIR, "s_" + UUID.randomUUID().toString().take(8))
         // Half-finished downloads (.webm, .part, thumbnails) go to a cache folder, so the music scan
         // never sees them.
-        val tmpDir = File(activity.cacheDir, "song_dl_" + UUID.randomUUID().toString().take(8))
+        val tmpDir = File(appContext.cacheDir, "song_dl_" + UUID.randomUUID().toString().take(8))
         try {
             if (!runDir.mkdirs() && !runDir.isDirectory) {
                 return report(jobId, "failed", "Can't create $STAGING_DIR. Allow \"All files access\" for this app.")
@@ -422,17 +649,27 @@ class SongDownloader(
                         val info = parseYtDlpLine(line)
                         val finalPct = if (progress >= 0f) progress.toDouble() else info.percent
                         val finalEta = if (etaInSeconds >= 0L) etaInSeconds else info.eta
-                        val json = JSONObject().apply {
-                            put("jobId", jobId)
-                            put("percent", finalPct)
-                            put("eta", finalEta)
-                            put("speed", info.speed)
-                            put("downloaded", info.downloaded)
-                            put("total", info.total)
-                            put("status", "downloading")
-                        }.toString()
-                        main.post {
-                            onPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + json)
+                        if (finalPct >= 0.0 || info.speed.isNotEmpty() || info.downloaded.isNotEmpty()) {
+                            jobProgress[jobId] = ProgressMetrics(
+                                percent = finalPct,
+                                eta = finalEta,
+                                speed = info.speed,
+                                downloaded = info.downloaded,
+                                total = info.total,
+                            )
+                            postNotificationUpdate(force = false)
+                            val json = JSONObject().apply {
+                                put("jobId", jobId)
+                                put("percent", finalPct)
+                                put("eta", finalEta)
+                                put("speed", info.speed)
+                                put("downloaded", info.downloaded)
+                                put("total", info.total)
+                                put("status", "downloading")
+                            }.toString()
+                            main.post {
+                                onPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + json)
+                            }
                         }
                     }
                 }
@@ -473,10 +710,9 @@ class SongDownloader(
     /** Updates the bundled yt-dlp to the nightly build. The update status, or null when it could not run (offline, ...). */
     private fun updateYtDlp(): YoutubeDL.UpdateStatus? {
         return try {
-            val ctx = activity.applicationContext
             val channel = nightlyChannel()
-            if (channel != null) YoutubeDL.getInstance().updateYoutubeDL(ctx, channel)
-            else YoutubeDL.getInstance().updateYoutubeDL(ctx)
+            if (channel != null) YoutubeDL.getInstance().updateYoutubeDL(appContext, channel)
+            else YoutubeDL.getInstance().updateYoutubeDL(appContext)
         } catch (e: Throwable) {
             null
         }
@@ -489,7 +725,7 @@ class SongDownloader(
      */
     private fun refreshYtDlpIfDue() {
         if (!nightlyChecked.compareAndSet(false, true)) return
-        val prefs = activity.getSharedPreferences("song_downloader", android.content.Context.MODE_PRIVATE)
+        val prefs = appContext.getSharedPreferences("song_downloader", android.content.Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         if (now - prefs.getLong("ytdlpCheckedAt", 0L) < 6L * 3600 * 1000) return
         if (updateYtDlp() != null) prefs.edit().putLong("ytdlpCheckedAt", now).apply()
@@ -503,7 +739,7 @@ class SongDownloader(
      */
     private fun cookiesCopy(tmpDir: File): File? {
         return try {
-            val candidates = listOf(YouTubeSignIn.cookieFile(activity.filesDir), File(COOKIES_FILE))
+            val candidates = listOf(YouTubeSignIn.cookieFile(appContext.filesDir), File(COOKIES_FILE))
             val src = candidates.firstOrNull { it.isFile && it.length() > 0L && it.length() <= 2_000_000L } ?: return null
             val copy = File(tmpDir, "cookies.txt")
             src.copyTo(copy, overwrite = true)
@@ -516,7 +752,7 @@ class SongDownloader(
     /** The message the page shows for a failed download: the bot check gets steps to follow, the rest stays as yt-dlp said it. */
     private fun explainFailure(error: String): String {
         if (!isBotCheck(error)) return error
-        val usedCookies = YouTubeSignIn.cookieFile(activity.filesDir).isFile || File(COOKIES_FILE).isFile
+        val usedCookies = YouTubeSignIn.cookieFile(appContext.filesDir).isFile || File(COOKIES_FILE).isFile
         return if (usedCookies) {
             "YouTube still says \u201cSign in to confirm you\u2019re not a bot\u201d even with your sign-in. " +
                 "It may have expired: open Settings, sign out of YouTube and sign in again, or try another network (VPN off), then retry."
@@ -535,7 +771,7 @@ class SongDownloader(
 
         // Every song lands in the one shared Songs folder. The playlist the user chose only gets a
         // REFERENCE to it (a line in the playlist's file), never a folder or a second copy.
-        val lib = library()
+        val lib = getLibrary()
         val staged = File(path)
         val stem = name.ifEmpty { staged.nameWithoutExtension }
         if (!lib.ensureSongsDir()) {
@@ -618,63 +854,71 @@ class SongDownloader(
     }
 
     private fun finish(jobId: String, status: String, message: String) {
-        val (mine, noMoreDownloads) = synchronized(lock) {
+        jobProgress.remove(jobId)
+        val (mine, noMoreDownloads, cb, ready) = synchronized(lock) {
             downloading.remove(jobId)
             val mine = running.remove(jobId)
-            Pair(mine, fgServiceRunning && downloading.isEmpty())
+            if (mine && jobId.startsWith("pl-dl-") && status == "done") {
+                playlistSucceeded++
+            }
+            val empty = downloading.isEmpty()
+            if (empty) {
+                fgServiceRunning = false
+            }
+            if (mine && (statusCallback == null || !jsReady)) {
+                pendingResults.add(Triple(jobId, status, message))
+            }
+            listOf(mine, empty, statusCallback, jsReady)
         }
+        @Suppress("UNCHECKED_CAST")
+        val callback = cb as? ((String, String, String) -> Unit)
         cancelled.remove(jobId)
-        if (!mine) return                    // a late or repeated answer changes nothing
-        onStatus(jobId, status, message)
-
-        // Post a per-song result notification so the user sees outcome even when backgrounded.
-        postSongResultNotification(jobId, status, message)
-
-        // Stop the foreground service when the last download finishes.
-        if (noMoreDownloads) {
-            synchronized(lock) { fgServiceRunning = false }
-            main.post { DownloadForegroundService.stop(activity) }
+        if (mine != true) {
+            if (noMoreDownloads == true) {
+                main.post { DownloadForegroundService.stop(appContext) }
+            }
+            return                    // a late or repeated answer changes nothing
         }
+        if (callback != null && ready == true) {
+            callback(jobId, status, message)
+        }
+
+        // Stop the foreground service immediately when the last download finishes.
+        if (noMoreDownloads == true) {
+            main.post { DownloadForegroundService.stop(appContext) }
+        } else {
+            postNotificationUpdate(force = true)
+        }
+
+        // Post a brief result notification for single-song downloads (never for cancelled jobs or playlist items).
+        postSongResultNotification(jobId, status, message)
     }
 
     /** Posts a brief notification for a completed or failed single-song download. */
     private fun postSongResultNotification(jobId: String, status: String, message: String) {
-        // Only for stage (download) jobs, not place jobs.
-        if (!jobId.startsWith("dl-") && !jobId.startsWith("pl-dl-")) return
-        val nm = activity.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
-                as? NotificationManager ?: return
+        // Only for single-song stage jobs (s1, s2, ... or legacy dl-*), not place jobs or playlist items.
+        val isSingleStage = jobId.startsWith("dl-") ||
+            (jobId.length >= 2 && jobId[0] == 's' && jobId[1].isDigit())
+        if (!isSingleStage) return
+        if (status == "failed" && message == "Stopped") return
         val title = when (status) {
             "done"   -> "Song downloaded"
             "failed" -> "Download failed"
-            else     -> return   // "running" — no notification
+            else     -> return
         }
         val songName = if (status == "done") {
-            try { java.io.File(message).nameWithoutExtension } catch (e: Exception) { "" }
+            try { File(message).nameWithoutExtension } catch (e: Exception) { "" }
         } else ""
         val body = when {
-            status == "failed"      -> message.take(120)
-            songName.isNotBlank()   -> "\u201c$songName\u201d saved"
-            else                    -> "Tap to open Moonlight"
+            status == "failed"    -> message.take(120)
+            songName.isNotBlank() -> "\u201c$songName\u201d ready to save"
+            else                  -> "Tap to open Moonlight"
         }
-        val tapIntent = android.content.Intent(activity, MainActivity::class.java).apply {
-            flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val tap = android.app.PendingIntent.getActivity(
-            activity, 0, tapIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        DownloadForegroundService.postResultNotification(
+            appContext,
+            title = title,
+            body = body,
+            isError = (status == "failed"),
         )
-        val notif = NotificationCompat.Builder(activity, DownloadForegroundService.CHANNEL_SONG)
-            .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setContentIntent(tap)
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
-        val notifId = songNotifCounter.getAndIncrement()
-        nm.notify(notifId, notif)
-        // Auto-cancel after 8 seconds so the shade doesn't pile up with download results.
-        main.postDelayed({ nm.cancel(notifId) }, 8_000L)
     }
 }

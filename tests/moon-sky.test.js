@@ -184,5 +184,153 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
     console.log('ok - index.html defines bold SVG symbols with tilted crescent');
   }
 
-  console.log('\nAll 10 background visual effects and moon icon tests passed cleanly!');
+  // 11. Sharper, circular .moon-badge CSS (no pixelated rendering, crisp 50% clip)
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
+    const moonBadgeRule = html.match(/\.moon-badge\s*\{[^}]+\}/);
+    assert.ok(moonBadgeRule, '.moon-badge CSS rule exists');
+    assert.ok(/border-radius:\s*50%/.test(moonBadgeRule[0]), '.moon-badge has border-radius: 50%');
+    assert.ok(/overflow:\s*hidden/.test(moonBadgeRule[0]), '.moon-badge clips with overflow: hidden');
+    assert.ok(/isolation:\s*isolate/.test(moonBadgeRule[0]), '.moon-badge isolates stacking context for WebKit/Blink border-radius clipping');
+    const moonBadgeSvgRule = html.match(/\.moon-badge svg[^{]*\{[^}]+\}/);
+    assert.ok(moonBadgeSvgRule, '.moon-badge svg CSS rule exists');
+    assert.strictEqual(/image-rendering:\s*pixelated/.test(moonBadgeSvgRule[0]), false, 'image-rendering: pixelated is removed from .moon-badge svg');
+    console.log('ok - .moon-badge CSS is circular, clipped, and free of pixelated rendering');
+  }
+
+  // 12. paintMoonBadges applies CodePen-inspired tilt and geometricPrecision
+  {
+    const elements = [];
+    const fakeDoc = {
+      querySelectorAll: (sel) => (sel === '[data-moon]' ? elements : []),
+      createElementNS: (ns, tag) => {
+        const attrs = {};
+        const children = [];
+        return {
+          tagName: tag.toUpperCase(),
+          style: {},
+          setAttribute: (k, v) => { attrs[k] = v; },
+          getAttribute: (k) => attrs[k],
+          appendChild: (c) => children.push(c),
+          children,
+        };
+      },
+    };
+    const badgeEl = {
+      children: [],
+      appendChild: function (child) { this.children.push(child); },
+      setAttribute: function () {},
+      textContent: '',
+    };
+    elements.push(badgeEl);
+    global.NovelMoonLock = {
+      moonPhaseInfo: () => ({ name: 'Full Moon', fraction: 0.5, waxing: false }),
+      moonPhasePath: () => 'M 0 12 A 12 12 0 1 1 24 12 A 12 12 0 1 1 0 12 Z',
+    };
+    const savedDoc = global.document;
+    global.document = fakeDoc;
+    try {
+      MoonSky.paintMoonBadges();
+      const svg = badgeEl.children[0];
+      assert.strictEqual(svg.getAttribute('shape-rendering'), 'geometricPrecision', 'uses geometricPrecision');
+      assert.strictEqual(svg.getAttribute('viewBox'), '0 0 200 200', 'uses high-res padded 200x200 viewBox');
+      assert.strictEqual(svg.children[0].getAttribute('r'), '88', 'disc stays inside viewBox with clean margin');
+      assert.strictEqual(svg.children[1].getAttribute('transform'), 'rotate(0.0 100 100)', 'applies vector tilt on SVG group');
+    } finally {
+      global.document = savedDoc;
+    }
+    console.log('ok - paintMoonBadges applies CodePen-inspired tilt and sharp vector attributes');
+  }
+
+  // 13. Hourly & >1h on-load/resume moon phase scheduler (pauses when hidden)
+  {
+    let nowMs = 10_000_000;
+    let hidden = false;
+    let paintCount = 0;
+    let intervalId = 0;
+    const activeIntervals = new Map();
+    const store = new Map();
+    const fakeStorage = {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => { store.set(k, v); },
+    };
+
+    const scheduler = MoonSky.createMoonPhaseScheduler({
+      now: () => nowMs,
+      isHidden: () => hidden,
+      onPaint: () => { paintCount++; },
+      storage: fakeStorage,
+      setInterval: (fn, ms) => {
+        const id = ++intervalId;
+        activeIntervals.set(id, { fn, ms });
+        return id;
+      },
+      clearInterval: (id) => { activeIntervals.delete(id); },
+    });
+
+    scheduler.init();
+    assert.strictEqual(paintCount, 1, 'paints on initial load');
+    assert.strictEqual(scheduler.getLastCheckAt(), nowMs, 'records lastMoonPhaseCheckAt');
+    assert.strictEqual(store.get('moonlight.lastMoonPhaseCheckAt'), String(nowMs), 'persists timestamp to localStorage');
+    assert.strictEqual(activeIntervals.size, 1, 'starts single hourly timer when visible');
+    assert.strictEqual([...activeIntervals.values()][0].ms, 3600000, 'uses 3600000ms (1h) interval');
+
+    // Resume before 1 hour: should NOT repaint
+    nowMs += 30 * 60 * 1000;
+    hidden = true;
+    scheduler.onVisibilityChange();
+    assert.strictEqual(activeIntervals.size, 0, 'pauses hourly timer when hidden');
+    hidden = false;
+    scheduler.onVisibilityChange();
+    assert.strictEqual(paintCount, 1, 'skips repaint when < 1 hour has elapsed');
+    assert.strictEqual(activeIntervals.size, 1, 'restarts single hourly timer when visible');
+
+    // Resume after >= 1 hour: SHOULD repaint and update timestamp
+    nowMs += 60 * 60 * 1000;
+    hidden = true;
+    scheduler.onVisibilityChange();
+    hidden = false;
+    scheduler.onVisibilityChange();
+    assert.strictEqual(paintCount, 2, 'repaints on visibilitychange when >= 1 hour has elapsed');
+    assert.strictEqual(scheduler.getLastCheckAt(), nowMs, 'updates lastMoonPhaseCheckAt after >= 1h repaint');
+
+    // Hourly timer tick when visible
+    nowMs += 3600000;
+    [...activeIntervals.values()][0].fn();
+    assert.strictEqual(paintCount, 3, 'hourly interval tick repaints when >= 1 hour has elapsed');
+
+    // Backward clock skew (stored timestamp in the future) should re-evaluate and repaint
+    nowMs -= 2 * 3600000;
+    hidden = true;
+    scheduler.onVisibilityChange();
+    hidden = false;
+    scheduler.onVisibilityChange();
+    assert.strictEqual(paintCount, 4, 'repaints when clock moves backward (elapsed < 0)');
+    assert.strictEqual(scheduler.getLastCheckAt(), nowMs, 'resets lastMoonPhaseCheckAt after backward clock skew');
+
+    // Cold reload within < 1h still paints empty DOM without crashing when storage throws
+    const throwingStorage = {
+      getItem: () => { throw new Error('blocked'); },
+      setItem: () => { throw new Error('blocked'); },
+    };
+    let hiddenPaintCount = 0;
+    const hiddenIntervals = [];
+    const hiddenScheduler = MoonSky.createMoonPhaseScheduler({
+      now: () => nowMs,
+      isHidden: () => true,
+      onPaint: () => { hiddenPaintCount++; },
+      storage: throwingStorage,
+      setInterval: (fn, ms) => { hiddenIntervals.push(ms); return 1; },
+      clearInterval: () => {},
+    });
+    hiddenScheduler.init();
+    assert.strictEqual(hiddenPaintCount, 1, 'paints on initial load even if localStorage throws');
+    assert.strictEqual(hiddenIntervals.length, 0, 'does not start timer if initially hidden');
+
+    console.log('ok - moon phase scheduler handles 1h checks, localStorage, visibilitychange, and hidden pause');
+  }
+
+  console.log('\nAll 13 background visual effects and moon icon tests passed cleanly!');
 })();

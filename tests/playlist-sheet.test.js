@@ -154,7 +154,9 @@ check('the Songs-tab ... menu is about the playlist; Now playing keeps the song 
   const mark = (act) => (sheet.match(new RegExp('<button[^>]*data-sp-act="' + act + '"[^>]*>')) || [''])[0];
   ['like', 'addto', 'songmenu'].forEach((a) => assert.ok(/sp-song-only/.test(mark(a)), a + ' is a song action'));
   ['addsongs', 'editsongs', 'editpl', 'cover', 'sharelinks', 'deletepl'].forEach((a) => assert.ok(/sp-pl-only/.test(mark(a)), a + ' is a playlist action'));
-  assert.ok(!/sp-(song|pl)-only/.test(mark('sleep')) && !/sp-(song|pl)-only/.test(mark('rescan')));   // app-wide items stay in both
+  assert.ok(!/sp-(song|pl)-only/.test(mark('sleep')));   // app-wide items stay in both
+  assert.ok(/sp-song-only/.test(mark('sharesong')), 'Share song is a Now playing action');
+  assert.ok(/sp-pl-only/.test(mark('rescan')), 'Scan the sky now lives in the playlist menu only');
   assert.ok(/#sp-sheet\[data-sheet-mode="playlist"\] \.sp-song-only[^{]*\.sp-pl-only[^{]*\{\s*display:\s*none/.test(html));
   const js = fs.readFileSync(path.join(__dirname, '..', 'app/src/main/assets/spotify-ui.js'), 'utf8');
   assert.ok(/data-sheet-mode', playlistMode \? 'playlist' : 'song'/.test(js));
@@ -242,7 +244,7 @@ check('every screen outside the music panel follows the song colours (class dyn-
   const ui = fs.readFileSync(path.join(dir, 'spotify-ui.js'), 'utf8');
   assert.ok(/querySelectorAll\('\.dyn-colours'\)/.test(ui) && /syncTint: \(\) => pushTint\(\)/.test(ui));
   assert.strictEqual((ui.match(/refreshTint:/g) || []).length, 1);   // Settings' own refreshTint (re-fit the song colour after a theme change) must not be overwritten
-  assert.ok(/refreshTint: \(\) => updateTint\(\)/.test(ui));
+  assert.ok(/refreshTint:\s*\(\)\s*=>\s*\{?\s*updateTint\(\)/.test(ui));
   assert.ok(!/var\(--panel, var\(--bg\)\)/.test(html));           // no static fallback inside the new input styles
 });
 

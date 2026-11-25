@@ -133,9 +133,17 @@ const STANDARD = () => [
 
   await check('the new Home markup is in index.html', () => {
     const html = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/index.html'), 'utf8');
-    ['sp-greeting', 'sp-home-grid', 'sp-shelf-made', 'sp-shelf-made-row', 'sp-shelf-lists', 'sp-shelf-lists-row'].forEach(id =>
+    ['sp-greeting', 'sp-home-grid', 'sp-shelf-made', 'sp-shelf-made-row', 'sp-shelf-lists', 'sp-shelf-lists-row', 'set-user-name', 'name-dialog-layer'].forEach(id =>
       assert.ok(html.includes('id="' + id + '"'), id));
     assert.ok(html.includes('id="sp-lib-avatar"') && html.includes('id="sp-lib-stats"') && html.includes('id="audio-scan-btn"'));   // the moon strip is still there
+  });
+
+  await check('Home greeting appends ! Name when userName setting is present', async () => {
+    const t = boot();
+    global.NovelAudio.getSetting = (k) => (k === 'userName' ? 'Alex' : undefined);
+    t.showRows(STANDARD());
+    await sleep(20);
+    assert.strictEqual(t.home.greeting.textContent, greetingForHour(new Date().getHours()) + '! Alex');
   });
 
   console.log(n + ' checks passed');

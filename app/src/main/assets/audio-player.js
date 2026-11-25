@@ -222,6 +222,47 @@ window.NovelAudio = (function () {
       fns.forEach((fn) => { try { fn(); } catch (e) { /* one listener must not stop the others */ } });
     },
 
+    // Synchronises player state with an ongoing background playback session
+    _syncActiveTrack(active) {
+      if (!active || !active.path || !Array.isArray(state.tracks) || !state.tracks.length) return;
+      const norm = (p) => (p || '').replace(/\\/g, '/').toLowerCase();
+      const target = norm(active.path);
+      const track = state.tracks.find(t => norm(t.path) === target) || state.tracks.find(t => t.id === active.path);
+      if (!track) return;
+
+      const alreadyShown = state.currentTrackId === track.id && AudioEngine === NativeAudioEngine && state.queue.includes(track.id);
+      state.currentTrackId = track.id;
+      NativeAudioEngine._loadedTrackId = track.id;
+      if (alreadyShown) {
+        // Coming back to the app with the same song playing: keep the queue (a rebuild would reshuffle what plays next).
+        if (typeof active.playing === 'boolean') state.playing = active.playing;
+        if (typeof active.positionSec === 'number') state.positionSec = active.positionSec;
+        if (typeof active.durationSec === 'number' && active.durationSec > 0) state.durationSec = active.durationSec;
+        StartupPlayback.done = true;
+        AudioUI.render();
+        return;
+      }
+      if (typeof active.playing === 'boolean') state.playing = active.playing;
+      if (typeof active.positionSec === 'number') state.positionSec = active.positionSec;
+      state.durationSec = (typeof active.durationSec === 'number' && active.durationSec > 0)
+        ? active.durationSec
+        : (track.durationSec || 0);
+
+      StartupPlayback.done = true;
+      AudioEngine = NativeAudioEngine;
+
+      if (!this.currentSelectionIds().includes(track.id)) {
+        state.activePlaylist = 'all';
+      }
+      const ids = this.currentSelectionIds();
+      PlaybackQueue.buildFrom(ids);
+      PlaybackQueue.jumpTo(track.id);
+
+      AudioUI.render();
+      AudioFeatures.emit('engineChanged', NativeAudioEngine);
+      AudioFeatures.emit('trackStart', track);
+    },
+
     /* Called by the native side with the scan result. Each track may
      * carry a `playlist` field (the name of the subfolder it lives in
      * under Audio/, or null/undefined for a file directly in Audio/ —
@@ -282,18 +323,25 @@ window.NovelAudio = (function () {
         } catch (e) { /* non-fatal */ }
       }
 
-      // First scan after launch: bring back the song that was playing when the app was last
-      // closed. It becomes the current song (shown in the player, and what Play starts) but is
-      // not started here, and like every track it starts from the beginning, not where it was
-      // left. If it is no longer in the selected playlist, fall back to the whole library.
-      // With shuffle on, the remembered song is NOT brought back: it would be the first song of every
-      // launch. The shuffle round picks a song that has not been played yet instead (see below).
-      const remembered = !state.shuffle && !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
-      if (remembered) {
-        state.currentTrackId = remembered.id;
-        state.durationSec = remembered.durationSec || 0;
-        state.positionSec = 0;
-        if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
+      // First scan after launch: if native playback is already active in the background,
+      // sync with that playing song instead of resetting or picking a new track.
+      if (state.pendingActivePlayback) {
+        this._syncActiveTrack(state.pendingActivePlayback);
+        state.pendingActivePlayback = null;
+      } else {
+        // The song you were on carries on from where it was, also with shuffle on (it used to show the NEXT song of the
+        // queue instead). With shuffle on that needs a saved position inside the song: a song that had finished is over.
+        const last = !state.currentTrackId && state.lastTrackId ? this.getTrack(state.lastTrackId) : null;
+        const rp = last ? ResumePoint.read() : null;
+        const resumeSec = rp && rp.id === last.id && (!(last.durationSec > 0) || rp.sec < last.durationSec - 3) ? rp.sec : 0;
+        const remembered = last && (!state.shuffle || (rp && rp.id === last.id && (!(last.durationSec > 0) || rp.sec < last.durationSec - 3))) ? last : null;
+        if (remembered) {
+          state.currentTrackId = remembered.id;
+          state.durationSec = remembered.durationSec || 0;
+          state.positionSec = resumeSec;
+          state.resumeSeek = resumeSec > 0 ? { id: remembered.id, sec: resumeSec } : null;
+          if (!this.currentSelectionIds().includes(remembered.id)) state.activePlaylist = 'all';
+        }
       }
 
       try { this.relinkMovedIds(); } catch (e) { /* a failed relink only leaves old entries unavailable */ }
@@ -318,7 +366,7 @@ window.NovelAudio = (function () {
         PlaybackQueue.jumpTo(currentId);
       }
       // Shuffle on and nothing loaded yet (a fresh launch): get the next unplayed song ready (not started).
-      if (state.shuffle && !currentId && PlaybackQueue.current()) {
+      if (state.shuffle && !currentId && !state.currentTrackId && PlaybackQueue.current()) {
         const first = this.getTrack(PlaybackQueue.current());
         if (first) {
           state.currentTrackId = first.id;
@@ -541,6 +589,13 @@ window.NovelAudio = (function () {
       return !!(layer && !layer.classList.contains('hidden'));
     },
 
+    // Closing the dialog without choosing (tap outside, Back) is "keep the rest as they are": they are remembered, so the
+    // same songs are not asked about again at every launch. Nothing is moved or deleted.
+    dismissDuplicateDialog() {
+      if (this._dupeQueue.length && this._dupeIndex < this._dupeQueue.length) this.ignoreRemainingDuplicates();
+      else this.closeDuplicateDialog();
+    },
+
     closeDuplicateDialog() {
       const layer = typeof document !== 'undefined' && document.getElementById('dupe-dialog-layer');
       if (layer) layer.classList.add('hidden');
@@ -563,7 +618,11 @@ window.NovelAudio = (function () {
       const pairs = [];
       found.forEach(g => g.drop.forEach(d => {
         if (d.id !== state.currentTrackId && pairs.length < 100) {
-          if (this.isDuplicateIgnored(g.keep.path || g.keep.id, d.path || d.id)) return;
+          // "Keep both" is remembered per pair, but which copy of a group counts as the one to keep can change from
+          // one launch to the next (the song playing, a like, a playlist...). So a copy you already reviewed against
+          // ANY other copy of its group stays reviewed; otherwise a group of 3 would be flagged again at every launch.
+          const members = [g.keep].concat(g.drop);
+          if (members.some(m => m !== d && this.isDuplicateIgnored(m.path || m.id, d.path || d.id))) return;
           const keepFolder = g.keep.playlist || (g.keep.path && g.keep.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           const dropFolder = d.playlist || (d.path && d.path.indexOf('/Novel/Audio') !== -1 ? 'Novel/Audio' : 'Moonlight/Songs');
           pairs.push({
@@ -666,6 +725,8 @@ window.NovelAudio = (function () {
           if (moved.indexOf(p.drop) !== -1) {
             this.mergeInto(p.dropId, p.keepId);
             this._dupeMovedCount++;
+          } else {
+            this.ignoreDuplicatePair(p.keep || p.keepId, p.drop || p.dropId);      // could not be moved: leave it alone from now on
           }
         });
         if (this._dupeMovedCount > 0) {
@@ -686,6 +747,10 @@ window.NovelAudio = (function () {
             this._dupeMovedCount++;
             Prefs.save();
             AudioUI.render();
+          } else {
+            // The file could not be moved (it stays where it is): do not ask about it again at every launch.
+            this.ignoreDuplicatePair(pair.keep || pair.keepId, pair.drop || pair.dropId);
+            if (window.SongMenu && window.SongMenu.toast) window.SongMenu.toast('Could not move that song, so it was left where it is');
           }
         }
       } else {
@@ -963,6 +1028,31 @@ window.NovelAudio = (function () {
 
     current() {
       return state.queue[state.queueIndex] || null;
+    },
+
+    // The order the song list shows. Shuffle changes only the order the songs PLAY in (state.queue): the
+    // playlist itself keeps its own order, so with shuffle on the list is the unshuffled selection. The
+    // order they play in is shown in the "Playing order" menu (playingOrder()).
+    displayOrder() {
+      return state.shuffle && this._originalOrder.length ? this._originalOrder : state.queue;
+    },
+
+    // The order the songs will really play in (and have played in, for a shuffle round): the queue.
+    playingOrder() {
+      return state.queue.slice();
+    },
+
+    // The user dragged songs in the "Playing order" menu. newIds must be the same songs as the queue, in the new order; the
+    // song playing now keeps playing and queueIndex follows it. The playlist itself (its own order) is not touched.
+    setQueueOrder(newIds) {
+      if (!Array.isArray(newIds) || newIds.length !== state.queue.length) return false;
+      const a = newIds.slice().sort();
+      const b = state.queue.slice().sort();
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      const cur = this.current();
+      state.queue = newIds.slice();
+      state.queueIndex = cur ? state.queue.indexOf(cur) : state.queueIndex;
+      return true;
     },
 
     // "Add to Queue": the song plays right after the one that is playing now. Picking another playlist or a
@@ -1621,6 +1711,10 @@ window.NovelAudio = (function () {
     // first use of this engine, leaving nothing loaded natively even
     // though state *looked* like playback had already started.
     _loadedTrackId: null,
+    // When this page last asked the native player to load / crossfade to a song: for a moment after that the native
+    // side still reports the OLD song, which must not be taken for "the player is on another song".
+    _lastLoadAt: 0,
+    _mismatch: 0,
     // Until this time, a "paused" report from native is ignored: right after
     // a crossfade starts the new player is briefly buffering, which reads as
     // "not playing" for a few tens of ms and would make the play button blink.
@@ -1672,6 +1766,10 @@ window.NovelAudio = (function () {
         // including this same one next time) always starts at 0.
         this._pendingSeek = state.handoffPositionSec;
         state.handoffPositionSec = null;
+        // The song remembered from the last launch carries on from where it was; any other song starts at 0.
+        if (state.resumeSeek && state.resumeSeek.id === id && this._pendingSeek === null) this._pendingSeek = state.resumeSeek.sec;
+        state.resumeSeek = null;
+        this._lastLoadAt = Date.now();
         bridge.nativeAudioLoad(track.path, track.title || '', track.artist || '', track.album || '');
         this._loadedTrackId = id;
         AudioFeatures.emit('trackStart', track);
@@ -1754,16 +1852,35 @@ window.NovelAudio = (function () {
       if (!playing && Date.now() < this._xfGraceUntil) return; // see _xfGraceUntil
       if (state.playing === playing) return;
       state.playing = playing;
+      if (!playing) ResumePoint.flush();
       AudioUI.render();
     },
 
     // Called by window.onNativeAudioProgress(posSec, durSec), a couple
     // of times a second while playing.
-    onProgress(positionSec, durationSec) {
+    // True when the song the native player really has differs from the one this page shows, for two reports in a row
+    // and not just after this page asked for a change. Then the page follows the player: what you hear is what is shown.
+    _followNativeSong(path, positionSec, durationSec) {
+      if (!path) return false;
+      const cur = MediaLibrary.getTrack(state.currentTrackId);
+      const now = Date.now();
+      if (!cur || now < this._xfGraceUntil || now - this._lastLoadAt < 3000) { this._mismatch = 0; return false; }
+      const norm = (p) => String(p || '').replace(/\\/g, '/').toLowerCase();
+      if (norm(cur.path) === norm(path)) { this._mismatch = 0; return false; }
+      if (++this._mismatch < 2) return false;
+      this._mismatch = 0;
+      const before = state.currentTrackId;
+      MediaLibrary._syncActiveTrack({ path: path, playing: true, positionSec: positionSec, durationSec: durationSec });
+      return state.currentTrackId !== before;
+    },
+
+    onProgress(positionSec, durationSec, path) {
       // Reports already on their way from the OLD track when a crossfade began
       // would drag the seek bar back to its end (and re-trigger a crossfade).
       if (Date.now() < this._xfGraceUntil) return;
+      if (this._followNativeSong(path, positionSec, durationSec)) return;
       state.positionSec = positionSec;
+      ResumePoint.tick();
       if (durationSec) state.durationSec = durationSec;
       AudioUI.updateProgressOnly();
       this._applySleepFadeIfDue();
@@ -1806,6 +1923,7 @@ window.NovelAudio = (function () {
         this._pendingSeek = null;
         state.handoffPositionSec = null;
         this._loadedTrackId = nextId;
+        this._lastLoadAt = Date.now();
         this._xfGraceUntil = Date.now() + 1500;
         try {
           bridge.nativeAudioCrossfade(track.path, track.title || '', track.artist || '',
@@ -2048,20 +2166,36 @@ window.NovelAudio = (function () {
 
   /* ---- A-B repeat -------------------------------------------------------
      Loops the section between two points of the current track. Works on
-     both engines through AudioEngine.seek(). Resolution is the engine's
-     progress rate (~4 Hz local, ~2 Hz native), so the loop can overshoot B
-     by up to half a second; a frame-accurate loop would need a native
-     ClippingMediaSource. Cleared whenever a new track starts. UI: the A / B
+     both engines through AudioEngine.seek(). The engine reports progress at
+     ~4 Hz (local) / ~2 Hz (native); when B falls before the next report a timer
+     makes the jump right at B (the seek itself still takes a few ms), so the
+     overshoot is small, not up to half a second. A fully frame-accurate loop would
+     need a native ClippingMediaSource. Cleared whenever a new track starts. UI: the A / B
      buttons under the seek bar. */
   AudioFeatures.register({
     id: 'abRepeat', label: 'A-B repeat', status: 'working',
     defaults: { a: null, b: null },
     persistKeys: [],
-    trackStart() { const s = state.features.abRepeat; s.a = null; s.b = null; },
+    trackStart() { const s = state.features.abRepeat; s.a = null; s.b = null; this._clearTimer(); },
+    _timer: null,
+    _clearTimer() { if (this._timer !== null) { clearTimeout(this._timer); this._timer = null; } },
     progress(p) {
       const s = state.features.abRepeat;
+      this._clearTimer();
       if (s.a === null || s.b === null) return;
-      if (p.positionSec >= s.b) AudioEngine.seek(s.a);
+      if (p.positionSec >= s.b) { AudioEngine.seek(s.a); return; }
+      // The progress reports come only every 0.25-0.5 s, so when B is about to be reached inside the next
+      // report, a timer jumps back right at B instead of waiting for the report that is already too late.
+      const left = s.b - p.positionSec;
+      if (state.playing && left < 0.75) {
+        this._timer = setTimeout(() => {
+          this._timer = null;
+          const f = state.features.abRepeat;
+          if (f.a === null || f.b === null || !state.playing) return;
+          if (Math.abs(state.positionSec - f.b) > 1.5) return;     // the user moved on in the meantime
+          AudioEngine.seek(f.a);
+        }, Math.max(0, left * 1000 - 40));
+      }
     },
     setA() {
       const s = state.features.abRepeat;
@@ -2075,7 +2209,7 @@ window.NovelAudio = (function () {
       s.b = state.positionSec;
       return s.b;
     },
-    clear() { const s = state.features.abRepeat; s.a = null; s.b = null; },
+    clear() { const s = state.features.abRepeat; s.a = null; s.b = null; this._clearTimer(); },
     isActive() { const s = state.features.abRepeat; return s.a !== null && s.b !== null; },
     get() { const s = state.features.abRepeat; return { a: s.a, b: s.b }; },
   });
@@ -2322,7 +2456,7 @@ window.NovelAudio = (function () {
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true, userName: '' },
   });
 
   /* ---- Duplicate song memory ----------------------------------------------------
@@ -2334,6 +2468,61 @@ window.NovelAudio = (function () {
     persistKeys: ['ignoredPairs'],
   });
 
+  /* ---- Autoplay playlist blacklist ----------------------------------------------
+     Playlists that the user excluded from starting automatically on connect. */
+  AudioFeatures.register({
+    id: 'autoplayBlacklist', label: 'Autoplay playlist blacklist', status: 'working',
+    defaults: { keys: [] },
+    persistKeys: ['keys'],
+    isBlacklisted(key) {
+      if (!key) return false;
+      const clean = String(key).trim();
+      const keys = (state.features.autoplayBlacklist && state.features.autoplayBlacklist.keys) || [];
+      return keys.includes(clean);
+    },
+    toggle(key) {
+      if (!key) return;
+      const clean = String(key).trim();
+      const keys = (state.features.autoplayBlacklist.keys = state.features.autoplayBlacklist.keys || []);
+      const idx = keys.indexOf(clean);
+      if (idx === -1) keys.push(clean);
+      else keys.splice(idx, 1);
+      Prefs.save();
+    },
+    getBlacklist() {
+      return ((state.features.autoplayBlacklist && state.features.autoplayBlacklist.keys) || []).slice();
+    }
+  });
+
+  /* ---- Remember where in the song you were -------------------------------------
+     The last song is remembered by Prefs (lastTrackId). This remembers the position in it, written every few seconds
+     while it plays and when it pauses, so reopening the app (also after Android closed it) carries on with that song
+     from there instead of picking the next one in the queue. Kept apart from Prefs: it is written often, and cheap. */
+  const RESUME_KEY = 'moonlight_resume';
+  const ResumePoint = {
+    _lastWrite: 0,
+    write(id, sec) {
+      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, sec: Math.max(0, Math.floor(sec || 0)) })); } catch (e) { /* non-fatal */ }
+    },
+    read() {
+      try {
+        const o = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
+        return o && typeof o.id === 'string' && typeof o.sec === 'number' ? o : null;
+      } catch (e) { return null; }
+    },
+    tick() {                                       // during playback: at most every 5 seconds
+      const now = Date.now();
+      if (!state.currentTrackId || now - this._lastWrite < 5000) return;
+      this._lastWrite = now;
+      this.write(state.currentTrackId, state.positionSec);
+    },
+    flush() {                                      // on pause
+      if (!state.currentTrackId) return;
+      this._lastWrite = Date.now();
+      this.write(state.currentTrackId, state.positionSec);
+    },
+  };
+
   /* ---- Remember the last song ---------------------------------------------------
      Every time a track starts, the audio prefs are saved with it as `lastTrackId`
      (see Prefs.save), so the next launch can bring that song back. */
@@ -2341,7 +2530,10 @@ window.NovelAudio = (function () {
     id: 'lastTrack', label: 'Remember last song', status: 'working',
     defaults: {},
     persistKeys: [],
-    trackStart() { Prefs.save(); },
+    trackStart(track) {
+      Prefs.save();
+      if (track) ResumePoint.write(track.id, state.currentTrackId === track.id ? state.positionSec : 0);
+    },
   });
 
   /* ---- Liked tracks ---------------------------------------------------------
@@ -2539,6 +2731,10 @@ window.NovelAudio = (function () {
       els.xf = document.getElementById('audio-xf');
       els.xfValue = document.getElementById('audio-xf-value');
       els.queue = document.getElementById('audio-queue');
+      els.order = document.getElementById('audio-order');
+      els.orderBack = document.getElementById('audio-order-back');
+      els.orderSub = document.getElementById('audio-order-sub');
+      els.orderList = document.getElementById('audio-order-list');
       els.empty = document.getElementById('audio-empty');
       els.note = document.getElementById('audio-status-note');
       els.playlistRow = document.getElementById('audio-playlist-row');
@@ -2751,6 +2947,26 @@ window.NovelAudio = (function () {
         if (next) AudioEngine.play(next);
       });
 
+      // "Current playback order" screen: the back arrow closes it, a row plays that song, scrolling loads more rows.
+      if (els.orderBack && els.orderBack.addEventListener) els.orderBack.addEventListener('click', () => AudioUI.closeOrder());
+      if (els.orderList && els.orderList.addEventListener) {
+        els.orderList.addEventListener('click', (e) => {
+          if (e.target.closest && e.target.closest('.pe-grip')) return;       // the handle only drags
+          const row = e.target.closest && e.target.closest('[data-order-id]');
+          if (!row) return;
+          const next = PlaybackQueue.jumpTo(row.getAttribute('data-order-id'));
+          if (next) AudioEngine.play(next);
+        });
+        els.orderList.addEventListener('pointerdown', (e) => {
+          const grip = e.target.closest && e.target.closest('.pe-grip');
+          const row = grip && grip.closest('.po-row');
+          if (row) AudioUI._startOrderDrag(row, e, grip);
+        });
+        els.orderList.addEventListener('scroll', () => {
+          if (els.orderList.scrollTop + els.orderList.clientHeight >= els.orderList.scrollHeight - 400) AudioUI._drawMoreOrder();
+        });
+      }
+
       // Duplicate confirmation dialog wiring
       const dupeLayer = document.getElementById('dupe-dialog-layer');
       const dupeKeep = document.getElementById('dupe-btn-keep');
@@ -2765,9 +2981,22 @@ window.NovelAudio = (function () {
 
       if (dupeLayer) {
         dupeLayer.addEventListener('click', (e) => {
-          if (e.target === dupeLayer) MediaLibrary.closeDuplicateDialog();
+          if (e.target === dupeLayer) MediaLibrary.dismissDuplicateDialog();
         });
       }
+
+      // Autoplay blacklist dialog wiring
+      const blLayer = document.getElementById('blacklist-dialog-layer');
+      const blClose = document.getElementById('blacklist-dialog-close');
+      const blDone = document.getElementById('blacklist-dialog-done');
+      if (blClose) blClose.addEventListener('click', () => AudioUI.closeBlacklistDialog());
+      if (blDone) blDone.addEventListener('click', () => AudioUI.closeBlacklistDialog());
+      if (blLayer) {
+        blLayer.addEventListener('click', (e) => {
+          if (e.target === blLayer) AudioUI.closeBlacklistDialog();
+        });
+      }
+      AudioUI.updateBlacklistStatus();
 
       AudioUI.renderPlaylistOptions();
     },
@@ -3100,6 +3329,194 @@ window.NovelAudio = (function () {
       els.newInput.value = '';
       els.newInput.focus();
     },
+    /* ---- "Current playback order": a screen (Now playing "..." menu) showing the order the songs play in ----
+       The bar says how many songs and whether shuffle is on. Rows are in the look of the playlist
+       editor (picture, title, artist), numbered, the song playing now marked, songs already played dimmed.
+       Rows are drawn 100 at a time while scrolling so a long playlist does not slow the page down. */
+    _orderOpen: false,
+    _orderKey: '',
+    _orderIds: [],
+    _orderDrawn: 0,
+    _ORDER_CHUNK: 100,
+    openOrder() {
+      if (!els.order || !state.queue.length) return false;
+      this._orderOpen = true;
+      this._orderKey = '';
+      this._renderOrder(true);
+      return true;
+    },
+    closeOrder() {
+      if (this._orderDrag) this._endOrderDrag();
+      this._orderOpen = false;
+      if (els.order) els.order.classList.add('hidden');
+    },
+    _renderOrder(force) {
+      if (!els.order) return;
+      const total = state.queue.length;
+      els.order.classList.toggle('hidden', !this._orderOpen);
+      if (els.orderSub) els.orderSub.textContent = total + (total === 1 ? ' song' : ' songs') + ' \u00b7 ' + (state.shuffle ? 'shuffle on' : 'in order');
+      if (!this._orderOpen || !els.orderList) return;
+      const key = state.queue.join('|') + '#' + MediaLibrary.infoRev;
+      if (!force && key === this._orderKey && els.orderList.childElementCount) {
+        this._markOrder();      // the same list: only move the "playing" mark
+        return;
+      }
+      this._orderKey = key;
+      this._orderIds = PlaybackQueue.playingOrder();
+      els.orderList.innerHTML = '';
+      this._orderDrawn = 0;
+      // enough rows to reach the song playing now, then a screenful beyond it
+      const upto = Math.max(this._ORDER_CHUNK, state.queueIndex + this._ORDER_CHUNK);
+      while (this._orderDrawn < Math.min(upto, this._orderIds.length)) this._drawMoreOrder();
+      this._markOrder();
+      const now = els.orderList.querySelector ? els.orderList.querySelector('.po-row.now') : null;
+      if (now && now.scrollIntoView && state.queueIndex > 2) { try { now.scrollIntoView({ block: 'center' }); } catch (e) { /* non-fatal */ } }
+    },
+    _drawMoreOrder() {
+      if (!els.orderList || this._orderDrawn >= this._orderIds.length) return;
+      const end = Math.min(this._orderIds.length, this._orderDrawn + this._ORDER_CHUNK);
+      for (let i = this._orderDrawn; i < end; i++) {
+        const t = MediaLibrary.getTrack(this._orderIds[i]);
+        if (!t) continue;
+        const row = document.createElement('div');
+        row.className = 'pe-row po-row';
+        row.setAttribute('data-order-id', t.id);
+        row.setAttribute('data-order-index', String(i));
+        const num = document.createElement('div');
+        num.className = 'po-num';
+        num.textContent = String(i + 1);
+        row.appendChild(num);
+        const tile = document.createElement('div');
+        tile.className = 'pe-art';
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'ico');
+        svg.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS(NS, 'use');
+        use.setAttribute('href', '#i-moon-music');
+        svg.appendChild(use);
+        tile.appendChild(svg);
+        row.appendChild(tile);
+        const text = document.createElement('div');
+        text.className = 'pe-text';
+        const name = document.createElement('div');
+        name.className = 'pe-name';
+        name.textContent = t.title || 'Unknown song';
+        text.appendChild(name);
+        if (t.artist) {
+          const artist = document.createElement('div');
+          artist.className = 'pe-artist';
+          artist.textContent = t.artist;
+          text.appendChild(artist);
+        }
+        row.appendChild(text);
+        const grip = document.createElement('button');
+        grip.type = 'button';
+        grip.className = 'pe-grip';
+        grip.setAttribute('aria-label', 'Drag to move: ' + (t.title || 'song'));
+        const gsvg = document.createElementNS(NS, 'svg');
+        gsvg.setAttribute('class', 'ico');
+        gsvg.setAttribute('aria-hidden', 'true');
+        const guse = document.createElementNS(NS, 'use');
+        guse.setAttribute('href', '#i-menu');
+        gsvg.appendChild(guse);
+        grip.appendChild(gsvg);
+        row.appendChild(grip);
+        els.orderList.appendChild(row);
+        // the picture comes from the same loader the playlist editor uses (one per animation frame)
+        try { if (window.PlaylistEditor && window.PlaylistEditor.art) window.PlaylistEditor.art(tile, t); } catch (e) { /* the icon stays */ }
+      }
+      this._orderDrawn = end;
+      this._markOrder();
+    },
+    /* ---- dragging a row: like the playlist editor, rows have a fixed height (72px, CSS .pe-row), so the
+       position under the finger is plain arithmetic. The DOM row moves in whole rows, the transform covers the rest. ---- */
+    _orderDrag: null,
+    _ORDER_ROW_H: 72,
+    _startOrderDrag(row, e, grip) {
+      if (this._orderDrag || !els.orderList) return;
+      if (e.preventDefault) e.preventDefault();
+      const list = els.orderList;
+      const rows = Array.prototype.slice.call(list.children);
+      const idx = rows.indexOf(row);
+      if (idx < 0) return;
+      try { if (grip && grip.setPointerCapture && e.pointerId !== undefined) grip.setPointerCapture(e.pointerId); } catch (err) { /* the document listeners below still work */ }
+      const d = { row: row, startIdx: idx, curIdx: idx, startY: e.clientY, startScroll: list.scrollTop, lastY: e.clientY, raf: 0 };
+      this._orderDrag = d;
+      row.classList.add('dragging');
+      d.move = (ev) => { d.lastY = ev.clientY; AudioUI._followOrder(); };
+      d.up = () => AudioUI._endOrderDrag();
+      document.addEventListener('pointermove', d.move);
+      document.addEventListener('pointerup', d.up);
+      document.addEventListener('pointercancel', d.up);
+      this._autoScrollOrder();
+    },
+    _followOrder() {
+      const d = this._orderDrag;
+      if (!d) return;
+      const list = els.orderList;
+      const H = this._ORDER_ROW_H;
+      const dy = (d.lastY - d.startY) + (list.scrollTop - d.startScroll);
+      const count = list.children.length;
+      const want = Math.max(0, Math.min(count - 1, d.startIdx + Math.round(dy / H)));
+      if (want !== d.curIdx) {
+        const rows = Array.prototype.slice.call(list.children);
+        list.insertBefore(d.row, want > d.curIdx ? (rows[want + 1] || null) : rows[want]);
+        d.curIdx = want;
+      }
+      d.row.style.transform = 'translateY(' + (dy - (d.curIdx - d.startIdx) * H) + 'px)';
+    },
+    _autoScrollOrder() {
+      const d = this._orderDrag;
+      if (!d) return;
+      const list = els.orderList;
+      if (list.getBoundingClientRect) {
+        const r = list.getBoundingClientRect();
+        if (d.lastY < r.top + 60) list.scrollTop -= 14;
+        else if (d.lastY > r.bottom - 60) list.scrollTop += 14;
+        this._followOrder();
+      }
+      d.raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => AudioUI._autoScrollOrder()) : 0;
+    },
+    _endOrderDrag() {
+      const d = this._orderDrag;
+      if (!d) return;
+      this._orderDrag = null;
+      document.removeEventListener('pointermove', d.move);
+      document.removeEventListener('pointerup', d.up);
+      document.removeEventListener('pointercancel', d.up);
+      if (d.raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(d.raf);
+      d.row.classList.remove('dragging');
+      d.row.style.transform = '';
+      if (d.curIdx === d.startIdx) return;
+      // New queue = the rows as they are now, then the rows not drawn yet (the tail never moves), then any song without a row.
+      const rows = Array.prototype.slice.call(els.orderList.children);
+      const ids = rows.map((r) => r.getAttribute('data-order-id'));
+      const tail = this._orderIds.slice(this._orderDrawn);
+      const known = new Set(ids.concat(tail));
+      const missing = this._orderIds.filter((id) => !known.has(id));
+      if (!PlaybackQueue.setQueueOrder(ids.concat(tail, missing))) { this._orderKey = ''; this._renderOrder(true); return; }
+      this._orderIds = PlaybackQueue.playingOrder();
+      rows.forEach((r, i) => {
+        r.setAttribute('data-order-index', String(i));
+        const n = r.querySelector ? r.querySelector('.po-num') : null;
+        if (n) n.textContent = String(i + 1);
+      });
+      this._orderKey = state.queue.join('|') + '#' + MediaLibrary.infoRev;   // already drawn: render() must not rebuild it
+      this._markOrder();
+      AudioUI.render();
+    },
+    // "now" = the song playing, "done" = songs before it in this order (already played in the round).
+    _markOrder() {
+      if (!els.orderList || !els.orderList.children) return;
+      const cur = state.queueIndex;
+      Array.prototype.forEach.call(els.orderList.children, (row) => {
+        const i = parseInt(row.getAttribute('data-order-index'), 10);
+        row.classList.toggle('now', i === cur);
+        row.classList.toggle('done', i < cur);
+      });
+    },
+
     _createList() {
       const name = els.newInput.value.trim();
       if (!name) { els.newInput.focus(); return; }
@@ -3156,6 +3573,86 @@ window.NovelAudio = (function () {
         ? String(Math.round((state.positionSec / state.durationSec) * 1000))
         : '0';
       syncSliderFill(els.seek);
+    },
+
+    isBlacklistDialogOpen() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      return !!(layer && !layer.classList.contains('hidden'));
+    },
+
+    closeBlacklistDialog() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      if (layer) layer.classList.add('hidden');
+      this.updateBlacklistStatus();
+    },
+
+    getBlacklistStatusText() {
+      const keys = (AudioFeatures.autoplayBlacklist && AudioFeatures.autoplayBlacklist.getBlacklist()) || [];
+      if (!keys.length) return 'No playlists blacklisted';
+      return keys.length === 1 ? '1 playlist blacklisted' : keys.length + ' playlists blacklisted';
+    },
+
+    updateBlacklistStatus() {
+      const el = typeof document !== 'undefined' && document.getElementById('autoplay-blacklist-status');
+      if (el) el.textContent = this.getBlacklistStatusText();
+    },
+
+    openBlacklistDialog() {
+      const layer = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-layer');
+      if (!layer) return;
+      this.renderBlacklistDialog();
+      layer.classList.remove('hidden');
+    },
+
+    renderBlacklistDialog() {
+      const listEl = typeof document !== 'undefined' && document.getElementById('blacklist-dialog-list');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      const bl = AudioFeatures.autoplayBlacklist;
+      const names = AudioUI._playlistNames().filter(n => n !== 'all');
+
+      if (!names.length) {
+        const empty = document.createElement('div');
+        empty.className = 'bl-empty';
+        empty.textContent = 'No playlists found';
+        listEl.appendChild(empty);
+        return;
+      }
+
+      names.forEach((name) => {
+        const item = document.createElement('div');
+        item.className = 'bl-item';
+
+        const info = document.createElement('div');
+        info.className = 'bl-item-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'bl-item-name';
+        nameSpan.textContent = playlistLabel(name);
+
+        const countSpan = document.createElement('span');
+        countSpan.className = 'bl-item-count';
+        const cnt = AudioUI._playlistCount(name);
+        countSpan.textContent = cnt === 1 ? '1 song' : cnt + ' songs';
+
+        info.appendChild(nameSpan);
+        info.appendChild(countSpan);
+
+        const check = document.createElement('div');
+        check.className = 'bl-checkbox' + (bl.isBlacklisted(name) ? ' checked' : '');
+
+        item.appendChild(info);
+        item.appendChild(check);
+
+        item.addEventListener('click', () => {
+          bl.toggle(name);
+          check.classList.toggle('checked', bl.isBlacklisted(name));
+          this.updateBlacklistStatus();
+        });
+
+        listEl.appendChild(item);
+      });
     },
 
     render() {
@@ -3244,12 +3741,15 @@ window.NovelAudio = (function () {
       // while a specific playlist is selected, since every visible row
       // already belongs to it.
       const showPlaylistTags = state.activePlaylist === 'all' && MediaLibrary.getPlaylists().length > 0;
+      // The song list keeps the playlist's own order, also while shuffle is on (see PlaybackQueue.displayOrder).
+      const listOrder = PlaybackQueue.displayOrder();
+      AudioUI._renderOrder();       // the "Playing order" drop-down (cheap while it is closed)
       // infoRev changes when a song's title / artist is edited, so the rows are redrawn with the new names.
-      const queueKey = showPlaylistTags + '|' + MediaLibrary.infoRev + '|' + state.queue.map(id => {
+      const queueKey = showPlaylistTags + '|' + MediaLibrary.infoRev + '|' + listOrder.map(id => {
         const t = MediaLibrary.getTrack(id);
         return id + ':' + (t ? t.durationSec + (t.playlist || '') : '');
       }).join(',');
-      if (state.queue.length > 0 && queueKey === queueRenderKey && els.queue.childElementCount === state.queue.length) {
+      if (listOrder.length > 0 && queueKey === queueRenderKey && els.queue.childElementCount === listOrder.length) {
         // Same list as last time: just move the "playing" highlight
         // instead of tearing down and rebuilding every row.
         Array.prototype.forEach.call(els.queue.children, li => {
@@ -3259,7 +3759,7 @@ window.NovelAudio = (function () {
       }
       queueRenderKey = queueKey;
       els.queue.innerHTML = '';
-      state.queue.forEach(id => {
+      listOrder.forEach(id => {
         const t = MediaLibrary.getTrack(id);
         if (!t) return;
         const li = document.createElement('li');
@@ -3344,7 +3844,23 @@ window.NovelAudio = (function () {
       let connected = false;
       try { connected = !!bridge.isBluetoothAudioConnected(); } catch (e) { /* treat as not connected */ }
       const id = state.currentTrackId || PlaybackQueue.current();
-      if (connected && id) AudioEngine.play(id);
+      if (!connected || !id) return;
+
+      const bl = AudioFeatures.autoplayBlacklist;
+      if (bl && bl.isBlacklisted) {
+        if (bl.isBlacklisted(state.activePlaylist)) return;
+        if (state.activePlaylist === 'all') {
+          const t = MediaLibrary.getTrack(id);
+          if (t) {
+            const names = MediaLibrary._namesOf(t);
+            if (names.length > 0 && names.every(n => bl.isBlacklisted(n))) {
+              return;
+            }
+          }
+        }
+      }
+
+      AudioEngine.play(id);
     },
   };
 
@@ -3393,12 +3909,26 @@ window.NovelAudio = (function () {
     removeDuplicates(opts) { return MediaLibrary.removeDuplicates(opts); },
     findDuplicates() { return MediaLibrary.findDuplicates(state.tracks).map(g => ({ keep: g.keep.id, drop: g.drop.map(d => d.id) })); },
     isDuplicateDialogOpen() { return MediaLibrary.isDuplicateDialogOpen(); },
-    closeDuplicateDialog() { return MediaLibrary.closeDuplicateDialog(); },
+    openPlayingOrder() { return AudioUI.openOrder(); },
+    closePlayingOrder() { AudioUI.closeOrder(); },
+    isPlayingOrderOpen() { return !!AudioUI._orderOpen; },
+    closeDuplicateDialog() { return MediaLibrary.dismissDuplicateDialog(); },       // used by Back: counts as "keep the rest"
     getDuplicateQueue() { return MediaLibrary._dupeQueue ? MediaLibrary._dupeQueue.slice() : []; },
     isDuplicateIgnored(a, b) { return MediaLibrary.isDuplicateIgnored(a, b); },
     ignoreDuplicatePair(a, b) { MediaLibrary.ignoreDuplicatePair(a, b); },
     ignoreRemainingDuplicates() { MediaLibrary.ignoreRemainingDuplicates(); },
     clearIgnoredDuplicates() { MediaLibrary.clearIgnoredDuplicates(); },
+    isBlacklistDialogOpen() { return AudioUI.isBlacklistDialogOpen(); },
+    closeBlacklistDialog() { AudioUI.closeBlacklistDialog(); },
+    openBlacklistDialog() { AudioUI.openBlacklistDialog(); },
+    getBlacklistStatusText() { return AudioUI.getBlacklistStatusText(); },
+    updateBlacklistStatus() { AudioUI.updateBlacklistStatus(); },
+    isPlaylistAutoplayBlacklisted(k) { return AudioFeatures.autoplayBlacklist.isBlacklisted(k); },
+    toggleAutoplayBlacklist(k) {
+      AudioFeatures.autoplayBlacklist.toggle(k);
+      AudioUI.updateBlacklistStatus();
+    },
+    getAutoplayBlacklist() { return AudioFeatures.autoplayBlacklist.getBlacklist(); },
     getIgnoredDuplicates() {
       const st = state.features.duplicates;
       return (st && Array.isArray(st.ignoredPairs)) ? st.ignoredPairs.slice() : [];
@@ -3722,7 +4252,11 @@ window.NovelAudio = (function () {
        One link per line (the page each song was downloaded from, see Id3Tag.kt), notes start with #, so the same
        file can be read back by an import later. Songs without a source link are only counted. */
     getPlaylistLinksText(uiName, title) {
-      const tracks = this.getPlaylistTracks(uiName || 'all');
+      let raw = String(uiName || 'all');
+      let cleanKey = raw;
+      if (cleanKey.indexOf('name:') === 0) cleanKey = cleanKey.slice(5);
+      else if (cleanKey.indexOf('list:') === 0) cleanKey = '@list:' + cleanKey.slice(5);
+      const tracks = this.getPlaylistTracks(cleanKey);
       const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
       const seen = new Set(), body = [];
       let withLink = 0;
@@ -3735,9 +4269,10 @@ window.NovelAudio = (function () {
         const label = clean(t.title) + (t.artist ? ' - ' + clean(t.artist) : '');
         body.push('# ' + label, link, '');
       });
-      const name = clean(title) || 'Playlist';
+      const name = clean(title) || (cleanKey !== 'all' ? cleanKey.replace(/^@list:/, 'Playlist ') : 'Playlist');
       const head = ['# Moonlight playlist links', '# name: ' + name];
-      const info = uiName && uiName !== 'all' ? this.getPlaylistInfo(uiName.indexOf('@list:') === 0 ? 'list:' + uiName.slice(6) : 'name:' + uiName) : null;
+      const infoKey = cleanKey && cleanKey !== 'all' ? (cleanKey.indexOf('@list:') === 0 ? 'list:' + cleanKey.slice(6) : (cleanKey.indexOf('@') === 0 ? null : 'name:' + cleanKey)) : null;
+      const info = infoKey ? this.getPlaylistInfo(infoKey) : null;
       if (info && info.description) head.push('# description: ' + clean(info.description));
       head.push('# songs: ' + tracks.length + ' (' + seen.size + ' with a source link)', '# One link per line. Lines that start with # are notes.', '');
       return { text: head.concat(body).join('\n'), count: seen.size, total: tracks.length, name: name };
@@ -3929,9 +4464,12 @@ window.NovelAudio = (function () {
     // The songs of any playlist by the name used in the UI ('all', '@list:3', '@liked', 'Lo-fi'): the Songs-list order.
     getPlaylistTracks(name) {
       if (!name || name === 'all') return state.tracks.slice();
-      const virtual = AudioFeatures.selectionFor(name);
+      let key = String(name || '');
+      if (key.indexOf('name:') === 0) key = key.slice(5);
+      else if (key.indexOf('list:') === 0) key = '@list:' + key.slice(5);
+      const virtual = AudioFeatures.selectionFor(key);
       if (virtual) return virtual.map(id => MediaLibrary.getTrack(id)).filter(Boolean);
-      return MediaLibrary.tracksInPlaylist(name);
+      return MediaLibrary.tracksInPlaylist(key);
     },
 
     // The shuffle button: a NEW shuffle of the playlist now shown, played from the first song of that shuffle.
@@ -3996,7 +4534,9 @@ window.NovelAudio = (function () {
       const positionSec = state.positionSec;
 
       if (wasPlaying) LocalAudioEngine.pause();
-      if (currentId && positionSec) state.handoffPositionSec = positionSec;
+      // Only a song that is really playing is handed over mid-way. A song that is just shown (the one remembered from the
+      // last launch, with its saved position) is resumed through state.resumeSeek when it is played, and only that song.
+      if (currentId && positionSec && wasPlaying) state.handoffPositionSec = positionSec;
 
       AudioEngine = NativeAudioEngine;
       AudioFeatures.emit('engineChanged', NativeAudioEngine);
@@ -4014,11 +4554,25 @@ window.NovelAudio = (function () {
     // referenced directly from outside this closure.
     _nativeOnLoaded(durationSec) { NativeAudioEngine.onLoaded(durationSec); },
     _nativeOnStateChanged(playing) { NativeAudioEngine.onStateChanged(playing); },
-    _nativeOnProgress(positionSec, durationSec) { NativeAudioEngine.onProgress(positionSec, durationSec); },
+    _nativeOnProgress(positionSec, durationSec, path) { NativeAudioEngine.onProgress(positionSec, durationSec, path); },
     _nativeOnEnded() { NativeAudioEngine.onTrackEnded(); },
     _nativeOnError(message) { NativeAudioEngine.onError(message); },
     _nativeOnSkipNext() { NativeAudioEngine.onSkipNext(); },
     _nativeOnSkipPrevious() { NativeAudioEngine.onSkipPrevious(); },
+    _nativeOnActive(data) {
+      if (!data || !data.active) return;
+      // A song is already loaded in the background player (the app was swiped away or reopened while it played or
+      // was paused): it keeps going, and the start-up auto play must never replace it with another song.
+      StartupPlayback.done = true;
+      // Returning to the app also reports the running song. Right after this page itself loaded or crossfaded to a song, the
+      // player may still report the previous one for a moment: that must not put the old song back on the screen.
+      if (AudioEngine === NativeAudioEngine && NativeAudioEngine._loadedTrackId && Date.now() - NativeAudioEngine._lastLoadAt < 3000) return;
+      if (state.tracks && state.tracks.length > 0) {
+        MediaLibrary._syncActiveTrack(data);
+      } else {
+        state.pendingActivePlayback = data;
+      }
+    },
 
     /* Called by the reading-session timer when a break overlay appears.
      * Pauses playback and remembers that it was *we* who paused, so
@@ -4041,6 +4595,16 @@ window.NovelAudio = (function () {
     // Local search over the indexed song records, and the playlist files (read-only here).
     searchTracks(query) { return MediaLibrary.search(query); },
     getPlaylistFiles() { return MediaLibrary.playlistFiles(); },
+    setUserName(raw, rng) {
+      let name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim().slice(0, 32);
+      const roll = typeof rng === 'function' ? rng() : Math.random();
+      if (name && roll < 0.1) {
+        if (/^johnny\s*doe$/i.test(name)) name = 'Guru';
+        else if (/^niranjan$/i.test(name)) name = 'Knight Toe';
+      }
+      this.setSetting('userName', name);
+      return name;
+    },
 
     // Native bridge callback — see MediaLibrary.scan() for the contract.
     onAudioListed(tracks) {
@@ -4079,6 +4643,16 @@ window.onAudioListed = function (tracksJson) {
   }
 };
 
+// Fired when the native engine reports an already-active background playback session.
+window.onNativeAudioActive = function (json) {
+  try {
+    const data = typeof json === 'string' ? JSON.parse(json) : json;
+    window.NovelAudio._nativeOnActive(data);
+  } catch (e) {
+    console.error('Failed to parse native active audio', e);
+  }
+};
+
 // Fired once MainActivity has successfully connected a MediaController
 // to PlaybackService — see MainActivity.kt's connectNativePlayer().
 window.onNativeAudioReady = function () {
@@ -4105,8 +4679,8 @@ window.onNativeAudioState = function (json) {
 
 // Fired roughly every 500ms while playing (see MainActivity.kt's
 // startProgressUpdates()).
-window.onNativeAudioProgress = function (positionSec, durationSec) {
-  window.NovelAudio._nativeOnProgress(positionSec, durationSec);
+window.onNativeAudioProgress = function (positionSec, durationSec, path) {
+  window.NovelAudio._nativeOnProgress(positionSec, durationSec, path);
 };
 
 window.onNativeAudioEnded = function () {

@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.app.NotificationManager
 import android.app.PendingIntent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import android.content.Context
 import android.content.Intent
 import androidx.annotation.OptIn
@@ -68,10 +69,12 @@ import com.google.common.collect.ImmutableList
  */
 @UnstableApi
 private class AlwaysOngoingMediaNotificationProvider(
+    private val appContext: Context,
     private val delegate: DefaultMediaNotificationProvider
 ) : MediaNotification.Provider by delegate {
 
     constructor(context: Context) : this(
+        context.applicationContext,
         DefaultMediaNotificationProvider(context).apply {
             // Proper monochrome status-bar glyph (the launcher icon renders
             // as a solid blob there).
@@ -96,17 +99,16 @@ private class AlwaysOngoingMediaNotificationProvider(
         n.flags = n.flags or Notification.FLAG_ONGOING_EVENT
 
         // Modern look: tint and colourise the notification from the cover
-        // art (a deep shade of its dominant colour), falling back to the
-        // app's purple accent. Android 13+ restyles media notifications
-        // itself; this covers older versions and the tinted accents.
+        // art (a deep shade of its dominant colour), falling back to
+        // Moonlight's active accent colour. Android 13+ restyles media
+        // notifications itself; this covers older versions and the tinted accents.
         val art = mediaSession.player.mediaMetadata.artworkData
-        n.color = art?.let { dominantColor(it) } ?: ACCENT_FALLBACK
+        n.color = art?.let { dominantColor(it) } ?: DownloadForegroundService.getAccentColor(appContext)
         n.extras.putBoolean("android.colorized", true)
         return built
     }
 
     private companion object {
-        const val ACCENT_FALLBACK = 0xFFBC44DD.toInt()
 
         /** Average colour of a tiny decode of the art, darkened so the
          * white notification text always has strong contrast. */
@@ -352,7 +354,7 @@ class PlaybackService : MediaSessionService() {
     private val idleStopRunnable = Runnable {
         val p = mediaSession?.player
         if ((p == null || !isPlaybackActive(p)) && !heldByMute()) {
-            getSystemService(NotificationManager::class.java)?.cancelAll()
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }

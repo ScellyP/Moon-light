@@ -357,5 +357,6 @@
 
   function isOpen() { return !!(layer && !layer.classList.contains('hidden')); }
 
-  root.PlaylistEditor = { open: open, close: close, isOpen: isOpen };
+  // art(tile, track): put the song's picture on a .pe-art tile. Used by the "Playing order" rows (audio-player.js).
+  root.PlaylistEditor = { open: open, close: close, isOpen: isOpen, art: queueArt };
 })(typeof window !== 'undefined' ? window : this);

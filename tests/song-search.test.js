@@ -93,14 +93,14 @@ check('highlight marks what was typed, ignoring case and accents', () => {
   assert.strictEqual(joined(S.highlight('', ['a'])), '');
 });
 
-check('recent searches: newest first, no repeats, at most 8', () => {
+check('recent searches: newest first, no repeats, at most 3', () => {
   let list = [];
-  ['rain', 'halo', 'Rain ', 'a', 'b', 'c', 'd', 'e', 'f', 'g'].forEach((q) => { list = S.addRecentSearch(list, q, 8); });
-  assert.strictEqual(list.length, 8);
-  assert.strictEqual(list[0], 'g');
+  ['rain', 'halo', 'Rain ', 'a', 'b', 'c', 'd'].forEach((q) => { list = S.addRecentSearch(list, q); });
+  assert.strictEqual(list.length, 3);
+  assert.deepStrictEqual(list, ['d', 'c', 'b']);
   assert.ok(!list.includes('halo'), 'the oldest dropped off');
-  assert.deepStrictEqual(S.addRecentSearch(['x'], '   ', 8), ['x']);
-  assert.deepStrictEqual(S.addRecentSearch(['Rain', 'x'], 'rain', 8), ['rain', 'x']);
+  assert.deepStrictEqual(S.addRecentSearch(['x'], '   ', 3), ['x']);
+  assert.deepStrictEqual(S.addRecentSearch(['Rain', 'x'], 'rain', 3), ['rain', 'x']);
 });
 
 check('5000 songs search in well under a second', () => {
@@ -270,9 +270,9 @@ check('the song being played is marked', () => {
 /* ---------------------------------------------------------------- the page structure */
 const body = HTML.slice(HTML.indexOf('<body'));
 
-check('the Search tab sits second in the bottom bar and has its view, input and chips', () => {
+check('the Search tab sits in the middle of the bottom bar and has its view, input and chips', () => {
   const nav = [...body.matchAll(/data-sp-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepStrictEqual(nav, ['library', 'search', 'album', 'track', 'download']);
+  assert.deepStrictEqual(nav, ['library', 'album', 'search', 'track', 'download']);
   ['sp-view-search', 'srch-input', 'srch-body', 'srch-clear', 'srch-chips'].forEach((id) => assert.ok(body.includes('id="' + id + '"'), id));
   ['all', 'songs', 'playlists', 'artists'].forEach((f) => assert.ok(body.includes('data-srch-filter="' + f + '"'), f));
   assert.ok(/#audio-panel\[data-view="search"\]/.test(HTML));

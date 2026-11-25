@@ -1092,6 +1092,112 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 #dialog-ok:hover { background: var(--accent-strong); }
 
+/* What's New popup (shown once after an update, reads whats-new.txt) */
+#whatsnew-dialog-layer {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#whatsnew-dialog-layer.hidden { display: none; }
+#whatsnew-dialog-box {
+  width: 100%; max-width: 360px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+.wn-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.wn-icon {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 50%;
+  background: color-mix(in srgb, var(--sp-accent, var(--accent)) 18%, transparent);
+  color: var(--sp-accent, var(--accent));
+}
+.wn-icon .ico { width: 20px; height: 20px; }
+#whatsnew-dialog-title { margin: 0; font: 700 18px/1.2 var(--font-ui); color: var(--text); }
+#whatsnew-dialog-version {
+  display: inline-block; margin-top: 2px;
+  font: 600 12px/1.2 var(--font-ui); letter-spacing: .04em;
+  color: var(--sp-accent, var(--accent));
+}
+#whatsnew-dialog-version.hidden { display: none; }
+#whatsnew-dialog-list {
+  margin: 0 0 18px;
+  max-height: 52vh; overflow-y: auto;
+  font-size: 13.5px; line-height: 1.5; color: var(--text);
+}
+.wn-heading { margin: 12px 0 6px; font-weight: 700; color: var(--sp-accent, var(--accent)); }
+.wn-heading:first-child { margin-top: 0; }
+.wn-h1 { font-size: 15px; }
+.wn-h2 { font-size: 13.5px; letter-spacing: .02em; text-transform: uppercase; }
+.wn-h3 { font-size: 13px; opacity: .9; }
+.wn-ul { margin: 0 0 10px; padding-left: 18px; }
+.wn-ul:last-child { margin-bottom: 0; }
+.wn-ul li { margin-bottom: 6px; }
+.wn-ul li:last-child { margin-bottom: 0; }
+.wn-p { margin: 0 0 8px; }
+.wn-p:last-child { margin-bottom: 0; }
+#whatsnew-dialog-list code {
+  padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  font-size: 12.5px;
+}
+.wn-actions { display: flex; justify-content: flex-end; }
+#whatsnew-dialog-ok {
+  padding: 10px 22px; background: var(--sp-accent, var(--accent)); color: var(--accent-ink, #0b0d12);
+  border: none; border-radius: 999px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+#whatsnew-dialog-ok:hover { background: var(--accent-strong); }
+
+/* First-launch name prompt */
+#name-dialog-layer {
+  position: fixed; inset: 0; z-index: 295;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#name-dialog-layer.hidden { display: none; }
+#name-dialog-box {
+  width: 100%; max-width: 340px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+#name-dialog-title { margin: 0 0 4px; font: 700 18px/1.2 var(--font-ui); color: var(--text); }
+#name-dialog-sub { margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+#name-dialog-input {
+  width: 100%; box-sizing: border-box; padding: 11px 13px; margin-bottom: 16px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 10px; color: var(--text); font: 600 15px/1.2 var(--font-ui); outline: none;
+}
+#name-dialog-input:focus { border-color: var(--sp-accent, var(--accent)); }
+.nm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+#name-dialog-skip {
+  padding: 10px 16px; background: transparent; color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+#name-dialog-ok {
+  padding: 10px 22px; background: var(--sp-accent, var(--accent)); color: var(--accent-ink, #0b0d12);
+  border: none; border-radius: 999px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+#name-dialog-ok:hover { background: var(--accent-strong); }
+.sd-name-input {
+  width: 120px; padding: 7px 10px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 8px; color: var(--text); font: 600 13.5px/1.2 var(--font-ui);
+  text-align: right; outline: none;
+}
+.sd-name-input:focus { border-color: var(--accent); }
+
 /* Duplicate confirmation dialog */
 #dupe-dialog-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -1161,6 +1267,66 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
   font: 500 12px/1 var(--font-ui); cursor: pointer; padding: 4px;
 }
 .dupe-link-btn:hover { color: var(--text); }
+
+/* Autoplay blacklist dialog */
+#blacklist-dialog-layer {
+  position: fixed; inset: 0; z-index: 310;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#blacklist-dialog-layer.hidden { display: none; }
+#blacklist-dialog-box {
+  width: 100%; max-width: 380px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+.bl-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.bl-head-title h3 { margin: 0; font: 700 18px/1.25 var(--font-ui); color: var(--text); }
+.bl-hint { margin: 4px 0 0; font-size: 12.5px; line-height: 1.35; color: var(--sp-sub, var(--muted)); }
+.bl-close-btn {
+  background: none; border: none; font-size: 24px; line-height: 1; color: var(--sp-sub, var(--muted));
+  cursor: pointer; padding: 0 4px;
+}
+.bl-close-btn:hover { color: var(--text); }
+.bl-list {
+  flex: 1 1 auto; overflow-y: auto; margin: 8px 0 16px; display: flex; flex-direction: column; gap: 6px;
+  max-height: 50vh; -webkit-overflow-scrolling: touch;
+}
+.bl-item {
+  display: flex; align-items: center; justify-content: space-between; padding: 10px 12px;
+  background: color-mix(in srgb, var(--text) 6%, transparent); border-radius: 10px; cursor: pointer;
+  transition: background-color .15s ease;
+}
+.bl-item:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.bl-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bl-item-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-item-count { font-size: 11.5px; color: var(--sp-sub, var(--muted)); }
+.bl-checkbox {
+  width: 20px; height: 20px; border-radius: 4px; border: 2px solid var(--sp-sub, var(--muted));
+  display: flex; align-items: center; justify-content: center; flex: none; transition: background .15s, border-color .15s;
+}
+.bl-checkbox.checked {
+  background: var(--sp-accent, var(--accent)); border-color: var(--sp-accent, var(--accent));
+}
+.bl-checkbox.checked::after {
+  content: ''; display: block; width: 5px; height: 9px;
+  border: solid var(--sp-ink, #000); border-width: 0 2px 2px 0;
+  transform: rotate(45deg); margin-top: -2px;
+}
+.bl-empty { padding: 20px; text-align: center; color: var(--sp-sub, var(--muted)); font-size: 13.5px; }
+.bl-actions { display: flex; justify-content: flex-end; }
+.bl-btn-done {
+  min-height: 40px; padding: 0 22px; border-radius: 999px; border: none;
+  background: var(--sp-accent, var(--accent)); color: var(--sp-ink, #000);
+  font: 700 13.5px/1 var(--font-ui); cursor: pointer;
+  transition: transform .15s ease, opacity .15s ease;
+}
+.bl-btn-done:active { transform: scale(.96); }
 
 /* "Delete chapters" popup: asks for a chapter number (reader.js). Same look as the message dialog. */
 #delete-layer {
@@ -2159,10 +2325,12 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 }
 
 .sp-view {
+  touch-action: pan-y;
   flex: 0 0 100%; width: 100%; height: 100%;
   overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
   scrollbar-width: none; box-sizing: border-box; padding-bottom: 16px;
   display: block;
+  transform: translateZ(0);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
@@ -2175,8 +2343,14 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 .sp-view:not(.is-active) {
   pointer-events: none;
 }
-.sp-view:not(.is-active) * {
+.sp-view:not(.is-active):not(.sp-peeking) * {
   animation-play-state: paused !important;
+}
+
+/* While swiping between tabs, force off-screen list items to paint immediately instead of staying gray placeholders */
+#audio-panel.sp-dragging .sp-view *,
+.sp-view.sp-peeking * {
+  content-visibility: visible !important;
 }
 
 /* Active tab */
@@ -2458,9 +2632,34 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #dl-stage[data-step="pl-resolving"] { justify-content: center; align-items: center; text-align: center; }
 .dl-pl-step { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; margin: auto 0; }
 .dl-pl-step .dl-hint, .dl-pl-step .dl-sub, .dl-pl-step .dl-title { text-align: center; align-self: center; }
-.dl-step { display: flex; flex-direction: column; align-items: center; width: 100%; animation: dlStepIn .24s var(--ease) both; }
+.dl-step { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; animation: dlStepIn .24s var(--ease) both; }
 .dl-step.dl-wide { align-items: stretch; }
 @keyframes dlStepIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.dl-cancel-btn {
+  background: transparent;
+  border: 0;
+  padding: 8px;
+  cursor: pointer;
+  color: #c8c8c8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .15s ease, background-color .15s ease, color .15s ease;
+}
+.dl-cancel-btn:active {
+  transform: scale(.9);
+  background-color: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.dl-cancel-btn .ico {
+  width: 22px;
+  height: 22px;
+  color: #c8c8c8;
+}
 
 /* Buttons: Spotify's pill, bold; bigger and a little brighter on hover, pressed in on tap. */
 .dl-primary, .dl-secondary {
@@ -2702,8 +2901,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sidebar-header { position: relative; }
 
 /* Live moon-phase badge (filled in by moon-theme.js). */
-.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; }
-.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
+.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; isolation: isolate; }
+.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; }
 #status-gap .moon-badge { position: absolute; right: 16px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; opacity: .75; pointer-events: none; }
 body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 
@@ -2766,8 +2965,8 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
   color: var(--text, #14171f);
   box-shadow: 0 4px 14px rgba(0,0,0,.08);
 }
-.moon-badge.big { width: 62px; height: 62px; filter: drop-shadow(0 0 10px rgba(243,239,224,.45)); }
-.theme-light .moon-badge.big { filter: drop-shadow(0 0 6px rgba(0,0,0,.18)); }
+.moon-badge.big { width: 62px; height: 62px; }
+.theme-light .moon-badge.big { }
 #sp-lib-phase { margin-top: -4px; font-size: 12px; letter-spacing: .06em; color: var(--sp-sub, var(--muted)); text-align: center; }
 
 /* Playing: the play button glows like the moon. */
@@ -2805,7 +3004,7 @@ button, a, li, input[type="range"], select, summary, [role="button"] { touch-act
    player's own playlist rows (#audio-playlist-list), which stay in the page
    but hidden: every tap here is forwarded to the matching row.
    ========================================================================= */
-#sp-greeting { margin: 0; padding-left: 8px; font: 700 24px/1.2 var(--font-ui); letter-spacing: .2px; color: var(--text); }
+#sp-greeting { margin: 0; padding-left: 8px; font: 700 clamp(20px, 5.5vw, 25px)/1.25 var(--font-ui); letter-spacing: .2px; color: var(--text); overflow-wrap: anywhere; word-break: break-word; }
 
 /* Today's moon, now a slim strip under the greeting: the moon, its phase and the Scan button on
    one row, the two counts on a row of their own below (they don't fit beside the button). */
@@ -2972,6 +3171,20 @@ textarea.sm-input { display: block; width: 100%; height: auto; min-height: 56px;
 .pe-grip .ico { width: 26px; height: 26px; }
 #pe-layer.selecting .pe-grip { visibility: hidden; }
 .pe-empty { padding: 48px 28px; text-align: center; color: var(--sp-sub, var(--faint)); font: 400 15px/1.5 var(--font-ui); }
+/* "Current playback order" screen (opened from the Now playing "..." menu): the editor's look, rows are .pe-row / .pe-art / .pe-text */
+#audio-order { position: fixed; inset: 0 0 var(--kb-height, 0px) 0; z-index: 93; display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+  padding-top: var(--status-bar-height, 0px); animation: pp-in .22s ease-out; }
+#audio-order.hidden { display: none; }
+#audio-order .pe-title { display: flex; flex-direction: column; gap: 2px; }
+.po-sub { font: 400 13px/1.3 var(--font-ui); color: var(--sp-sub, var(--faint)); }
+#audio-order-list { scrollbar-width: none; }
+#audio-order-list::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.po-row { cursor: pointer; background: transparent; }
+.po-row:active { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.po-num { flex: none; width: 34px; text-align: center; font: 600 14px/1 var(--font-ui); color: var(--sp-sub, var(--faint)); font-variant-numeric: tabular-nums; }
+.po-row.now .po-num, .po-row.now .pe-name { color: var(--accent); }
+.po-row.now .pe-name { font-weight: 700; }
+.po-row.done { opacity: .55; }
 .pe-selectbar { display: flex; gap: 10px; margin: 6px 16px calc(12px + var(--nav-bar-height, 0px)); }
 .pe-pill { flex: 1; height: 52px; border: 0; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--text) 13%, var(--bg)); color: var(--text);
   font: 600 16px/1 var(--font-ui); transition: transform .15s, opacity .15s; }
@@ -3192,9 +3405,58 @@ html, body { overflow: hidden; }
 .sd-foot { flex-shrink: 0; padding: 12px 20px calc(var(--nav-bar-height, 0px) + 14px); border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 40%, var(--panel-2)); }
 .sd-foot #update-bar { margin: 0 0 8px; }
 .sd-foot #update-auto-row { margin: 0; font-size: 14.5px; color: var(--text); cursor: pointer; }
-.sd-version-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 6px; }
-/* The old reader-app footer style gave the version a top line and padding: not wanted inside the menu. */
-.sd-foot #app-version { margin: 0; padding: 0; border: 0; text-align: left; font-size: 13px; letter-spacing: 0; color: var(--faint); cursor: default; }
+.sd-foot #update-auto-row.hidden { display: none !important; }
+.sd-version-row { display: flex; align-items: center; width: 100%; padding-top: 4px; }
+#update-check.sd-version-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+}
+#update-check.sd-version-box:active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel-2));
+  border-color: var(--accent-line);
+  transform: scale(.985);
+}
+.sd-version-box-meta {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 2px;
+}
+.sd-version-box-title {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13.5px;
+}
+.sd-version-box-hint {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.sd-foot #app-version {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: var(--r-pill, 999px);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent-strong, var(--text));
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  border: 1px solid var(--accent-line, var(--border));
+  cursor: pointer;
+}
 .sd-btn { padding: 9px 14px; min-height: 40px; border: 1px solid var(--accent-line); border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent-strong); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .sd-btn:active { background: var(--accent); color: var(--accent-ink); }
 body.settings-open #sp-views { pointer-events: none; }
@@ -3279,7 +3541,7 @@ mark.srch-hit { background: none; color: inherit; font-weight: 800; }
 .srch-page-text { min-width: 0; }
 .srch-page-text h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .srch-page-text p { margin: 2px 0 0; font-size: 13px; color: var(--faint); }
-.srch-rail { display: flex; gap: 12px; overflow-x: auto; margin: 0 -20px; padding: 2px 20px 8px; scroll-snap-type: x proximity; scrollbar-width: none; }
+.srch-rail { display: flex; gap: 12px; overflow-x: auto; margin: 0 -14px; padding: 2px 14px 8px; scroll-padding-inline: 14px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .srch-rail::-webkit-scrollbar { display: none; }
 .srch-card { position: relative; flex: 0 0 142px; height: 190px; padding: 12px; border: 0; border-radius: 12px; overflow: hidden; text-align: left; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
   color: var(--text); background: var(--tile, color-mix(in srgb, var(--accent) 30%, #3a2a5a)); scroll-snap-align: start; cursor: pointer; }
@@ -3462,25 +3724,6 @@ body.settings-open #srch-input { pointer-events: none; }
         </section>
 
         <!-- ============ SEARCH (song-search.js) ============ -->
-        <section id="sp-view-search" class="sp-view" aria-label="Search">
-          <div class="sp-topbar"><h1 id="srch-title-h">Search</h1></div>
-          <div id="srch-bar">
-            <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
-            <input id="srch-input" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="What do you want to listen to?" aria-label="Search your songs, artists and playlists">
-            <button type="button" id="srch-clear" aria-label="Clear search" hidden><svg class="ico"><use href="#i-close"/></svg></button>
-          </div>
-          <div id="srch-chips" role="group" aria-label="Filter results" hidden>
-            <button type="button" data-srch-filter="all" class="active" aria-pressed="true">All</button>
-            <button type="button" data-srch-filter="songs" aria-pressed="false">Songs</button>
-            <button type="button" data-srch-filter="playlists" aria-pressed="false">Playlists</button>
-            <button type="button" data-srch-filter="artists" aria-pressed="false">Artists</button>
-            <button type="button" data-srch-filter="albums" aria-pressed="false">Albums</button>
-            <button type="button" data-srch-filter="genres" aria-pressed="false">Genres</button>
-          </div>
-          <div id="srch-body" data-state="empty"></div>
-        </section>
-
-        <!-- ============ SONGS (kit: "Album View") ============ -->
         <section id="sp-view-album" class="sp-view" aria-label="Songs">
           <div class="sp-topbar">
             <button type="button" class="sp-icon-btn" id="sp-back-library" title="Library" aria-label="Back to library"><svg class="ico"><use href="#i-chev-left"/></svg></button>
@@ -3513,6 +3756,25 @@ body.settings-open #srch-input { pointer-events: none; }
         </section>
 
         <!-- ============ NOW PLAYING (kit: "Track View") ============ -->
+        <section id="sp-view-search" class="sp-view" aria-label="Search">
+          <div class="sp-topbar"><h1 id="srch-title-h">Search</h1></div>
+          <div id="srch-bar">
+            <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
+            <input id="srch-input" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="What do you want to listen to?" aria-label="Search your songs, artists and playlists">
+            <button type="button" id="srch-clear" aria-label="Clear search" hidden><svg class="ico"><use href="#i-close"/></svg></button>
+          </div>
+          <div id="srch-chips" role="group" aria-label="Filter results" hidden>
+            <button type="button" data-srch-filter="all" class="active" aria-pressed="true">All</button>
+            <button type="button" data-srch-filter="songs" aria-pressed="false">Songs</button>
+            <button type="button" data-srch-filter="playlists" aria-pressed="false">Playlists</button>
+            <button type="button" data-srch-filter="artists" aria-pressed="false">Artists</button>
+            <button type="button" data-srch-filter="albums" aria-pressed="false">Albums</button>
+            <button type="button" data-srch-filter="genres" aria-pressed="false">Genres</button>
+          </div>
+          <div id="srch-body" data-state="empty"></div>
+        </section>
+
+        <!-- ============ SONGS (kit: "Album View") ============ -->
         <section id="sp-view-track" class="sp-view" aria-label="Now playing">
           <div class="sp-topbar">
             <button type="button" class="sp-icon-btn" id="sp-track-down" title="Back" aria-label="Back to songs"><svg class="ico"><use href="#i-chev-down"/></svg></button>
@@ -3593,7 +3855,7 @@ body.settings-open #srch-input { pointer-events: none; }
         <section id="sp-view-download" class="sp-view" aria-label="Download songs">
           <div class="sp-topbar">
             <h1>Download songs</h1>
-            <button type="button" class="sp-icon-btn" data-close-panel title="Close" aria-label="Close music"><svg class="ico"><use href="#i-close"/></svg></button>
+            <button type="button" id="dl-cancel-btn" class="dl-cancel-btn sp-icon-btn" title="Cancel download" aria-label="Cancel download"><svg class="ico"><use href="#i-close"/></svg></button>
           </div>
           <div id="dl-body">
             <!-- One step at a time: song-download.js replaces this box's content as the steps go by. -->
@@ -3620,8 +3882,8 @@ body.settings-open #srch-input { pointer-events: none; }
       <!-- ============ Bottom navigation ============ -->
       <nav id="sp-nav" aria-label="Music navigation">
         <button type="button" data-sp-view="library"><svg class="ico"><use href="#sp-home"/></svg><span>Home</span></button>
-        <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="album"><svg class="ico"><use href="#i-moon-music"/></svg><span>Songs</span></button>
+        <button type="button" data-sp-view="search"><svg class="ico"><use href="#i-search"/></svg><span>Search</span></button>
         <button type="button" data-sp-view="track"><svg class="ico"><use href="#i-headphones"/></svg><span>Now playing</span></button>
         <button type="button" data-sp-view="download"><svg class="ico"><use href="#i-download"/></svg><span>Download</span></button>
       </nav>
@@ -3651,7 +3913,9 @@ body.settings-open #srch-input { pointer-events: none; }
               <button type="button" data-sp-sleep="60">60 min</button>
               <button type="button" data-sp-sleep="-1">End of track</button>
             </div>
-            <button type="button" data-sp-act="rescan"><svg class="ico"><use href="#i-refresh"/></svg><span>Scan the sky</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="playorder"><svg class="ico"><use href="#i-queue"/></svg><span>Current playback order</span></button>
+            <button type="button" class="sp-song-only" data-sp-act="sharesong"><svg class="ico"><use href="#i-share"/></svg><span>Share song</span></button>
+            <button type="button" class="sp-pl-only" data-sp-act="rescan"><svg class="ico"><use href="#i-refresh"/></svg><span>Scan the sky</span></button>
           </div>
           <button type="button" id="sp-sheet-close" data-sp-sheet-close>Close</button>
         </div>
@@ -3695,6 +3959,10 @@ body.settings-open #srch-input { pointer-events: none; }
           <span class="sd-switch-text">Play when Bluetooth connects<small>Starts the music when you open the app with headphones, a speaker or a car connected.</small></span>
           <input type="checkbox" id="set-bt" checked>
         </label>
+        <div class="sd-account" id="autoplay-blacklist-row">
+          <span class="sd-switch-text">Autoplay blacklist<small id="autoplay-blacklist-status">No playlists blacklisted</small><small>Choose playlists that should never start automatically on connect.</small></span>
+          <button type="button" id="autoplay-blacklist-btn" class="sd-btn">Manage</button>
+        </div>
       </section>
 
       <section class="sd-group" aria-labelledby="sd-downloads">
@@ -3711,6 +3979,10 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <section class="sd-group" aria-labelledby="sd-look">
         <h3 class="sd-title" id="sd-look">Appearance</h3>
+        <div class="sd-account" id="sd-name-row">
+          <span class="sd-switch-text">Your name<small>Shown in the Home greeting.</small></span>
+          <input type="text" id="set-user-name" class="sd-name-input" maxlength="32" placeholder="Name" aria-label="Your name" enterkeyhint="done">
+        </div>
         <label class="sd-switch" for="set-light-mode">
           <span class="sd-switch-text">Light mode<small>Brighten the interface with clean light surfaces and dark text.</small></span>
           <input type="checkbox" id="set-light-mode">
@@ -3758,17 +4030,30 @@ body.settings-open #srch-input { pointer-events: none; }
         <div id="update-progress" class="hidden"><div id="update-progress-fill"></div></div>
         <button id="update-action" type="button" class="hidden"></button>
       </div>
-      <label id="update-auto-row" class="sd-switch" for="update-auto">
+      <label id="update-auto-row" class="sd-switch hidden" for="update-auto" style="display:none;">
         <span class="sd-switch-text">Update automatically<small>Checks in the background and installs new versions.</small></span>
         <input type="checkbox" id="update-auto" checked>
       </label>
       <div class="sd-version-row">
-        <span id="app-version"></span>
-        <button type="button" id="update-check" class="sd-btn">Check for updates</button>
+        <button type="button" id="update-check" class="sd-version-box" aria-label="Current version">
+          <span class="sd-version-box-meta">
+            <span class="sd-version-box-title">Moonlight</span>
+          </span>
+          <span id="app-version"></span>
+        </button>
       </div>
 
     </footer>
   </aside>
+</div>
+
+<div id="audio-order" class="dyn-colours hidden" role="dialog" aria-label="Current playback order">
+  <div class="pe-bar">
+    <button type="button" class="pe-back" id="audio-order-back" aria-label="Back"><svg class="ico"><use href="#i-chev-left"/></svg></button>
+    <div class="pe-title"><span>Current playback order</span><small id="audio-order-sub" class="po-sub"></small></div>
+    <span></span>
+  </div>
+  <div id="audio-order-list" class="pe-list" role="list"></div>
 </div>
 
 <div id="dialog-layer" class="hidden" role="alertdialog" aria-modal="true" aria-describedby="dialog-message">
@@ -3776,6 +4061,32 @@ body.settings-open #srch-input { pointer-events: none; }
     <div id="dialog-icon"><svg class="ico"><use href="#i-info"/></svg></div>
     <p id="dialog-message"></p>
     <div id="dialog-actions"><button id="dialog-ok" type="button">Got it</button></div>
+  </div>
+</div>
+
+<div id="whatsnew-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="whatsnew-dialog-title">
+  <div id="whatsnew-dialog-box">
+    <div class="wn-head">
+      <div class="wn-icon"><svg class="ico"><use href="#i-info"/></svg></div>
+      <div>
+        <h3 id="whatsnew-dialog-title">What’s New</h3>
+        <span id="whatsnew-dialog-version"></span>
+      </div>
+    </div>
+    <div id="whatsnew-dialog-list"></div>
+    <div class="wn-actions"><button id="whatsnew-dialog-ok" type="button">Got it</button></div>
+  </div>
+</div>
+
+<div id="name-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="name-dialog-title">
+  <div id="name-dialog-box">
+    <h3 id="name-dialog-title">Welcome to Moonlight</h3>
+    <p id="name-dialog-sub">What should we call you on Home?</p>
+    <input type="text" id="name-dialog-input" maxlength="32" placeholder="Your name" aria-label="Your name" enterkeyhint="done">
+    <div class="nm-actions">
+      <button id="name-dialog-skip" type="button">Skip</button>
+      <button id="name-dialog-ok" type="button">Save</button>
+    </div>
   </div>
 </div>
 
@@ -3808,6 +4119,22 @@ body.settings-open #srch-input { pointer-events: none; }
     <div id="dupe-dialog-footer" class="hidden">
       <button id="dupe-btn-keep-all" type="button" class="dupe-link-btn">Keep all remaining</button>
       <button id="dupe-btn-move-all" type="button" class="dupe-link-btn">Move all remaining</button>
+    </div>
+  </div>
+</div>
+
+<div id="blacklist-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="blacklist-dialog-title">
+  <div id="blacklist-dialog-box">
+    <div class="bl-head">
+      <div class="bl-head-title">
+        <h3 id="blacklist-dialog-title">Autoplay Blacklist</h3>
+        <p class="bl-hint">Playlists checked below will never start automatically on connect.</p>
+      </div>
+      <button type="button" id="blacklist-dialog-close" class="bl-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div id="blacklist-dialog-list" class="bl-list"></div>
+    <div class="bl-actions">
+      <button type="button" id="blacklist-dialog-done" class="bl-btn-done">Done</button>
     </div>
   </div>
 </div>
@@ -3905,6 +4232,7 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="song-download.js"></script>
 <script src="moon-phase.js"></script>
 <script src="moon-theme.js"></script>
+<script src="whats-new.js"></script>
 <script src="player-app.js"></script>
 <script src="settings-menu.js"></script>
 <script src="song-backup.js"></script>
