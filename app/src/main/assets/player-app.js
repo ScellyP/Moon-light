@@ -141,6 +141,7 @@
      asks for a second back press before it exits. ---- */
   window.handleBack = function () {
     if (dialogOpen) { closeDialog(); return true; }
+    if (nameDialogOpen) { closeNameDialog(true); return true; }
     if (window.WhatsNew && window.WhatsNew.isOpen && window.WhatsNew.isOpen()) {
       window.WhatsNew.close();
       return true;
@@ -175,8 +176,63 @@
     return false;
   };
 
+  /* ---- first-launch name prompt ---- */
+  var NAME_ASKED_KEY = 'moonlight_name_asked_v1';
+  var nameLayer = document.getElementById('name-dialog-layer');
+  var nameInput = document.getElementById('name-dialog-input');
+  var nameOk = document.getElementById('name-dialog-ok');
+  var nameSkip = document.getElementById('name-dialog-skip');
+  var nameDialogOpen = false;
+
+  function closeNameDialog(markAsked) {
+    if (!nameLayer || !nameDialogOpen) return;
+    nameLayer.classList.add('hidden');
+    nameDialogOpen = false;
+    if (markAsked) {
+      try { localStorage.setItem(NAME_ASKED_KEY, '1'); } catch (e) {}
+    }
+  }
+  function saveNameDialog() {
+    var a = window.NovelAudio;
+    var val = nameInput ? nameInput.value : '';
+    if (a && a.setUserName) a.setUserName(val);
+    else if (a && a.setSetting) a.setSetting('userName', String(val || '').trim());
+    closeNameDialog(true);
+    if (window.SpotifyUI && window.SpotifyUI.refreshPlaylists) window.SpotifyUI.refreshPlaylists();
+  }
+  function maybeAskName() {
+    if (!nameLayer) return;
+    var a = window.NovelAudio;
+    var existing = a && a.getSetting ? a.getSetting('userName') : '';
+    var asked = false;
+    try { asked = localStorage.getItem(NAME_ASKED_KEY) === '1'; } catch (e) {}
+    if (existing || asked) return;
+    nameDialogOpen = true;
+    if (nameInput) nameInput.value = '';
+    nameLayer.classList.remove('hidden');
+    if (nameInput && nameInput.focus) {
+      try { nameInput.focus({ preventScroll: true }); } catch (e) {}
+    }
+  }
+  if (nameOk) nameOk.addEventListener('click', saveNameDialog);
+  if (nameSkip) nameSkip.addEventListener('click', function () { closeNameDialog(true); });
+  if (nameInput) nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveNameDialog(); });
+
   /* ---- start ---- */
   if (window.NovelAudio && window.NovelAudio.init) window.NovelAudio.init();
   if (window.NovelAudio && window.NovelAudio.onPanelOpened) window.NovelAudio.onPanelOpened();
-  if (window.WhatsNew && window.WhatsNew.checkAndShow) window.WhatsNew.checkAndShow();
+  if (window.WhatsNew && window.WhatsNew.checkAndShow) {
+    Promise.resolve(window.WhatsNew.checkAndShow()).then(function (shown) {
+      if (!shown) maybeAskName();
+      else {
+        var wnOk = document.getElementById('whatsnew-dialog-ok');
+        var wnLayer = document.getElementById('whatsnew-dialog-layer');
+        var afterWn = function () { setTimeout(maybeAskName, 120); };
+        if (wnOk) wnOk.addEventListener('click', afterWn, { once: true });
+        if (wnLayer) wnLayer.addEventListener('click', function (e) { if (e.target === wnLayer) afterWn(); }, { once: true });
+      }
+    });
+  } else {
+    maybeAskName();
+  }
 })();

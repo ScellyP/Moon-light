@@ -1152,6 +1152,52 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 #whatsnew-dialog-ok:hover { background: var(--accent-strong); }
 
+/* First-launch name prompt */
+#name-dialog-layer {
+  position: fixed; inset: 0; z-index: 295;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#name-dialog-layer.hidden { display: none; }
+#name-dialog-box {
+  width: 100%; max-width: 340px;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 22px 20px 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui);
+  animation: panelIn .22s var(--ease) both;
+}
+#name-dialog-title { margin: 0 0 4px; font: 700 18px/1.2 var(--font-ui); color: var(--text); }
+#name-dialog-sub { margin: 0 0 14px; font-size: 13.5px; color: var(--muted); }
+#name-dialog-input {
+  width: 100%; box-sizing: border-box; padding: 11px 13px; margin-bottom: 16px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  border-radius: 10px; color: var(--text); font: 600 15px/1.2 var(--font-ui); outline: none;
+}
+#name-dialog-input:focus { border-color: var(--sp-accent, var(--accent)); }
+.nm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+#name-dialog-skip {
+  padding: 10px 16px; background: transparent; color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent); border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+#name-dialog-ok {
+  padding: 10px 22px; background: var(--sp-accent, var(--accent)); color: var(--accent-ink, #0b0d12);
+  border: none; border-radius: 999px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+#name-dialog-ok:hover { background: var(--accent-strong); }
+.sd-name-input {
+  width: 120px; padding: 7px 10px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 8px; color: var(--text); font: 600 13.5px/1.2 var(--font-ui);
+  text-align: right; outline: none;
+}
+.sd-name-input:focus { border-color: var(--accent); }
+
 /* Duplicate confirmation dialog */
 #dupe-dialog-layer {
   position: fixed; inset: 0; z-index: 300;
@@ -2855,8 +2901,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sidebar-header { position: relative; }
 
 /* Live moon-phase badge (filled in by moon-theme.js). */
-.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; isolation: isolate; box-sizing: border-box; border: 1px solid color-mix(in srgb, currentColor 45%, transparent); background: color-mix(in srgb, currentColor 10%, transparent); }
-.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; border-radius: 50%; object-fit: contain; }
+.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; isolation: isolate; }
+.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; }
 #status-gap .moon-badge { position: absolute; right: 16px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; opacity: .75; pointer-events: none; }
 body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 
@@ -2919,8 +2965,8 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
   color: var(--text, #14171f);
   box-shadow: 0 4px 14px rgba(0,0,0,.08);
 }
-.moon-badge.big { width: 62px; height: 62px; box-shadow: 0 0 10px rgba(243,239,224,.35); }
-.theme-light .moon-badge.big { box-shadow: 0 0 6px rgba(0,0,0,.14); }
+.moon-badge.big { width: 62px; height: 62px; }
+.theme-light .moon-badge.big { }
 #sp-lib-phase { margin-top: -4px; font-size: 12px; letter-spacing: .06em; color: var(--sp-sub, var(--muted)); text-align: center; }
 
 /* Playing: the play button glows like the moon. */
@@ -2958,7 +3004,7 @@ button, a, li, input[type="range"], select, summary, [role="button"] { touch-act
    player's own playlist rows (#audio-playlist-list), which stay in the page
    but hidden: every tap here is forwarded to the matching row.
    ========================================================================= */
-#sp-greeting { margin: 0; padding-left: 8px; font: 700 24px/1.2 var(--font-ui); letter-spacing: .2px; color: var(--text); }
+#sp-greeting { margin: 0; padding-left: 8px; font: 700 clamp(20px, 5.5vw, 25px)/1.25 var(--font-ui); letter-spacing: .2px; color: var(--text); overflow-wrap: anywhere; word-break: break-word; }
 
 /* Today's moon, now a slim strip under the greeting: the moon, its phase and the Scan button on
    one row, the two counts on a row of their own below (they don't fit beside the button). */
@@ -3933,6 +3979,10 @@ body.settings-open #srch-input { pointer-events: none; }
 
       <section class="sd-group" aria-labelledby="sd-look">
         <h3 class="sd-title" id="sd-look">Appearance</h3>
+        <div class="sd-account" id="sd-name-row">
+          <span class="sd-switch-text">Your name<small>Shown in the Home greeting.</small></span>
+          <input type="text" id="set-user-name" class="sd-name-input" maxlength="32" placeholder="Name" aria-label="Your name" enterkeyhint="done">
+        </div>
         <label class="sd-switch" for="set-light-mode">
           <span class="sd-switch-text">Light mode<small>Brighten the interface with clean light surfaces and dark text.</small></span>
           <input type="checkbox" id="set-light-mode">
@@ -4025,6 +4075,18 @@ body.settings-open #srch-input { pointer-events: none; }
     </div>
     <div id="whatsnew-dialog-list"></div>
     <div class="wn-actions"><button id="whatsnew-dialog-ok" type="button">Got it</button></div>
+  </div>
+</div>
+
+<div id="name-dialog-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="name-dialog-title">
+  <div id="name-dialog-box">
+    <h3 id="name-dialog-title">Welcome to Moonlight</h3>
+    <p id="name-dialog-sub">What should we call you on Home?</p>
+    <input type="text" id="name-dialog-input" maxlength="32" placeholder="Your name" aria-label="Your name" enterkeyhint="done">
+    <div class="nm-actions">
+      <button id="name-dialog-skip" type="button">Skip</button>
+      <button id="name-dialog-ok" type="button">Save</button>
+    </div>
   </div>
 </div>
 

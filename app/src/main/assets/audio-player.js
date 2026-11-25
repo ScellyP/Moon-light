@@ -2456,7 +2456,7 @@ window.NovelAudio = (function () {
        lightMode    clean light surfaces with dark text */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true, userName: '' },
   });
 
   /* ---- Duplicate song memory ----------------------------------------------------
@@ -4595,6 +4595,16 @@ window.NovelAudio = (function () {
     // Local search over the indexed song records, and the playlist files (read-only here).
     searchTracks(query) { return MediaLibrary.search(query); },
     getPlaylistFiles() { return MediaLibrary.playlistFiles(); },
+    setUserName(raw, rng) {
+      let name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim().slice(0, 32);
+      const roll = typeof rng === 'function' ? rng() : Math.random();
+      if (name && roll < 0.1) {
+        if (/^johnny\s*doe$/i.test(name)) name = 'Guru';
+        else if (/^niranjan$/i.test(name)) name = 'Knight Toe';
+      }
+      this.setSetting('userName', name);
+      return name;
+    },
 
     // Native bridge callback — see MediaLibrary.scan() for the contract.
     onAudioListed(tracks) {

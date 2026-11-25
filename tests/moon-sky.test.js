@@ -235,8 +235,9 @@ const MoonSky = require('../app/src/main/assets/moon-theme');
       MoonSky.paintMoonBadges();
       const svg = badgeEl.children[0];
       assert.strictEqual(svg.getAttribute('shape-rendering'), 'geometricPrecision', 'uses geometricPrecision');
-      assert.strictEqual(svg.children[0].getAttribute('r'), '12', 'disc fills 24x24 viewBox cleanly');
-      assert.strictEqual(svg.style.transform, 'rotate(0.0deg)', 'applies CodePen-style tilt based on phase fraction');
+      assert.strictEqual(svg.getAttribute('viewBox'), '0 0 200 200', 'uses high-res padded 200x200 viewBox');
+      assert.strictEqual(svg.children[0].getAttribute('r'), '88', 'disc stays inside viewBox with clean margin');
+      assert.strictEqual(svg.children[1].getAttribute('transform'), 'rotate(0.0 100 100)', 'applies vector tilt on SVG group');
     } finally {
       global.document = savedDoc;
     }

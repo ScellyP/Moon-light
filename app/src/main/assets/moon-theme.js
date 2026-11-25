@@ -21,16 +21,17 @@
     document.querySelectorAll('[data-moon]').forEach(function (el) {
       el.textContent = '';
       const svg = document.createElementNS(NS, 'svg');
-      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('viewBox', '0 0 200 200');
       svg.setAttribute('aria-hidden', 'true');
       svg.setAttribute('shape-rendering', 'geometricPrecision');
-      if (svg.style) svg.style.transform = 'rotate(' + tilt + 'deg)';
       const disc = document.createElementNS(NS, 'circle');
-      disc.setAttribute('cx', '12'); disc.setAttribute('cy', '12'); disc.setAttribute('r', '12');
-      disc.setAttribute('fill', 'currentColor'); disc.setAttribute('fill-opacity', '.14');
+      disc.setAttribute('cx', '100'); disc.setAttribute('cy', '100'); disc.setAttribute('r', '88');
+      disc.setAttribute('fill', 'currentColor'); disc.setAttribute('fill-opacity', '.12');
+      disc.setAttribute('stroke', 'currentColor'); disc.setAttribute('stroke-opacity', '.5'); disc.setAttribute('stroke-width', '6');
       const lit = document.createElementNS(NS, 'path');
-      lit.setAttribute('d', ml.moonPhasePath(phase.fraction, 12, 12, 12));
+      lit.setAttribute('d', ml.moonPhasePath(phase.fraction, 100, 100, 85));
       lit.setAttribute('fill', 'currentColor');
+      lit.setAttribute('transform', 'rotate(' + tilt + ' 100 100)');
       svg.appendChild(disc); svg.appendChild(lit);
       el.appendChild(svg);
       el.setAttribute('title', label);

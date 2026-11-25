@@ -1532,7 +1532,9 @@
   function syncHome() {
     if (!home.grid || !home.madeRow || !home.listsRow) return;
 
-    const greeting = greetingForHour(new Date().getHours());
+    const baseGreeting = greetingForHour(new Date().getHours());
+    const userName = (window.NovelAudio && window.NovelAudio.getSetting && window.NovelAudio.getSetting('userName')) || '';
+    const greeting = userName ? (baseGreeting + '! ' + userName) : baseGreeting;
     if (home.greeting && home.greeting.textContent !== greeting) home.greeting.textContent = greeting;
 
     try { syncRecent(); } catch (error) { /* the rest of Home must still build */ }

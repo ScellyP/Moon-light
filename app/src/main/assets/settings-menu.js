@@ -121,6 +121,7 @@
   }
 
   function show() {
+    syncUserNameInput();
     clearTimeout(closeTimer);
     layer.classList.add('is-open');
     layer.setAttribute('aria-hidden', 'false');
@@ -242,6 +243,27 @@
 
   if (openBtn) openBtn.addEventListener('click', open);
   if (closeBtn) closeBtn.addEventListener('click', close);
+
+  /* ---- user name ---- */
+  var nameInput = document.getElementById('set-user-name');
+  function syncUserNameInput() {
+    if (!nameInput) return;
+    var a = audio();
+    nameInput.value = (a && a.getSetting && a.getSetting('userName')) || '';
+  }
+  if (nameInput) {
+    var commitName = function () {
+      var a = audio();
+      var saved = a && a.setUserName ? a.setUserName(nameInput.value) : String(nameInput.value || '').trim();
+      nameInput.value = saved;
+      if (root.SpotifyUI && root.SpotifyUI.refreshPlaylists) root.SpotifyUI.refreshPlaylists();
+    };
+    nameInput.addEventListener('change', commitName);
+    nameInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { nameInput.blur(); }
+    });
+    syncUserNameInput();
+  }
 
   /* ---- the switches ---- */
   function audio() { return root.NovelAudio || null; }
