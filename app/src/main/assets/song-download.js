@@ -1313,6 +1313,9 @@
   /** Kick off the next queued item (if any). */
   function plStartNext() {
     if (!pl || pl.step !== 'pl-downloading') return;
+    while (pl.queueIndex < pl.items.length && pl.items[pl.queueIndex].status !== 'queued') {
+      pl.queueIndex++;
+    }
     const idx = pl.queueIndex;
     if (idx >= pl.items.length) return;
     pl.queueIndex++;
@@ -1358,6 +1361,7 @@
       plCheckDone(); return;
     }
     item.status = 'dl';
+    savePlState();
     b.stageSong(jobId, item.url);
   }
 
@@ -1437,6 +1441,7 @@
     if (!b || typeof b.placeSong !== 'function') { pl = null; render(); return; }
     const jobId = 'pl-place-' + pl.saveIndex + '-' + Date.now().toString(36);
     item.placeJobId = jobId;
+    savePlState();
     b.placeSong(jobId, item.path, cleanSongName(item.name), cleanFolderName(pl.title));
   }
 
@@ -1694,10 +1699,10 @@
     };
 
     selAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = true; }); updateAll();
+      successItems.forEach((it) => { it.keep = true; }); updateAll(); savePlState();
     });
     deselAll.addEventListener('click', () => {
-      successItems.forEach((it) => { it.keep = false; }); updateAll();
+      successItems.forEach((it) => { it.keep = false; }); updateAll(); savePlState();
     });
 
     successItems.forEach((item, si) => {
@@ -1734,6 +1739,7 @@
       textWrap.appendChild(nameDisp);
       textWrap.appendChild(nameInput);
       row.appendChild(textWrap);
+      nameInput.addEventListener('input', () => { savePlState(); });
 
       // Right: pencil + keep/skip toggle
       const actions = el('div', 'dl-sp-row-actions');
@@ -1764,6 +1770,7 @@
           ? '<svg class="ico dl-sp-act-ico dl-sp-act-keep"><use href="#i-download"/></svg>'
           : '<svg class="ico dl-sp-act-ico dl-sp-act-skip"><use href="#i-close"/></svg>';
         updateCta();
+        savePlState();
       });
       actions.appendChild(toggleBtn);
 
@@ -1912,7 +1919,193 @@
     'pl-downloading': buildPlDownloading, 'pl-edit': buildPlEdit, 'pl-saving': buildPlSaving,
   };
 
+  const PL_STORAGE_KEY = 'moonlight_pl_dl_v1';
+
+  function savePlState() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      if (!pl || pl.step === 'pl-error') {
+        localStorage.removeItem(PL_STORAGE_KEY);
+        return;
+      }
+      const items = Array.isArray(pl.items) ? pl.items : [];
+      const savingIndices = Array.isArray(pl.saving)
+        ? pl.saving.map((it) => items.indexOf(it)).filter((i) => i >= 0)
+        : [];
+      localStorage.setItem(PL_STORAGE_KEY, JSON.stringify({
+        url: String(pl.url || ''),
+        step: String(pl.step || ''),
+        title: String(pl.title || ''),
+        tracks: Array.isArray(pl.tracks) ? pl.tracks.slice() : [],
+        queueIndex: Number(pl.queueIndex) || 0,
+        skipped: Number(pl.skipped) || 0,
+        done: Number(pl.done) || 0,
+        failed: Number(pl.failed) || 0,
+        saveIndex: Number(pl.saveIndex) || 0,
+        savingIndices,
+        items: items.map((it) => ({
+          url: String(it.url || ''),
+          jobId: String(it.jobId || ''),
+          name: String(it.name || ''),
+          path: String(it.path || ''),
+          crop: it.crop && typeof it.crop === 'object' ? { x: Number(it.crop.x) || 0, y: Number(it.crop.y) || 0, size: Number(it.crop.size) || 1 } : null,
+          status: String(it.status || 'queued'),
+          error: String(it.error || ''),
+          keep: it.keep !== false,
+          dupeName: String(it.dupeName || ''),
+          placeJobId: String(it.placeJobId || ''),
+        })),
+      }));
+    } catch (e) {}
+  }
+
+  function loadPlState() {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(PL_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function restorePlState(saved, { isStaged, activeJobs, bufferedResults, onCrop } = {}) {
+    if (!saved || !saved.step || saved.step === 'pl-error') return false;
+    const b = bridge();
+    if (saved.step === 'pl-resolving') {
+      if (saved.url) startPlaylistFlow(saved.url);
+      return !!saved.url;
+    }
+    const activeSet = new Set(Array.isArray(activeJobs) ? activeJobs : []);
+    const buffered = bufferedResults && typeof bufferedResults === 'object' ? bufferedResults : {};
+    const items = (Array.isArray(saved.items) ? saved.items : []).map((it) => ({
+      url: String(it.url || ''),
+      jobId: String(it.jobId || ''),
+      name: String(it.name || ''),
+      path: String(it.path || ''),
+      fullArt: '',
+      art: '',
+      crop: it.crop && typeof it.crop === 'object' ? { x: Number(it.crop.x) || 0, y: Number(it.crop.y) || 0, size: Number(it.crop.size) || 1 } : null,
+      status: String(it.status || 'queued'),
+      error: String(it.error || ''),
+      keep: it.keep !== false,
+      dupeName: String(it.dupeName || ''),
+      placeJobId: String(it.placeJobId || ''),
+      percent: it.status === 'done' ? 100 : -1,
+      eta: -1,
+      speed: '',
+      downloaded: '',
+      total: '',
+    }));
+
+    pl = {
+      url: String(saved.url || ''),
+      step: String(saved.step),
+      title: String(saved.title || 'Playlist'),
+      tracks: Array.isArray(saved.tracks) ? saved.tracks.slice() : [],
+      items,
+      queueIndex: Number(saved.queueIndex) || 0,
+      skipped: 0,
+      done: 0,
+      failed: 0,
+      saveIndex: Number(saved.saveIndex) || 0,
+      saving: [],
+    };
+
+    if (pl.step === 'pl-confirm') {
+      savePlState();
+      return true;
+    }
+
+    const savingIndices = Array.isArray(saved.savingIndices) ? saved.savingIndices : [];
+    const savingSet = new Set(savingIndices);
+    const toReplayDl = [];
+    items.forEach((item, idx) => {
+      if (item.status === 'done') {
+        if (pl.step === 'pl-saving' && savingSet.has(idx)) {
+          return;
+        }
+        const ok = item.path && (!isStaged || isStaged(item.path));
+        if (!ok) {
+          item.status = 'queued';
+          item.path = '';
+          item.jobId = '';
+          item.crop = null;
+        } else {
+          if (item.crop && onCrop) {
+            try { onCrop(item.path, item.crop); } catch (e) {}
+          }
+          if (b && typeof b.getArtwork === 'function') {
+            try { const a = b.getArtwork(item.path); item.fullArt = a || ''; item.art = item.fullArt; } catch (e) {}
+          }
+        }
+      } else if (item.status === 'dl') {
+        if (item.jobId && buffered[item.jobId]) {
+          toReplayDl.push(item.jobId);
+        } else if (!item.jobId || !activeSet.has(item.jobId)) {
+          item.status = 'queued';
+          item.jobId = '';
+          item.error = '';
+        }
+      }
+    });
+
+    const recount = () => {
+      pl.done = items.filter((it) => it.status === 'done').length;
+      pl.failed = items.filter((it) => it.status === 'failed').length;
+      pl.skipped = items.filter((it) => it.status === 'skipped').length;
+    };
+    recount();
+
+    if (pl.step === 'pl-downloading') {
+      const firstQueued = items.findIndex((it) => it.status === 'queued');
+      pl.queueIndex = firstQueued >= 0 ? firstQueued : items.length;
+      toReplayDl.forEach((jid) => {
+        const res = buffered[jid];
+        if (res) onPlSongStatus(jid, res.status, res.message);
+      });
+      if (pl && pl.step === 'pl-downloading') {
+        const activeCount = items.filter((it) => it.status === 'dl').length;
+        const slots = Math.max(0, PL_CONCURRENCY - activeCount);
+        for (let s = 0; s < slots; s++) plStartNext();
+        plCheckDone();
+      }
+      savePlState();
+      return true;
+    }
+
+    if (pl.step === 'pl-edit') {
+      savePlState();
+      return true;
+    }
+
+    if (pl.step === 'pl-saving') {
+      pl.saving = savingIndices.map((idx) => items[idx]).filter(Boolean);
+      pl.saveIndex = Math.max(0, Math.min(pl.saveIndex, pl.saving.length));
+      const cur = pl.saving[pl.saveIndex];
+      if (!cur) {
+        pl = null;
+        savePlState();
+        return false;
+      }
+      if (cur.placeJobId && buffered[cur.placeJobId]) {
+        onPlPlaceDone(cur.placeJobId, buffered[cur.placeJobId].status === 'done');
+      } else if (!cur.placeJobId || !activeSet.has(cur.placeJobId)) {
+        if (cur.path && (!isStaged || isStaged(cur.path))) {
+          placeSaved();
+        } else {
+          pl.saveIndex++;
+          placeSaved();
+        }
+      }
+      savePlState();
+      return true;
+    }
+
+    savePlState();
+    return true;
+  }
+
   function render() {
+    savePlState();
     const s = wizard.state;
     // A step that is redrawn because something happened in the background (the next song finished
     // downloading) must not take the keyboard away from a field being typed in.
@@ -2010,7 +2203,7 @@
     });
   }
 
-  (function restoreWizardOnStartup() {
+  (function restoreDownloadsOnStartup() {
     const b = bridge();
     let sync = null;
     if (b && typeof b.getSongDownloadSyncState === 'function') {
@@ -2018,22 +2211,25 @@
     }
     if (sync && sync.cancelled) {
       saveWizardState(null);
+      try { if (typeof localStorage !== 'undefined') localStorage.removeItem(PL_STORAGE_KEY); } catch (e) {}
       return;
     }
-    const saved = loadWizardState();
-    if (!saved) return;
     const bufferedResults = {};
     if (sync && Array.isArray(sync.results)) {
       sync.results.forEach((r) => { if (r && r.jobId) bufferedResults[r.jobId] = r; });
     }
-    wizard.restore(saved, {
+    const restoreOpts = {
       isStaged: (p) => !!(b && typeof b.isStagedFile === 'function' && b.isStagedFile(p)),
       activeJobs: (sync && Array.isArray(sync.activeJobs)) ? sync.activeJobs : [],
       bufferedResults,
       onCrop: (p, crop) => {
         try { if (b && typeof b.songStageCrop === 'function' && crop) b.songStageCrop(p, crop.x, crop.y, crop.size); } catch (e) {}
       },
-    });
+    };
+    const saved = loadWizardState();
+    if (saved) wizard.restore(saved, restoreOpts);
+    const savedPl = loadPlState();
+    if (savedPl) restorePlState(savedPl, restoreOpts);
   })();
 
   render();

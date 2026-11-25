@@ -1047,6 +1047,29 @@ check('song-download.js persists wizard state in localStorage, restores on reope
   assert.strictEqual(s2.win.SongDownload.wizard.state.step, 'name', 'restored and replayed buffered s1 -> name step');
   assert.strictEqual(s2.win.SongDownload.wizard.state.items[0].path, STAGED(1));
   assert.strictEqual(s2.stageEl.getAttribute('data-step'), 'name');
+
+  // Playlist flow persistence across app close & reopen:
+  delete store.moonlight_song_dl_wizard_v1;
+  const pStaged = [];
+  const p1 = mountApp({
+    stageSong: (id, url) => { pStaged.push({ id, url }); return true; },
+  });
+  p1.win.onIncomingMoonlightFile('# name: Road\nhttps://youtu.be/r1\nhttps://youtu.be/r2', 'Road.moonlight');
+  assert.ok(store.moonlight_pl_dl_v1, 'playlist state persisted to localStorage');
+  assert.strictEqual(pStaged.length, 2);
+
+  // Reopen app: r1 finished while closed, r2 still active -> transitions to pl-downloading with 1 done, 1 active
+  const p2 = mountApp({
+    getSongDownloadSyncState: () => JSON.stringify({
+      activeJobs: [pStaged[1].id],
+      results: [{ jobId: pStaged[0].id, status: 'done', message: STAGED(1) }],
+      cancelled: false,
+    }),
+  });
+  assert.strictEqual(p2.stageEl.getAttribute('data-step'), 'pl-downloading');
+  // r2 finishes in reopened session -> transitions to pl-edit
+  p2.win.onSongDownloadStatus(pStaged[1].id, 'done', STAGED(2));
+  assert.strictEqual(p2.stageEl.getAttribute('data-step'), 'pl-edit');
 });
 
 console.log(n + ' checks passed');
