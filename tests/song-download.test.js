@@ -670,4 +670,383 @@ check('playlist notification includes skipped songs and stops queue on Stopped',
   assert.ok(!callOrder.some((c) => c.endsWith(':1/1')), 'cancel never sends 1/1 completion signal');
 });
 
+check('dynamic notification accent colours across Kotlin, XML layouts, and spotify-ui.js', () => {
+  const kdir = path.join(__dirname, '../app/src/main/java/com/scell/moonlight');
+  const resDir = path.join(__dirname, '../app/src/main/res');
+  const mainKt = fs.readFileSync(path.join(kdir, 'MainActivity.kt'), 'utf8');
+  const fgKt = fs.readFileSync(path.join(kdir, 'DownloadForegroundService.kt'), 'utf8');
+  const pbKt = fs.readFileSync(path.join(kdir, 'PlaybackService.kt'), 'utf8');
+  const bgKt = fs.readFileSync(path.join(kdir, 'BackgroundUpdater.kt'), 'utf8');
+  const collapsedXml = fs.readFileSync(path.join(resDir, 'layout/notification_download_collapsed.xml'), 'utf8');
+  const expandedXml = fs.readFileSync(path.join(resDir, 'layout/notification_download_expanded.xml'), 'utf8');
+  const spotifyJs = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/spotify-ui.js'), 'utf8');
+
+  assert.ok(/@JavascriptInterface\s+fun setNotificationAccent\(accentHex:\s*String,\s*accentStrongHex:\s*String\)/.test(mainKt),
+    'MainActivity exposes setNotificationAccent bridge method');
+  assert.ok(fgKt.includes('getSharedPreferences(PREFS_ACCENT, Context.MODE_PRIVATE)'),
+    'DownloadForegroundService persists accent in SharedPreferences');
+  assert.ok(fgKt.includes('refreshActiveNotification(context)'),
+    'DownloadForegroundService live-refreshes active download notification');
+  assert.ok(fgKt.includes('setTextColor(R.id.notif_dl_badge, accentColor)'),
+    'DownloadForegroundService tints badge text dynamically');
+  assert.ok(fgKt.includes('setImageViewBitmap(R.id.notif_dl_progress'),
+    'DownloadForegroundService renders progress bar onto Bitmap for RemoteViews');
+  assert.ok(fgKt.includes('renderProgressBarBitmap('),
+    'DownloadForegroundService has renderProgressBarBitmap');
+  assert.ok(pbKt.includes('DownloadForegroundService.getAccentColor(appContext)'),
+    'PlaybackService uses persisted accent fallback');
+  assert.ok(!pbKt.includes('ACCENT_FALLBACK = 0xFFBC44DD'),
+    'PlaybackService no longer hardcodes ACCENT_FALLBACK');
+  assert.ok(bgKt.includes('setColor(DownloadForegroundService.getAccentColor(context))'),
+    'BackgroundUpdater tints update notification with persisted accent');
+  assert.ok(collapsedXml.includes('<ImageView') && collapsedXml.includes('@+id/notif_dl_progress'),
+    'collapsed layout uses ImageView for minSdk 24 progress bar');
+  assert.ok(expandedXml.includes('<ImageView') && expandedXml.includes('@+id/notif_dl_progress'),
+    'expanded layout uses ImageView for minSdk 24 progress bar');
+  assert.ok(spotifyJs.includes('setNotificationAccent(') && spotifyJs.includes('syncNotificationAccent()'),
+    'spotify-ui.js syncs notification accent to AndroidBridge');
+});
+
+check('spotify-ui.js syncs notification accent on load, tint, theme switch, and bridge retry', () => {
+  const vm = require('vm');
+  const spotifyCode = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/spotify-ui.js'), 'utf8');
+  const { createNode } = require('./fake-dom');
+  const panel = createNode('div', { id: 'audio-panel' });
+  panel.style.setProperty = (k, v) => { panel.style[k] = v; };
+  panel.style.removeProperty = (k) => { delete panel.style[k]; };
+  const seek = createNode('input', { id: 'audio-seek' });
+  seek.disabled = false;
+  const artwork = createNode('div', { id: 'audio-artwork' });
+  const docEl = createNode('html');
+  const mutationCallbacks = [];
+  let themeAccent = '#bc44dd';
+  let themeStrong = '#cb6fe5';
+  let coverTintEnabled = true;
+  let shouldThrowOnce = true;
+  const calls = [];
+
+  const sandbox = {
+    console,
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+    setInterval: () => 0,
+    clearInterval: () => {},
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame: () => {},
+    getComputedStyle: () => ({
+      getPropertyValue: (name) => {
+        if (name === '--bg') return '#0b0d12';
+        if (name === '--accent') return themeAccent;
+        if (name === '--accent-strong') return themeStrong;
+        return '';
+      },
+    }),
+    MutationObserver: class {
+      constructor(cb) { this.cb = cb; mutationCallbacks.push(cb); }
+      observe() {}
+    },
+    document: {
+      hidden: false,
+      documentElement: docEl,
+      getElementById: (id) => (id === 'audio-panel' ? panel : id === 'audio-seek' ? seek : id === 'audio-artwork' ? artwork : null),
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+    },
+    NovelAudio: {
+      getSetting: (k) => (k === 'coverTint' ? coverTintEnabled : true),
+    },
+    AndroidBridge: {
+      setNotificationAccent: (a, s) => {
+        if (shouldThrowOnce) {
+          shouldThrowOnce = false;
+          throw new Error('bridge not ready');
+        }
+        calls.push([a, s]);
+      },
+    },
+  };
+  sandbox.window = sandbox;
+  vm.runInContext(spotifyCode, vm.createContext(sandbox));
+
+  // setView->sync->resetTint->pushTint throws once; line 1940 initial syncNotificationAccent() retries and succeeds
+  assert.strictEqual(shouldThrowOnce, false, 'first call threw as expected');
+  assert.deepStrictEqual(calls[0], ['#bc44dd', '#cb6fe5'], 'retries initial theme accent after bridge error');
+
+  sandbox.SpotifyUI.syncTint();
+  assert.strictEqual(calls.length, 1, 'deduplicates unchanged accent');
+
+  themeAccent = 'rgb(153 43 184)';
+  themeStrong = '#83229e';
+  mutationCallbacks[0]();
+  assert.deepStrictEqual(calls[1], ['#992bb8', '#83229e'],
+    'MutationObserver syncs light theme accent and parses space-separated rgb()');
+
+  sandbox.SpotifyUI.applyTint([220, 60, 40]);
+  assert.strictEqual(calls.length, 3, 'applyTint pushes cover-art accent to AndroidBridge');
+  assert.match(calls[2][0], /^#[0-9a-f]{6}$/);
+  assert.match(calls[2][1], /^#[0-9a-f]{6}$/);
+  assert.notStrictEqual(calls[2][0], '#992bb8', 'cover-art tint replaces theme accent');
+
+  coverTintEnabled = false;
+  sandbox.SpotifyUI.refreshTint();
+  assert.strictEqual(calls.length, 3, 'refreshTint runs cleanly when coverTint is disabled');
+});
+
+check('single-song backgrounding & persistence wiring in Kotlin and JS', () => {
+  const kdir = path.join(__dirname, '../app/src/main/java/com/scell/moonlight');
+  const dlKt = fs.readFileSync(path.join(kdir, 'SongDownloader.kt'), 'utf8');
+  const mainKt = fs.readFileSync(path.join(kdir, 'MainActivity.kt'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+
+  // SongDownloader is application-scoped, detachable, buffers results, and notifies for s1/s2/...
+  assert.ok(dlKt.includes('fun getInstance(context: Context): SongDownloader'), 'SongDownloader has getInstance');
+  assert.ok(dlKt.includes('fun attach(') && dlKt.includes('fun detach('), 'SongDownloader has attach/detach');
+  assert.ok(dlKt.includes('fun shouldKeepAliveOnDestroy(): Boolean'), 'SongDownloader has shouldKeepAliveOnDestroy');
+  assert.ok(dlKt.includes('fun consumeSyncStateJson(): String'), 'SongDownloader has consumeSyncStateJson');
+  assert.ok(dlKt.includes("jobId[0] == 's' && jobId[1].isDigit()"), 'postSongResultNotification handles s1/s2/... jobs');
+
+  // MainActivity detaches onDestroy when active & enabled, and exposes bridge helpers
+  assert.ok(mainKt.includes('SongDownloader.getInstance(applicationContext)'), 'MainActivity uses SongDownloader.getInstance');
+  assert.ok(mainKt.includes('if (songDownloader.shouldKeepAliveOnDestroy())'), 'MainActivity checks shouldKeepAliveOnDestroy in onDestroy');
+  assert.ok(mainKt.includes('songDownloader.detach()'), 'MainActivity detaches instead of releasing');
+  assert.ok(/@JavascriptInterface\s+fun isStagedFile\(path:\s*String\):\s*Boolean/.test(mainKt), 'MainActivity exposes isStagedFile');
+  assert.ok(/@JavascriptInterface\s+fun getSongDownloadSyncState\(\):\s*String/.test(mainKt), 'MainActivity exposes getSongDownloadSyncState');
+
+  // MutationObserver does not call wizard.leave() on tab switch
+  const observerBlock = js.match(/new MutationObserver\(\(\) => \{[\s\S]*?\}\)\.observe/);
+  assert.ok(observerBlock && !observerBlock[0].includes('wizard.leave()'), 'tab switch MutationObserver does not call wizard.leave()');
+});
+
+check('wizard.snapshot and wizard.restore reconcile ready, downloading, placing, and dead jobs', () => {
+  // 1. Ready item kept if staged, crop re-applied; downloading item reattached if still active
+  const persisted = [];
+  const crops = [];
+  const log1 = [];
+  const w1 = SD.createWizard({
+    stage(id, url) { log1.push('stage ' + id + ' ' + url); return true; },
+    place(id, p, name, folder) { log1.push('place ' + id + ' ' + p + ' | ' + name + ' | ' + folder); return true; },
+    onPersist(snap) { persisted.push(snap); },
+  });
+  const saved1 = {
+    step: 'name',
+    index: 0,
+    folder: '',
+    message: '',
+    error: '',
+    seq: 2,
+    items: [
+      { id: 1, url: 'https://a/1', state: 'ready', path: STAGED(1), name: 'My Song', crop: { x: 0.1, y: 0.2, size: 0.5 }, error: '', jobId: '' },
+      { id: 2, url: 'https://a/2', state: 'downloading', path: '', name: '', crop: null, error: '', jobId: 's2' },
+    ],
+  };
+  assert.strictEqual(w1.restore(saved1, {
+    isStaged: (p) => p === STAGED(1),
+    activeJobs: ['s2'],
+    bufferedResults: {},
+    onCrop: (p, c) => crops.push({ p, c }),
+  }), true);
+  assert.strictEqual(w1.state.step, 'name');
+  assert.deepStrictEqual(crops, [{ p: STAGED(1), c: { x: 0.1, y: 0.2, size: 0.5 } }]);
+  assert.deepStrictEqual(log1, [], 'active s2 is not restarted');
+
+  // Reattached s2 receives progress and completion
+  const pItem = w1.progress('s2', { percent: 55, speed: '1.2MiB/s', eta: 5 });
+  assert.strictEqual(pItem.percent, 55);
+  w1.report('s2', 'done', STAGED(2));
+  assert.strictEqual(w1.state.items[1].state, 'ready');
+
+  // rename() persists without triggering onChange
+  let changed = 0;
+  const wRename = SD.createWizard({
+    stage: () => true,
+    onChange: () => { changed++; },
+    onPersist: (snap) => persisted.push(snap),
+  });
+  wRename.start(['https://a/1']);
+  wRename.report('s1', 'done', STAGED(1));
+  const beforeRename = changed;
+  const beforePersist = persisted.length;
+  wRename.rename('Typed Name');
+  assert.strictEqual(changed, beforeRename, 'rename does not trigger onChange');
+  assert.strictEqual(persisted.length, beforePersist + 1, 'rename triggers onPersist');
+  assert.strictEqual(persisted[persisted.length - 1].items[0].name, 'Typed Name');
+
+  // 2. Downloading item finished while closed (bufferedResults) transitions to name and pumps next song
+  const log2 = [];
+  const w2 = SD.createWizard({
+    stage(id, url) { log2.push('stage ' + id + ' ' + url); return true; },
+  });
+  w2.restore({
+    step: 'download',
+    index: 0,
+    seq: 1,
+    items: [
+      { id: 1, url: 'https://a/1', state: 'downloading', jobId: 's1' },
+      { id: 2, url: 'https://a/2', state: 'waiting', jobId: '' },
+    ],
+  }, {
+    isStaged: () => true,
+    activeJobs: [],
+    bufferedResults: { s1: { jobId: 's1', status: 'done', message: STAGED(1) } },
+  });
+  assert.strictEqual(w2.state.step, 'name');
+  assert.strictEqual(w2.state.items[0].path, STAGED(1));
+  assert.deepStrictEqual(log2, ['stage s2 https://a/2'], 'pumps next song with non-colliding seq');
+
+  // 3. Process died while downloading & staged file missing -> resets to waiting and pumps
+  const log3 = [];
+  const w3 = SD.createWizard({
+    stage(id, url) { log3.push('stage ' + id + ' ' + url); return true; },
+  });
+  w3.restore({
+    step: 'name',
+    index: 0,
+    seq: 3,
+    items: [
+      { id: 1, url: 'https://a/1', state: 'ready', path: STAGED(1), name: 'Gone' },
+      { id: 2, url: 'https://a/2', state: 'downloading', jobId: 's3' },
+    ],
+  }, {
+    isStaged: () => false,
+    activeJobs: [],
+    bufferedResults: {},
+  });
+  assert.strictEqual(w3.state.step, 'download');
+  assert.strictEqual(w3.state.items[0].state, 'downloading');
+  assert.strictEqual(w3.state.items[1].state, 'waiting');
+  assert.deepStrictEqual(log3, ['stage s4 https://a/1']);
+
+  // 4. Placing interrupted -> placefail if staged file still exists
+  const w4 = SD.createWizard({ stage: () => true, place: () => true });
+  w4.restore({
+    step: 'placing',
+    index: 0,
+    folder: 'Rock',
+    seq: 2,
+    items: [{ id: 1, url: 'https://a/1', state: 'ready', path: STAGED(1), name: 'Song', jobId: 'p2' }],
+  }, {
+    isStaged: (p) => p === STAGED(1),
+    activeJobs: [],
+    bufferedResults: {},
+  });
+  assert.strictEqual(w4.state.step, 'placefail');
+  assert.strictEqual(w4.state.folder, 'Rock');
+
+  // 5. Placing finished while detached (file already moved out of staging -> isStaged false) -> replays placeDone
+  const placedLog5 = [];
+  const w5 = SD.createWizard({
+    stage: () => true,
+    place: () => true,
+    play(path, folder) { placedLog5.push('play ' + path + ' ' + folder); },
+  });
+  w5.restore({
+    step: 'placing',
+    index: 0,
+    folder: 'Rock',
+    seq: 3,
+    items: [
+      { id: 1, url: 'https://a/1', state: 'ready', path: STAGED(1), name: 'Song', jobId: 'p2' },
+      { id: 2, url: 'https://a/2', state: 'ready', path: STAGED(2), name: 'Next', jobId: '' },
+    ],
+  }, {
+    isStaged: (p) => p === STAGED(2),
+    activeJobs: [],
+    bufferedResults: { p2: { jobId: 'p2', status: 'done', message: '/Songs/Song.mp3' } },
+  });
+  assert.strictEqual(w5.state.items[0].state, 'placed');
+  assert.strictEqual(w5.state.index, 1);
+  assert.strictEqual(w5.state.step, 'name');
+  assert.deepStrictEqual(placedLog5, ['play /Songs/Song.mp3 Rock']);
+
+  // 6. Placing still active while detached (file already moved, addSong in progress) -> reattaches p2
+  const placedLog6 = [];
+  const w6 = SD.createWizard({
+    stage: () => true,
+    place: () => true,
+    play(path, folder) { placedLog6.push('play ' + path + ' ' + folder); },
+  });
+  w6.restore({
+    step: 'placing',
+    index: 0,
+    folder: 'Rock',
+    seq: 2,
+    items: [{ id: 1, url: 'https://a/1', state: 'ready', path: STAGED(1), name: 'Song', jobId: 'p2' }],
+  }, {
+    isStaged: () => false,
+    activeJobs: ['p2'],
+    bufferedResults: {},
+  });
+  assert.strictEqual(w6.state.step, 'placing');
+  w6.report('p2', 'done', '/Songs/Song.mp3');
+  assert.strictEqual(w6.state.items[0].state, 'placed');
+  assert.strictEqual(w6.state.step, 'done');
+  assert.deepStrictEqual(placedLog6, ['play /Songs/Song.mp3 Rock']);
+});
+
+check('song-download.js persists wizard state in localStorage, restores on reopen, and survives tab switch', () => {
+  const vm = require('vm');
+  const { createNode } = require('./fake-dom');
+  const store = {};
+  const localStorageMock = {
+    getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+  };
+  const code = fs.readFileSync(path.join(__dirname, '../app/src/main/assets/song-download.js'), 'utf8');
+
+  function mountApp(bridgeOverrides = {}) {
+    const viewEl = createNode('div');
+    const stageEl = createNode('div');
+    const panelEl = createNode('div');
+    panelEl.setAttribute('data-view', 'download');
+    let observerCb = null;
+    const win = {
+      document: {
+        createElement: (tag) => createNode(tag),
+        createElementNS: (_, tag) => createNode(tag),
+        getElementById: (id) => (id === 'dl-stage' ? stageEl : id === 'sp-view-download' ? viewEl : id === 'audio-panel' ? panelEl : null),
+        activeElement: null,
+      },
+      MutationObserver: class {
+        constructor(cb) { observerCb = cb; }
+        observe() {}
+      },
+      localStorage: localStorageMock,
+      setTimeout, clearTimeout, Date, JSON, Math, Array, RegExp, Error, Set,
+      AndroidBridge: Object.assign({
+        stageSong: () => true,
+        placeSong: () => true,
+        cancelSongDownload: () => {},
+        discardStagedSongs: () => {},
+        isStagedFile: () => true,
+        getSongDownloadSyncState: () => JSON.stringify({ activeJobs: [], results: [], cancelled: false }),
+        getArtwork: () => '',
+      }, bridgeOverrides),
+    };
+    win.window = win;
+    vm.runInContext(code, vm.createContext(win));
+    return { win, stageEl, panelEl, triggerObserver: () => observerCb && observerCb() };
+  }
+
+  // First session: start download, switch away from Download tab -> wizard stays alive
+  const s1 = mountApp();
+  s1.win.SongDownload.wizard.start(['https://a/1', 'https://a/2']);
+  s1.panelEl.setAttribute('data-view', 'library');
+  s1.triggerObserver();
+  assert.strictEqual(s1.win.SongDownload.wizard.state.step, 'download', 'tab switch keeps download running');
+  assert.ok(store.moonlight_song_dl_wizard_v1, 'wizard state persisted to localStorage');
+
+  // Second session (app closed & reopened): s1 finished while closed
+  const s2 = mountApp({
+    getSongDownloadSyncState: () => JSON.stringify({
+      activeJobs: [],
+      results: [{ jobId: 's1', status: 'done', message: STAGED(1) }],
+      cancelled: false,
+    }),
+  });
+  assert.strictEqual(s2.win.SongDownload.wizard.state.step, 'name', 'restored and replayed buffered s1 -> name step');
+  assert.strictEqual(s2.win.SongDownload.wizard.state.items[0].path, STAGED(1));
+  assert.strictEqual(s2.stageEl.getAttribute('data-step'), 'name');
+});
+
 console.log(n + ' checks passed');

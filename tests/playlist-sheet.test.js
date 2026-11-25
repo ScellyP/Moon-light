@@ -244,7 +244,7 @@ check('every screen outside the music panel follows the song colours (class dyn-
   const ui = fs.readFileSync(path.join(dir, 'spotify-ui.js'), 'utf8');
   assert.ok(/querySelectorAll\('\.dyn-colours'\)/.test(ui) && /syncTint: \(\) => pushTint\(\)/.test(ui));
   assert.strictEqual((ui.match(/refreshTint:/g) || []).length, 1);   // Settings' own refreshTint (re-fit the song colour after a theme change) must not be overwritten
-  assert.ok(/refreshTint: \(\) => updateTint\(\)/.test(ui));
+  assert.ok(/refreshTint:\s*\(\)\s*=>\s*\{?\s*updateTint\(\)/.test(ui));
   assert.ok(!/var\(--panel, var\(--bg\)\)/.test(html));           // no static fallback inside the new input styles
 });
 

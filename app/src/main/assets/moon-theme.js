@@ -8,23 +8,28 @@
   const NS = 'http://www.w3.org/2000/svg';
 
   /* ---- Moon phase rendering ---- */
+  const MOON_CHECK_INTERVAL_MS = 3600000;
+  const MOON_CHECK_STORAGE_KEY = 'moonlight.lastMoonPhaseCheckAt';
+
   function paintMoonBadges() {
     const ml = (typeof window !== 'undefined' ? window.NovelMoonLock : null) || (typeof global !== 'undefined' ? global.NovelMoonLock : null) || root.NovelMoonLock;
     if (!ml || !ml.moonPhaseInfo || !ml.moonPhasePath || typeof document === 'undefined') return;
     const phase = ml.moonPhaseInfo(new Date());
     const label = phase.name;
+    const tilt = (-10 + 20 * (typeof phase.fraction === 'number' ? phase.fraction : 0)).toFixed(1);
     document.querySelectorAll('[data-moon-label]').forEach(function (el) { el.textContent = label; });
     document.querySelectorAll('[data-moon]').forEach(function (el) {
       el.textContent = '';
       const svg = document.createElementNS(NS, 'svg');
       svg.setAttribute('viewBox', '0 0 24 24');
       svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('shape-rendering', 'geometricPrecision');
+      if (svg.style) svg.style.transform = 'rotate(' + tilt + 'deg)';
       const disc = document.createElementNS(NS, 'circle');
-      disc.setAttribute('cx', '12'); disc.setAttribute('cy', '12'); disc.setAttribute('r', '10');
-      disc.setAttribute('fill', 'currentColor'); disc.setAttribute('fill-opacity', '.16');
-      disc.setAttribute('stroke', 'currentColor'); disc.setAttribute('stroke-opacity', '.45'); disc.setAttribute('stroke-width', '1.2');
+      disc.setAttribute('cx', '12'); disc.setAttribute('cy', '12'); disc.setAttribute('r', '12');
+      disc.setAttribute('fill', 'currentColor'); disc.setAttribute('fill-opacity', '.14');
       const lit = document.createElementNS(NS, 'path');
-      lit.setAttribute('d', ml.moonPhasePath(phase.fraction, 12, 12, 10));
+      lit.setAttribute('d', ml.moonPhasePath(phase.fraction, 12, 12, 12));
       lit.setAttribute('fill', 'currentColor');
       svg.appendChild(disc); svg.appendChild(lit);
       el.appendChild(svg);
@@ -32,6 +37,90 @@
       el.setAttribute('role', 'img');
       el.setAttribute('aria-label', label);
     });
+  }
+
+  function createMoonPhaseScheduler(opts) {
+    const o = opts || {};
+    const fnSetInterval = o.setInterval || setInterval;
+    const fnClearInterval = o.clearInterval || clearInterval;
+    const fnNow = o.now || (() => Date.now());
+    const fnPaint = o.onPaint || paintMoonBadges;
+    const isHidden = o.isHidden || (() => (typeof document !== 'undefined' ? (!!document.hidden || document.visibilityState === 'hidden') : false));
+    const storage = o.storage !== undefined ? o.storage : (typeof localStorage !== 'undefined' ? localStorage : null);
+
+    let lastMoonPhaseCheckAt = 0;
+    let timer = null;
+
+    function readStoredTimestamp() {
+      if (!storage || !storage.getItem) return 0;
+      try {
+        const parsed = Number(storage.getItem(MOON_CHECK_STORAGE_KEY));
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    function saveTimestamp(ts) {
+      lastMoonPhaseCheckAt = ts;
+      if (!storage || !storage.setItem) return;
+      try {
+        storage.setItem(MOON_CHECK_STORAGE_KEY, String(ts));
+      } catch (e) {}
+    }
+
+    function checkAndPaint(forceInitial) {
+      if (!lastMoonPhaseCheckAt) lastMoonPhaseCheckAt = readStoredTimestamp();
+      const current = fnNow();
+      const elapsed = current - lastMoonPhaseCheckAt;
+      if (!lastMoonPhaseCheckAt || elapsed < 0 || elapsed >= MOON_CHECK_INTERVAL_MS) {
+        fnPaint();
+        saveTimestamp(current);
+        return true;
+      }
+      if (forceInitial) {
+        fnPaint();
+        return true;
+      }
+      return false;
+    }
+
+    function stopTimer() {
+      if (timer !== null) {
+        fnClearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function startTimer() {
+      if (timer !== null || isHidden()) return;
+      timer = fnSetInterval(function () {
+        if (!isHidden()) checkAndPaint(false);
+      }, MOON_CHECK_INTERVAL_MS);
+    }
+
+    function onVisibilityChange() {
+      if (!isHidden()) {
+        checkAndPaint(false);
+        startTimer();
+      } else {
+        stopTimer();
+      }
+    }
+
+    function init() {
+      checkAndPaint(true);
+      if (!isHidden()) startTimer();
+    }
+
+    return {
+      init,
+      checkAndPaint,
+      startTimer,
+      stopTimer,
+      onVisibilityChange,
+      getLastCheckAt: () => lastMoonPhaseCheckAt,
+    };
   }
 
   /* ---- 6.1 Random star pattern generation ---- */
@@ -162,9 +251,12 @@
   }
 
   const cometManager = createCometManager();
+  const moonPhaseScheduler = createMoonPhaseScheduler();
 
   const api = {
+    MOON_CHECK_INTERVAL_MS,
     paintMoonBadges,
+    createMoonPhaseScheduler,
     generateStarGradient,
     generateSkyLayers,
     applyRandomStars,
@@ -189,13 +281,12 @@
   if (typeof window !== 'undefined') {
     window.MoonSky = api;
     if (typeof document !== 'undefined') {
-      paintMoonBadges();
-      setInterval(paintMoonBadges, 30 * 60 * 1000);
+      moonPhaseScheduler.init();
       applyRandomStars();
       cometManager.schedule();
       document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') {
-          paintMoonBadges();
+        moonPhaseScheduler.onVisibilityChange();
+        if (!document.hidden && document.visibilityState !== 'hidden') {
           cometManager.schedule();
         } else {
           cometManager.stop();

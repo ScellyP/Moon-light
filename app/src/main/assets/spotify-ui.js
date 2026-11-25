@@ -568,7 +568,8 @@
   }
 
   window.SpotifyUI = {
-    setView, stepView, dragView, releaseView, getCover, refreshTint: () => updateTint(),
+    setView, stepView, dragView, releaseView, getCover,
+    refreshTint: () => { updateTint(); syncNotificationAccent(); },
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
     dominantRgb, applyTint, computeTintVars, getTintVars: () => tintVars,
@@ -858,6 +859,46 @@
   // song / playlist sheets, the add-songs picker, the edit screen, settings), so nothing in the app falls back to
   // the plain theme while a song with cover art is loaded. `tintVars` is what was last applied (null = plain theme).
   let tintVars = null;
+  let lastNotifAccentKey = '';
+
+  function toHexColor(value) {
+    const s = String(value || '').trim();
+    if (!s) return '';
+    const hexMatch = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1].length === 3 ? hexMatch[1].replace(/./g, '$&$&') : hexMatch[1];
+      return '#' + hex.toLowerCase();
+    }
+    const rgbMatch = s.match(/^rgba?\(\s*([\d.]+)(?:\s*,\s*|\s+)([\d.]+)(?:\s*,\s*|\s+)([\d.]+)/i);
+    if (rgbMatch) {
+      const toByte = (n) => clamp(Math.round(Number(n) || 0), 0, 255).toString(16).padStart(2, '0');
+      return '#' + toByte(rgbMatch[1]) + toByte(rgbMatch[2]) + toByte(rgbMatch[3]);
+    }
+    return '';
+  }
+
+  function syncNotificationAccent() {
+    const bridge = typeof window !== 'undefined' ? window.AndroidBridge : null;
+    if (!bridge || typeof bridge.setNotificationAccent !== 'function') return;
+
+    let rawAccent = tintVars && tintVars['--accent'];
+    let rawStrong = tintVars && tintVars['--accent-strong'];
+    if ((!rawAccent || !rawStrong) && typeof getComputedStyle === 'function' && document.documentElement) {
+      const cs = getComputedStyle(document.documentElement);
+      if (!rawAccent) rawAccent = cs.getPropertyValue('--accent');
+      if (!rawStrong) rawStrong = cs.getPropertyValue('--accent-strong');
+    }
+
+    const accentHex = toHexColor(rawAccent);
+    if (!accentHex) return;
+    const accentStrongHex = toHexColor(rawStrong) || accentHex;
+    const key = accentHex + '|' + accentStrongHex;
+    if (key === lastNotifAccentKey) return;
+    try {
+      bridge.setNotificationAccent(accentHex, accentStrongHex);
+      lastNotifAccentKey = key;
+    } catch (error) { /* bridge not ready */ }
+  }
 
   function tintTargets() {
     return [panel].concat(Array.prototype.slice.call(document.querySelectorAll('.dyn-colours')));
@@ -871,6 +912,7 @@
         else node.style.removeProperty(name);
       });
     });
+    syncNotificationAccent();
   }
 
   function clearTint() {
@@ -934,6 +976,7 @@
   try {
     new MutationObserver(() => {
       if (tintRgb) applyTint(tintRgb);
+      else syncNotificationAccent();
     }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['style', 'class', 'data-theme'],
@@ -1894,6 +1937,7 @@
   initFind();
   setView('library', { immediate: true });
   scheduleSync();
+  syncNotificationAccent();
 
   // Startup transition cleanup: remove .no-transition after initial layout settles
   const appWrapper = $('app') || panel;

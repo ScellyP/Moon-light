@@ -221,18 +221,10 @@ class MainActivity : ComponentActivity() {
     }
 
     // Runs the "Download songs" jobs with the yt-dlp that is bundled in this app (see SongDownloader.kt
-    // and song-download.js).
-    private val songDownloader = SongDownloader(
-        activity = this,
-        library = { songLibrary },
-        onStatus = { jobId, status, message ->
-            callPage(
-                "onSongDownloadStatus",
-                JSONObject.quote(jobId) + ", " + JSONObject.quote(status) + ", " + JSONObject.quote(message)
-            )
-        },
-        onPage = { fn, args -> callPage(fn, args) },
-    )
+    // and song-download.js). Application-scoped so active downloads survive MainActivity.onDestroy().
+    private val songDownloader: SongDownloader by lazy {
+        SongDownloader.getInstance(applicationContext)
+    }
 
     fun notifySongDownloadProgress(jobId: String, progressJson: String) {
         callPage("onSongDownloadProgress", JSONObject.quote(jobId) + ", " + progressJson)
@@ -553,6 +545,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         installCrashLogger()
         registerVolumeReceiver()
+        songDownloader.attach(
+            library = { songLibrary },
+            onStatus = { jobId, status, message ->
+                callPage(
+                    "onSongDownloadStatus",
+                    JSONObject.quote(jobId) + ", " + JSONObject.quote(status) + ", " + JSONObject.quote(message)
+                )
+            },
+            onPage = { fn, args -> callPage(fn, args) },
+        )
         songDownloader.warmUp()
         appUpdater.start()
         busyCheck = { songDownloader.isBusy() || appUpdater.isBusy() }
@@ -1182,7 +1184,11 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         try { unregisterReceiver(volumeReceiver) } catch (e: Exception) { /* not registered */ }
-        songDownloader.release()
+        if (songDownloader.shouldKeepAliveOnDestroy()) {
+            songDownloader.detach()
+        } else {
+            songDownloader.release()
+        }
         appUpdater.release()
         busyCheck = null
         screenHandler.removeCallbacks(releaseScreenRunnable)
@@ -1298,6 +1304,12 @@ class MainActivity : ComponentActivity() {
         fun cancelSongDownload() {
             songDownloader.cancel()
         }
+
+        @JavascriptInterface
+        fun isStagedFile(path: String): Boolean = SongDownloader.isStagedPath(path)
+
+        @JavascriptInterface
+        fun getSongDownloadSyncState(): String = songDownloader.consumeSyncStateJson()
 
         // Deletes everything in the staging folder: songs that were downloaded but never placed.
         @JavascriptInterface
@@ -1643,6 +1655,12 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun setBackgroundDownloads(enabled: Boolean) {
             songDownloader.setBackgroundDownloadsEnabled(enabled)
+        }
+
+        // Dynamic notification accent colours from Moonlight's active cover-art tint or theme.
+        @JavascriptInterface
+        fun setNotificationAccent(accentHex: String, accentStrongHex: String) {
+            DownloadForegroundService.setNotificationAccent(applicationContext, accentHex, accentStrongHex)
         }
 
         // YouTube sign-in for the downloader. youtubeSignInStatus: "signed-in" | "signed-out".

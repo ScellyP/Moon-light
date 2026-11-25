@@ -2795,8 +2795,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
 #sidebar-header { position: relative; }
 
 /* Live moon-phase badge (filled in by moon-theme.js). */
-.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; }
-.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; object-fit: contain; image-rendering: pixelated; }
+.moon-badge { display: inline-flex; width: 24px; height: 24px; flex-shrink: 0; color: var(--text); vertical-align: middle; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; isolation: isolate; box-sizing: border-box; border: 1px solid color-mix(in srgb, currentColor 45%, transparent); background: color-mix(in srgb, currentColor 10%, transparent); }
+.moon-badge svg, .moon-badge img, .moon-badge .moon-icon-img { width: 100%; height: 100%; display: block; border-radius: 50%; object-fit: contain; }
 #status-gap .moon-badge { position: absolute; right: 16px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; opacity: .75; pointer-events: none; }
 body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
 
@@ -2859,8 +2859,8 @@ body.peek-active #status-gap .moon-badge { opacity: 0 !important; }
   color: var(--text, #14171f);
   box-shadow: 0 4px 14px rgba(0,0,0,.08);
 }
-.moon-badge.big { width: 62px; height: 62px; filter: drop-shadow(0 0 10px rgba(243,239,224,.45)); }
-.theme-light .moon-badge.big { filter: drop-shadow(0 0 6px rgba(0,0,0,.18)); }
+.moon-badge.big { width: 62px; height: 62px; box-shadow: 0 0 10px rgba(243,239,224,.35); }
+.theme-light .moon-badge.big { box-shadow: 0 0 6px rgba(0,0,0,.14); }
 #sp-lib-phase { margin-top: -4px; font-size: 12px; letter-spacing: .06em; color: var(--sp-sub, var(--muted)); text-align: center; }
 
 /* Playing: the play button glows like the moon. */

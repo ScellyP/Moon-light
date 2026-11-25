@@ -52,16 +52,11 @@
         android:maxLines="1"
         android:visibility="gone" />
 
-    <ProgressBar
+    <ImageView
         android:id="@+id/notif_dl_progress"
-        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="6dp"
         android:layout_marginTop="8dp"
-        android:indeterminate="true"
-        android:indeterminateTint="#FFBC44DD"
-        android:indeterminateTintMode="src_in"
-        android:max="100"
-        android:progress="0"
-        android:progressDrawable="@drawable/notif_progress_bar" />
+        android:contentDescription="@null"
+        android:scaleType="fitXY" />
 </LinearLayout>

@@ -7,6 +7,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -85,6 +93,7 @@ class DownloadForegroundService : Service() {
         }
 
         isServiceRunning = true
+        fgNotificationShowing = true
         startForeground(NOTIF_ID_FG, buildForegroundNotification(this, currentState))
         return START_NOT_STICKY
     }
@@ -92,6 +101,7 @@ class DownloadForegroundService : Service() {
     override fun onDestroy() {
         startPending = false
         isServiceRunning = false
+        fgNotificationShowing = false
         super.onDestroy()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
@@ -103,7 +113,11 @@ class DownloadForegroundService : Service() {
         const val NOTIF_ID_RESULT = 2011
         private const val LEGACY_PLAYLIST_NOTIF_ID = 2001
         const val ACTION_CANCEL = "com.scell.moonlight.action.CANCEL_DOWNLOAD"
-        private const val ACCENT_COLOR = 0xFFBC44DD.toInt()
+        private const val PREFS_ACCENT = "moonlight_notif_accent"
+        private const val KEY_ACCENT = "accent"
+        private const val KEY_ACCENT_STRONG = "accent_strong"
+        private const val DEFAULT_ACCENT_COLOR = 0xFFBC44DD.toInt()
+        private const val DEFAULT_ACCENT_STRONG_COLOR = 0xFFCB6FE5.toInt()
         private const val ERROR_COLOR = 0xFFEF5350.toInt()
 
         var cancelHandler: (() -> Unit)? = null
@@ -113,13 +127,94 @@ class DownloadForegroundService : Service() {
         private var isServiceRunning = false
 
         @Volatile
+        private var fgNotificationShowing = false
+
+        @Volatile
         private var startPending = false
+
+        @Volatile
+        private var cachedAccent: Int? = null
+
+        @Volatile
+        private var cachedAccentStrong: Int? = null
 
         @Volatile
         private var currentState = DownloadNotifState()
 
         private val mainHandler = Handler(Looper.getMainLooper())
         private var pendingResultDismiss: Runnable? = null
+
+        fun getAccentColor(context: Context): Int {
+            cachedAccent?.let { return it }
+            val color = context.getSharedPreferences(PREFS_ACCENT, Context.MODE_PRIVATE)
+                .getInt(KEY_ACCENT, DEFAULT_ACCENT_COLOR)
+            cachedAccent = color
+            return color
+        }
+
+        fun getAccentStrongColor(context: Context): Int {
+            cachedAccentStrong?.let { return it }
+            val color = context.getSharedPreferences(PREFS_ACCENT, Context.MODE_PRIVATE)
+                .getInt(KEY_ACCENT_STRONG, DEFAULT_ACCENT_STRONG_COLOR)
+            cachedAccentStrong = color
+            return color
+        }
+
+        fun setNotificationAccent(context: Context, accentHex: String, accentStrongHex: String) {
+            val prevAccent = getAccentColor(context)
+            val prevStrong = getAccentStrongColor(context)
+            val accent = parseColor(accentHex, DEFAULT_ACCENT_COLOR)
+            val strong = parseColor(accentStrongHex, accent)
+            if (prevAccent == accent && prevStrong == strong) return
+            cachedAccent = accent
+            cachedAccentStrong = strong
+            context.getSharedPreferences(PREFS_ACCENT, Context.MODE_PRIVATE)
+                .edit()
+                .putInt(KEY_ACCENT, accent)
+                .putInt(KEY_ACCENT_STRONG, strong)
+                .apply()
+            refreshActiveNotification(context)
+        }
+
+        fun refreshActiveNotification(context: Context) {
+            val state = currentState
+            if (!fgNotificationShowing || !state.active || isActiveCheck?.invoke() != true) return
+            ensureChannels(context)
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            nm.notify(NOTIF_ID_FG, buildForegroundNotification(context, state))
+        }
+
+        private fun parseColor(raw: String?, fallback: Int): Int {
+            val s = raw?.trim().orEmpty()
+            if (s.isEmpty()) return fallback
+            return try {
+                if (s.startsWith("#")) {
+                    val hex = s.substring(1)
+                    val full = when (hex.length) {
+                        3 -> "FF${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}"
+                        6 -> "FF$hex"
+                        8 -> hex
+                        else -> return fallback
+                    }
+                    full.toLong(16).toInt()
+                } else if (s.startsWith("rgb", ignoreCase = true)) {
+                    val nums = Regex("""[\d.]+""").findAll(s).mapNotNull { it.value.toFloatOrNull() }.toList()
+                    if (nums.size >= 3) {
+                        Color.rgb(
+                            nums[0].toInt().coerceIn(0, 255),
+                            nums[1].toInt().coerceIn(0, 255),
+                            nums[2].toInt().coerceIn(0, 255)
+                        )
+                    } else {
+                        fallback
+                    }
+                } else {
+                    Color.parseColor(s)
+                }
+            } catch (_: Exception) {
+                fallback
+            }
+        }
 
         fun start(context: Context, state: DownloadNotifState = currentState) {
             currentState = state
@@ -152,6 +247,7 @@ class DownloadForegroundService : Service() {
             if (!showInShade && !isServiceRunning) return
             ensureChannels(context)
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            fgNotificationShowing = true
             nm.notify(NOTIF_ID_FG, buildForegroundNotification(context, state))
         }
 
@@ -175,16 +271,17 @@ class DownloadForegroundService : Service() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            val accentColor = getAccentColor(context)
             val customView = RemoteViews(context.packageName, R.layout.notification_download_result).apply {
                 setTextViewText(R.id.notif_res_title, title)
                 setTextViewText(R.id.notif_res_body, body)
                 setTextViewText(R.id.notif_res_tag, if (isError) "Failed" else "Done")
-                setTextColor(R.id.notif_res_tag, if (isError) ERROR_COLOR else ACCENT_COLOR)
+                setTextColor(R.id.notif_res_tag, if (isError) ERROR_COLOR else accentColor)
             }
 
             val notif = NotificationCompat.Builder(context, CHANNEL_SONG)
                 .setSmallIcon(R.drawable.ic_stat_music)
-                .setColor(if (isError) ERROR_COLOR else ACCENT_COLOR)
+                .setColor(if (isError) ERROR_COLOR else accentColor)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
@@ -212,6 +309,7 @@ class DownloadForegroundService : Service() {
         }
 
         fun dismissForegroundNotification(context: Context) {
+            fgNotificationShowing = false
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             nm.cancel(NOTIF_ID_FG)
             nm.cancel(LEGACY_PLAYLIST_NOTIF_ID)
@@ -316,17 +414,28 @@ class DownloadForegroundService : Service() {
                 ""
             }
 
+            val accentColor = getAccentColor(context)
+            val accentStrongColor = getAccentStrongColor(context)
+            val collapsedBar = renderProgressBarBitmap(
+                context, progressValue, indeterminate, 5f, accentColor, accentStrongColor
+            )
+            val expandedBar = renderProgressBarBitmap(
+                context, progressValue, indeterminate, 6f, accentColor, accentStrongColor
+            )
+
             val collapsed = RemoteViews(context.packageName, R.layout.notification_download_collapsed).apply {
                 setTextViewText(R.id.notif_dl_title, title)
                 setTextViewText(R.id.notif_dl_badge, badge)
+                setTextColor(R.id.notif_dl_badge, accentColor)
                 setViewVisibility(R.id.notif_dl_badge, if (badge.isNotEmpty()) View.VISIBLE else View.GONE)
                 setTextViewText(R.id.notif_dl_subtitle, subtitle)
-                setProgressBar(R.id.notif_dl_progress, 100, progressValue.coerceAtLeast(0), indeterminate)
+                setImageViewBitmap(R.id.notif_dl_progress, collapsedBar)
             }
 
             val expanded = RemoteViews(context.packageName, R.layout.notification_download_expanded).apply {
                 setTextViewText(R.id.notif_dl_title, title)
                 setTextViewText(R.id.notif_dl_badge, badge)
+                setTextColor(R.id.notif_dl_badge, accentColor)
                 setViewVisibility(R.id.notif_dl_badge, if (badge.isNotEmpty()) View.VISIBLE else View.GONE)
                 setTextViewText(R.id.notif_dl_subtitle, subtitle)
                 if (detail.isNotEmpty()) {
@@ -335,12 +444,12 @@ class DownloadForegroundService : Service() {
                 } else {
                     setViewVisibility(R.id.notif_dl_detail, View.GONE)
                 }
-                setProgressBar(R.id.notif_dl_progress, 100, progressValue.coerceAtLeast(0), indeterminate)
+                setImageViewBitmap(R.id.notif_dl_progress, expandedBar)
             }
 
             return NotificationCompat.Builder(context, CHANNEL_FG)
                 .setSmallIcon(R.drawable.ic_stat_music)
-                .setColor(ACCENT_COLOR)
+                .setColor(accentColor)
                 .setContentTitle(title)
                 .setContentText(subtitle)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
@@ -353,6 +462,57 @@ class DownloadForegroundService : Service() {
                 .setSilent(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
+        }
+
+        private fun renderProgressBarBitmap(
+            context: Context,
+            progressValue: Int,
+            indeterminate: Boolean,
+            heightDp: Float,
+            accentColor: Int,
+            accentStrongColor: Int,
+        ): Bitmap {
+            val density = context.resources.displayMetrics.density.coerceAtLeast(1f)
+            val widthPx = (context.resources.displayMetrics.widthPixels - (48f * density).toInt()).coerceIn(240, 1080)
+            val heightPx = (heightDp * density).toInt().coerceAtLeast(4)
+            val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val radius = heightPx / 2f
+            val trackRect = RectF(0f, 0f, widthPx.toFloat(), heightPx.toFloat())
+
+            val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x2E8E8E9E
+                style = Paint.Style.FILL
+            }
+            canvas.drawRoundRect(trackRect, radius, radius, trackPaint)
+
+            val clipPath = Path().apply {
+                addRoundRect(trackRect, radius, radius, Path.Direction.CW)
+            }
+            canvas.save()
+            canvas.clipPath(clipPath)
+
+            if (indeterminate) {
+                val segW = widthPx * 0.35f
+                val left = (widthPx - segW) / 2f
+                val right = left + segW
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = LinearGradient(left, 0f, right, 0f, accentColor, accentStrongColor, Shader.TileMode.CLAMP)
+                    style = Paint.Style.FILL
+                }
+                canvas.drawRoundRect(RectF(left, 0f, right, heightPx.toFloat()), radius, radius, fillPaint)
+            } else if (progressValue > 0) {
+                val clamped = progressValue.coerceIn(0, 100)
+                val fillW = (widthPx * (clamped / 100f)).coerceAtLeast(heightPx.toFloat())
+                val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = LinearGradient(0f, 0f, fillW, 0f, accentColor, accentStrongColor, Shader.TileMode.CLAMP)
+                    style = Paint.Style.FILL
+                }
+                canvas.drawRoundRect(RectF(0f, 0f, fillW, heightPx.toFloat()), radius, radius, fillPaint)
+            }
+
+            canvas.restore()
+            return bitmap
         }
 
         private fun ensureChannels(context: Context) {
