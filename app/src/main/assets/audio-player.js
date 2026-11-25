@@ -4596,7 +4596,7 @@ window.NovelAudio = (function () {
     searchTracks(query) { return MediaLibrary.search(query); },
     getPlaylistFiles() { return MediaLibrary.playlistFiles(); },
     setUserName(raw, rng) {
-      let name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim().slice(0, 32);
+      let name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim().slice(0, 16);
       const roll = typeof rng === 'function' ? rng() : Math.random();
       if (name && roll < 0.1) {
         if (/^johnny\s*doe$/i.test(name)) name = 'Guru';
