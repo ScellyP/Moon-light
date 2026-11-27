@@ -2646,8 +2646,8 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   -webkit-tap-highlight-color: transparent;
   transition: transform .15s ease, background-color .15s ease, color .15s ease;
 }
@@ -2656,8 +2656,9 @@ input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--
   background-color: color-mix(in srgb, var(--text) 12%, transparent);
 }
 .dl-cancel-btn .ico {
-  width: 22px;
-  height: 22px;
+  /* the X path fills 11 of 24 units, so 36px draws an X about as tall as the 24px "Download songs" heading's capitals */
+  width: 36px;
+  height: 36px;
   color: #c8c8c8;
 }
 

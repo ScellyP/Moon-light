@@ -144,6 +144,47 @@ class DownloadForegroundService : Service() {
         private val mainHandler = Handler(Looper.getMainLooper())
         private var pendingResultDismiss: Runnable? = null
 
+        // The bar is a bitmap, so the system cannot animate it. While progress is unknown
+        // (preparing / no percent yet) we repost the notification on a short tick so the
+        // indeterminate segment keeps sweeping instead of sitting still.
+        private const val INDETERMINATE_TICK_MS = 120L
+        private const val INDETERMINATE_CYCLE_MS = 1400L
+        private var indeterminateTicker: Runnable? = null
+
+        private fun syncIndeterminateTicker(context: Context, indeterminate: Boolean) {
+            if (!indeterminate) {
+                stopIndeterminateTicker()
+                return
+            }
+            if (indeterminateTicker != null) return
+            val appContext = context.applicationContext
+            val tick = object : Runnable {
+                override fun run() {
+                    val state = currentState
+                    if (!fgNotificationShowing || !state.active || isActiveCheck?.invoke() != true) {
+                        indeterminateTicker = null
+                        return
+                    }
+                    val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    if (nm == null) {
+                        indeterminateTicker = null
+                        return
+                    }
+                    nm.notify(NOTIF_ID_FG, buildForegroundNotification(appContext, state))
+                    if (indeterminateTicker === this) {
+                        mainHandler.postDelayed(this, INDETERMINATE_TICK_MS)
+                    }
+                }
+            }
+            indeterminateTicker = tick
+            mainHandler.postDelayed(tick, INDETERMINATE_TICK_MS)
+        }
+
+        private fun stopIndeterminateTicker() {
+            indeterminateTicker?.let { mainHandler.removeCallbacks(it) }
+            indeterminateTicker = null
+        }
+
         fun getAccentColor(context: Context): Int {
             cachedAccent?.let { return it }
             val color = context.getSharedPreferences(PREFS_ACCENT, Context.MODE_PRIVATE)
@@ -310,6 +351,7 @@ class DownloadForegroundService : Service() {
 
         fun dismissForegroundNotification(context: Context) {
             fgNotificationShowing = false
+            stopIndeterminateTicker()
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             nm.cancel(NOTIF_ID_FG)
             nm.cancel(LEGACY_PLAYLIST_NOTIF_ID)
@@ -382,6 +424,7 @@ class DownloadForegroundService : Service() {
                 else -> -1
             }
             val indeterminate = progressValue < 0
+            syncIndeterminateTicker(context, indeterminate)
 
             val metaParts = mutableListOf<String>()
             if (state.isPlaylist && progressValue in 0..100) {
@@ -494,7 +537,8 @@ class DownloadForegroundService : Service() {
 
             if (indeterminate) {
                 val segW = widthPx * 0.35f
-                val left = (widthPx - segW) / 2f
+                val t = (System.currentTimeMillis() % INDETERMINATE_CYCLE_MS).toFloat() / INDETERMINATE_CYCLE_MS
+                val left = -segW + (widthPx + segW) * t
                 val right = left + segW
                 val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     shader = LinearGradient(left, 0f, right, 0f, accentColor, accentStrongColor, Shader.TileMode.CLAMP)
