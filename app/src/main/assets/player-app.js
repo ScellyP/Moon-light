@@ -146,6 +146,7 @@
       window.WhatsNew.close();
       return true;
     }
+    if (window.DockOrder && window.DockOrder.isOpen && window.DockOrder.isOpen()) { window.DockOrder.close(); return true; }
     if (window.NovelAudio && window.NovelAudio.isDuplicateDialogOpen && window.NovelAudio.isDuplicateDialogOpen()) {
       window.NovelAudio.closeDuplicateDialog();
       return true;

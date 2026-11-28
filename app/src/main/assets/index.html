@@ -1268,6 +1268,38 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--faint); }
 }
 .dupe-link-btn:hover { color: var(--text); }
 
+/* Change dock order dialog (dock-order.js): rows are a fixed 56px high so the drag maths is index * 56, like the song editor */
+#dock-order-layer {
+  position: fixed; inset: 0; z-index: 310;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(5,6,9,.75); backdrop-filter: blur(8px);
+  animation: fadeIn .18s ease both;
+}
+#dock-order-layer.hidden { display: none; }
+#dock-order-box {
+  width: 100%; max-width: 380px; max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--sp-bg, var(--panel)); border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 16px; padding: 20px; box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color: var(--text); font-family: var(--font-ui); animation: panelIn .22s var(--ease) both;
+}
+.do-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 8px 0 16px; }
+.do-row {
+  position: relative; display: flex; align-items: center; gap: 12px; height: 56px; box-sizing: border-box;
+  padding: 0 4px 0 8px; background: var(--sp-bg, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+.do-row.dragging { z-index: 2; background: color-mix(in srgb, var(--text) 10%, var(--sp-bg, var(--panel))); box-shadow: 0 8px 22px rgba(0,0,0,.45); border-radius: 10px; }
+.do-row .do-ico { flex: none; width: 24px; height: 24px; color: var(--sp-sub, var(--muted)); }
+.do-name { flex: 1 1 auto; min-width: 0; font: 600 15px/1.2 var(--font-ui); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.do-grip { flex: none; width: 52px; height: 52px; display: grid; place-items: center; border: 0; background: none; color: var(--sp-sub, var(--text)); cursor: grab; touch-action: none; }
+.do-grip .ico { width: 26px; height: 26px; }
+.do-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.do-btn-ghost {
+  min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  background: none; color: var(--text); font: 600 13.5px/1 var(--font-ui); cursor: pointer;
+}
+.do-btn-ghost:active { transform: scale(.96); }
+
 /* Autoplay blacklist dialog */
 #blacklist-dialog-layer {
   position: fixed; inset: 0; z-index: 310;
@@ -3984,6 +4016,10 @@ body.settings-open #srch-input { pointer-events: none; }
           <span class="sd-switch-text">Your name<small>Shown in the Home greeting.</small></span>
           <input type="text" id="set-user-name" class="sd-name-input" maxlength="16" placeholder="Name" aria-label="Your name" enterkeyhint="done">
         </div>
+        <div class="sd-account" id="dock-order-row">
+          <span class="sd-switch-text">Dock order<small>Choose the order of the bottom bar. Swiping between screens follows it.</small></span>
+          <button type="button" id="dock-order-btn" class="sd-btn">Change</button>
+        </div>
         <label class="sd-switch" for="set-light-mode">
           <span class="sd-switch-text">Light mode<small>Brighten the interface with clean light surfaces and dark text.</small></span>
           <input type="checkbox" id="set-light-mode">
@@ -4140,6 +4176,23 @@ body.settings-open #srch-input { pointer-events: none; }
   </div>
 </div>
 
+<div id="dock-order-layer" class="hidden dyn-colours" role="dialog" aria-modal="true" aria-labelledby="dock-order-title">
+  <div id="dock-order-box">
+    <div class="bl-head">
+      <div class="bl-head-title">
+        <h3 id="dock-order-title">Change dock order</h3>
+        <p class="bl-hint">Hold the handle and drag to move an item. Press Done to apply.</p>
+      </div>
+      <button type="button" id="dock-order-close" class="bl-close-btn" aria-label="Close">&times;</button>
+    </div>
+    <div id="dock-order-list" class="do-list" role="list"></div>
+    <div class="do-actions">
+      <button type="button" id="dock-order-reset" class="do-btn-ghost">Reset</button>
+      <button type="button" id="dock-order-done" class="bl-btn-done">Done</button>
+    </div>
+  </div>
+</div>
+
 <script src="splash.js"></script>
 <style>
 /* ---- Playlist download flow — Spotify playlist page style ------------- */
@@ -4238,5 +4291,6 @@ body.settings-open #srch-input { pointer-events: none; }
 <script src="settings-menu.js"></script>
 <script src="song-backup.js"></script>
 <script src="app-update.js"></script>
+<script src="dock-order.js"></script>
 </body>
 </html>

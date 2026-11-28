@@ -2453,10 +2453,11 @@ window.NovelAudio = (function () {
        randomComets randomly spawning comets moving across the sky background
        coverTint    colour the screens from the current cover art
        removeDuplicates  after a scan, move copies of the same song (same title and artist, or the same source link) out of the library
-       lightMode    clean light surfaces with dark text */
+       lightMode    clean light surfaces with dark text
+       dockOrder    the order of the bottom bar (and of swiping between screens), view names joined by commas; '' = the default order */
   AudioFeatures.register({
     id: 'appSettings', label: 'App settings', status: 'working',
-    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true, userName: '' },
+    defaults: { btAutoStart: true, starPattern: true, animatedSky: true, randomComets: true, coverTint: true, removeDuplicates: true, lightMode: false, backgroundDownloads: true, userName: '', dockOrder: '' },
   });
 
   /* ---- Duplicate song memory ----------------------------------------------------

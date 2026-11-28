@@ -318,6 +318,7 @@
      ======================================================================= */
 
   const VIEWS = ['library', 'album', 'search', 'track', 'download'];   // the order of the bottom bar, and of swiping
+  const DEFAULT_VIEWS = VIEWS.slice();
   const ENTER_ANIMATION_MS = 900;
   const PROGRESS_INTERVAL_MS = 400;
 
@@ -567,8 +568,43 @@
     if (row) row.click();
   }
 
+  /* The user's dock order (Settings > Change dock order). VIEWS is changed in place, because swiping, the
+     bottom bar and the slide position all go by its order; the buttons and the screens are moved to match, and the
+     slide position is set again for the screen that is showing. Unknown names are dropped and missing ones are
+     added at the end, so a damaged saved order can never lose a tab. */
+  function normalizeDockOrder(list) {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach((n) => { if (DEFAULT_VIEWS.indexOf(n) >= 0 && out.indexOf(n) < 0) out.push(n); });
+    DEFAULT_VIEWS.forEach((n) => { if (out.indexOf(n) < 0) out.push(n); });
+    return out;
+  }
+
+  function setDockOrder(list) {
+    const next = normalizeDockOrder(list);
+    VIEWS.splice(0, VIEWS.length);
+    next.forEach((n) => VIEWS.push(n));
+    const nav = document.getElementById('sp-nav');
+    const track = el.viewsTrack || document.getElementById('sp-views-track');
+    next.forEach((name) => {
+      const btn = nav && nav.querySelector ? nav.querySelector('[data-sp-view="' + name + '"]') : null;
+      if (btn && nav.appendChild) nav.appendChild(btn);
+      const view = document.getElementById('sp-view-' + name);
+      if (view && track && track.appendChild) track.appendChild(view);
+    });
+    const idx = Math.max(0, VIEWS.indexOf(panel.getAttribute('data-view')));
+    if (panel.style && panel.style.setProperty) panel.style.setProperty('--sp-active-index', idx);
+    if (track && track.style) {
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(-' + (idx * 100) + '%, 0, 0)';
+      void track.offsetWidth;
+      track.style.transition = '';
+    }
+    return next;
+  }
+
   window.SpotifyUI = {
     setView, stepView, dragView, releaseView, getCover,
+    setDockOrder, getDockOrder: () => VIEWS.slice(), getDefaultDockOrder: () => DEFAULT_VIEWS.slice(),
     refreshTint: () => { updateTint(); syncNotificationAccent(); },
     getPlaylistRows: () => readPlaylistRows(), openPlaylist, coverChanged, syncTint: () => pushTint(),
     refreshPlaylists: () => { syncHome(); scheduleMosaics(); sync(); },
