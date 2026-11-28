@@ -2,6 +2,8 @@
 // Lines starting with // are ignored. The version heading is added automatically — no need to write it here.
 
 ## Highlights
+- **Change your dock order** — new option in Settings > Appearance > Dock order: drag the items into the order you like and press Done. Swiping between screens follows it, and it stays after you restart the app
+- **Download notification** — the progress bar now keeps moving while a song is preparing, and the X in the Download songs header is bigger
 - **Personalised Home greeting** — the app now shows your name right on the home page
 - **Name input polish** — left-aligned, capped at 16 characters for a cleaner look
 
